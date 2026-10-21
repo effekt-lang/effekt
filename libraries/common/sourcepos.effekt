@@ -15,7 +15,7 @@ def toPythonStyleString(sp: SourcePosition): String = {
   s"File \"${sp.file}\", line ${sp.startLine.show()}"
 }
 
-def getSourceLine(file: String, line: Int): String / {Exception[IOError], stop} = {
+def getSourceLine(file: String, line: Int): String / {throw[IOError], stop} = {
   with stringBuffer
   with readFileUTF8(file)
   var currentLine = 1
@@ -31,7 +31,7 @@ def getSourceLine(file: String, line: Int): String / {Exception[IOError], stop} 
     c = do next()
   }
 }
-def getSourceText(sp: SourcePosition): String / {Exception[IOError], stop} = {
+def getSourceText(sp: SourcePosition): String / {throw[IOError], stop} = {
   with stringBuffer
   with readFileUTF8(sp.file)
   var currentLine = 1
@@ -68,8 +68,7 @@ def getMarkedSource(sp: SourcePosition): String / Formatted = {
     }
   } with stop {
     "(invalid source position)" 
-  } with Exception[IOError] { 
-    def raise(e, m) =
-      "(can't open source file: " ++ m ++ ")"
+  } with throw[IOError] { error =>
+    "(can't open source file: " ++ message(error) ++ ")"
   }
 }

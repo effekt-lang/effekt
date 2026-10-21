@@ -4,7 +4,7 @@ import test
 def main() = {
   suite("UnionFindTests", false) {
     test("three elements") {
-      with on[MissingValue].default { assertTrue(false, "MissingValue exception") }
+      with on[OutOfBounds].default { assertTrue(false, "OutOfBounds exception") }
       val u = unionFind()
       val a = u.makeSet()
       val b = u.makeSet()

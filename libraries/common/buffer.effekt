@@ -24,7 +24,7 @@ interface Buffer[T] {
   def read(): Option[T]
 
   /// Write an element to the head of the buffer
-  def write(el: T): Unit / Exception[BufferOverflow]
+  def write(el: T): Unit / throw[BufferOverflow]
 }
 
 def emptyBuffer[T](capacity: Int): Buffer[T] at global = {
@@ -56,7 +56,7 @@ def arrayBuffer[T](initialCapacity: Int): Buffer[T] at global = {
       }
     }
     def write(el: T) = {
-      if (capacity() <= 0) <> // raise(BufferOverflow())
+      if (capacity() <= 0) <> // do throw(BufferOverflow())
 
       contents.set(tail.get, el)
       tail.set(mod(tail.get + 1, initialCapacity))
@@ -77,7 +77,7 @@ def refBuffer[T](): Buffer[T] at global = {
     }
     def write(el: T) = content.get match {
       case Some(v) =>
-        <> // do raise(BufferOverflow(), "Cannot read element from buffer")
+        <> // do throw(BufferOverflow())
       case None() =>
         content.set(Some(el))
     }

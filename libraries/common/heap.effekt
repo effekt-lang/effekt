@@ -82,7 +82,7 @@ def insert[T](heap: Heap[T], value: T): Unit = {
 /// panics when heap is empty
 ///
 /// O(1)
-def findMin[T](heap: Heap[T]): T / Exception[OutOfBounds] = {
+def findMin[T](heap: Heap[T]): T / throw[OutOfBounds] = {
   heap.rawContents.get(0)
 }
 
@@ -90,7 +90,7 @@ def findMin[T](heap: Heap[T]): T / Exception[OutOfBounds] = {
 /// panics when heap is empty
 ///
 /// O(log n)
-def deleteMin[T](heap: Heap[T]): T / Exception[OutOfBounds] = {
+def deleteMin[T](heap: Heap[T]): T / throw[OutOfBounds] = {
   val arr = heap.rawContents
   val res = arr.get(0)
   if (arr.size == 1) {

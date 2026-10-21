@@ -8,7 +8,7 @@ effect Scan[A] = {next[A], peek[A]}
 /// Advance the pull stream to the next element, discarding the current element.
 def skip[A](): Unit / {next[A], stop} = { do next(); () }
 
-def expect(message: String) { scanner: () => Unit / fail }: Unit / Exception[WrongFormat] =
+def expect(message: String) { scanner: () => Unit / fail }: Unit / throw[WrongFormat] =
   returning::expect[Unit](message){scanner}
 
 /// If conversion is successful read the next token, otherwise stop.
@@ -193,7 +193,7 @@ def readDouble(): Double / { Scan[Char], fail} = {
 
 namespace returning {
 
-def expect[R](message: String) { scanner: () => R / fail }: R / Exception[WrongFormat] =
+def expect[R](message: String) { scanner: () => R / fail }: R / throw[WrongFormat] =
   try { scanner() } with fail { wrongFormat(message) }
 
 }

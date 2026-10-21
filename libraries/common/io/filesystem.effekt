@@ -11,7 +11,7 @@ type File = Int
 
 
 /// Reads a file at given path as utf8 encoded string.
-def readFile(path: String): String / Exception[IOError] = {
+def readFile(path: String): String / throw[IOError] = {
   val file = openForReading(path);
   with on[IOError].finalize { close(file) }
 
@@ -36,7 +36,7 @@ def readFile(path: String): String / Exception[IOError] = {
 }
 
 /// Writes the (utf8 encoded) string `contents` into the specified file.
-def writeFile(path: String, contents: String): Unit / Exception[IOError] = {
+def writeFile(path: String, contents: String): Unit / throw[IOError] = {
   val file = openForWriting(path);
   with on[IOError].finalize { close(file) }
 
@@ -54,7 +54,7 @@ def writeFile(path: String, contents: String): Unit / Exception[IOError] = {
 }
 
 /// Appends the (utf8 encoded) string `contents` to the specified file.
-def appendFile(path: String, contents: String): Unit / Exception[IOError] = {
+def appendFile(path: String, contents: String): Unit / throw[IOError] = {
   val file = openForAppending(path);
   with on[IOError].finalize { close(file) }
 
@@ -71,13 +71,13 @@ def appendFile(path: String, contents: String): Unit / Exception[IOError] = {
   go()
 }
 
-def writeFileUTF8[R](path: String) { stream: () => R / emit[Char] }: R / Exception[IOError] =
+def writeFileUTF8[R](path: String) { stream: () => R / emit[Char] }: R / throw[IOError] =
   writeFile(path) { encodeUTF8 { stream() } }
 
-def readFileUTF8[R](path: String) { driver: () => R / next[Char] }: R / Exception[IOError] =
+def readFileUTF8[R](path: String) { driver: () => R / next[Char] }: R / throw[IOError] =
   readFile(path) { decodeUTF8 { driver() } }
 
-def writeFile[R](path: String) { stream: () => R / emit[Byte] }: R / Exception[IOError] = {
+def writeFile[R](path: String) { stream: () => R / emit[Byte] }: R / throw[IOError] = {
 
   val file = openForWriting(path);
   with on[IOError].finalize { close(file) }
@@ -108,7 +108,7 @@ def writeFile[R](path: String) { stream: () => R / emit[Byte] }: R / Exception[I
   }
 }
 
-def readFile[R](path: String) { driver: () => R / next[Byte] }: R / Exception[IOError] = {
+def readFile[R](path: String) { driver: () => R / next[Byte] }: R / throw[IOError] = {
 
   val file = openForReading(path);
   with on[IOError].finalize { close(file) }
@@ -153,7 +153,7 @@ interface Files {
 }
 
 /// Using the file system via node.js
-def filesystem[R] { program: => R / Files }: R / Exception[IOError] = // TODO move Exception to be bidirectional
+def filesystem[R] { program: => R / Files }: R / throw[IOError] = // TODO move Exception to be bidirectional
   try { program() }
   with Files {
     def readFile(path) = resume(readFile(path))
@@ -161,26 +161,26 @@ def filesystem[R] { program: => R / Files }: R / Exception[IOError] = // TODO mo
   }
 
 
-def openForReading(path: String): File / Exception[IOError] =
+def openForReading(path: String): File / throw[IOError] =
   internal::checkResult(internal::openForReading(path))
 
-def openForWriting(path: String): File / Exception[IOError] =
+def openForWriting(path: String): File / throw[IOError] =
   internal::checkResult(internal::openForWriting(path))
 
-def openForAppending(path: String): File / Exception[IOError] =
+def openForAppending(path: String): File / throw[IOError] =
   internal::checkResult(internal::openForAppending(path))
 
-def read(file: File, buffer: ByteArray, offset: Int, size: Int, position: Int): Int / Exception[IOError] =
+def read(file: File, buffer: ByteArray, offset: Int, size: Int, position: Int): Int / throw[IOError] =
   internal::checkResult(internal::read(file, buffer, offset, size, position))
 
-def write(file: File, buffer: ByteArray, offset: Int, size: Int, position: Int): Int / Exception[IOError] =
+def write(file: File, buffer: ByteArray, offset: Int, size: Int, position: Int): Int / throw[IOError] =
   internal::checkResult(internal::write(file, buffer, offset, size, position))
 
-def close(file: File): Unit / Exception[IOError] = {
+def close(file: File): Unit / throw[IOError] = {
   internal::checkResult(internal::close(file)); ()
 }
 
-def mkdir(path: String): Unit / Exception[IOError] = {
+def mkdir(path: String): Unit / throw[IOError] = {
   internal::checkResult(internal::mkdir(path)); ()
 }
 

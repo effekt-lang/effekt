@@ -60,8 +60,8 @@ def nonEmpty[A](l: List[A]): Bool = l match {
 /// Throws a `MissingValue` exception if it's empty.
 ///
 /// O(1)
-def head[A](l: List[A]): A / Exception[MissingValue] = l match {
-  case Nil() => do raise(MissingValue(), "Trying to get the head of an empty list")
+def head[A](l: List[A]): A / throw[MissingValue] = l match {
+  case Nil() => do throw(MissingValue("Trying to get the head of an empty list"))
   case Cons(a, rest) => a
 }
 
@@ -69,8 +69,8 @@ def head[A](l: List[A]): A / Exception[MissingValue] = l match {
 /// Throws a `MissingValue` exception if it's empty.
 ///
 /// O(1)
-def tail[A](l: List[A]): List[A] / Exception[MissingValue] = l match {
-  case Nil() => do raise(MissingValue(), "Trying to get the head of an empty list")
+def tail[A](l: List[A]): List[A] / throw[MissingValue] = l match {
+  case Nil() => do throw(MissingValue("Trying to get the tail of an empty list"))
   case Cons(a, rest) => rest
 }
 
@@ -78,8 +78,8 @@ def tail[A](l: List[A]): List[A] / Exception[MissingValue] = l match {
 /// Throws a `MissingValue` exception if it's empty.
 ///
 /// O(n)
-def init[A](l: List[A]): List[A] / Exception[MissingValue] = l match {
-  case Nil() => do raise(MissingValue(), "Trying to get the beginning of an empty list")
+def init[A](l: List[A]): List[A] / throw[MissingValue] = l match {
+  case Nil() => do throw(MissingValue("Trying to get the beginning of an empty list"))
   case Cons(a, Nil()) => Nil()
   case Cons(a, as) => Cons(a, as.init)
 }
@@ -96,10 +96,10 @@ def headOption[A](l: List[A]): Option[A] = l match {
 /// Returns the last element of a given list.
 ///
 /// O(N)
-def last[A](l: List[A]): A / Exception[MissingValue] = {
+def last[A](l: List[A]): A / throw[MissingValue] = {
   def go(list: List[A]): A = {
     list match {
-      case Nil() => do raise(MissingValue(), "Trying to get the last element of an empty list")
+      case Nil() => do throw(MissingValue("Trying to get the last element of an empty list"))
       case Cons(x, Nil()) => x
       case Cons(x, xs) => go(xs)
     }
@@ -111,10 +111,10 @@ def last[A](l: List[A]): A / Exception[MissingValue] = {
 /// Get the value at given index.
 ///
 /// O(N)
-def get[A](list: List[A], index: Int): A / Exception[OutOfBounds] = {
+def get[A](list: List[A], index: Int): A / throw[OutOfBounds] = {
   def go(list: List[A], i: Int): A = {
     list match {
-      case Nil() => do raise(OutOfBounds(), "Trying to get an element outside the bounds of a list")
+      case Nil() => do throw(OutOfBounds(index, "Trying to get an element outside the bounds of a list"))
       case Cons(x, xs) and i == 0 => x
       case Cons(x, xs)            => go(xs, i - 1)
     }
@@ -604,11 +604,11 @@ def updateAt[A](list: List[A], index: Int) { update: A => A }: List[A] = {
 /// ```
 ///
 /// O(N)
-def modifyAt[A](list: List[A], index: Int) { update: A => A }: List[A] / Exception[OutOfBounds] = {
+def modifyAt[A](list: List[A], index: Int) { update: A => A }: List[A] / throw[OutOfBounds] = {
   list.splitAt(index) match {
     case (left, Cons(x, right)) =>
       left.append(Cons(update(x), right))
-    case _ => do raise(OutOfBounds(), "Trying to modify an element outside the bounds of a list")
+    case _ => do throw(OutOfBounds(index, "Trying to modify an element outside the bounds of a list"))
   }
 }
 

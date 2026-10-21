@@ -25,12 +25,6 @@ type View[A] {
   View(element: A, remainder: Seq[A])
 }
 
-/// Exception[NoSuchElement] is raised when accessing non-existing elements
-/// or splitting empty collections.
-record NoSuchElement()
-
-
-record IndexOutOfBounds()
 
 
 
@@ -227,13 +221,13 @@ def uncons[A](seq: Seq[A]): View[A] = seq match {
   case Deep(size, Four(a, b, c, d), m, s) => View(a, Deep(size - 1, Three(b, c, d), m, s))
 }
 
-def head[A](seq: Seq[A]): A / Exception[NoSuchElement] = seq.uncons match {
-  case IsEmpty() => raise(NoSuchElement(), "Calling `head` on empty sequence.")
+def head[A](seq: Seq[A]): A / throw[MissingValue] = seq.uncons match {
+  case IsEmpty() => do throw(MissingValue("Calling `head` on empty sequence."))
   case View(element, _) => element
 }
 
-def tail[A](seq: Seq[A]): Seq[A] / Exception[NoSuchElement] = seq.uncons match {
-  case IsEmpty() => raise(NoSuchElement(), "Calling `tail` on empty sequence.")
+def tail[A](seq: Seq[A]): Seq[A] / throw[MissingValue] = seq.uncons match {
+  case IsEmpty() => do throw(MissingValue("Calling `tail` on empty sequence."))
   case View(element, rest) => rest
 }
 
@@ -392,7 +386,7 @@ def reverse[A](seq: Seq[A]): Seq[A] = {
 
 
 /// Random access
-def index[A](seq: Seq[A], index: Int): A / Exception[NoSuchElement] = {
+def index[A](seq: Seq[A], index: Int): A / throw[OutOfBounds] = {
 
   // invariant for all internal functions: element is in the sequence
 
@@ -452,7 +446,7 @@ def index[A](seq: Seq[A], index: Int): A / Exception[NoSuchElement] = {
       }
   }
 
-  if (index >= seq.size) raise(NoSuchElement(), "...")
+  if (index < 0 || index >= seq.size) do throw(OutOfBounds(index, "Trying to access an element outside the bounds of a sequence"))
   else seq match {
     case Empty() => <{ "Cannot happen!" }>
     case Single(v) => v // has to be the right one due to the check above
@@ -467,7 +461,7 @@ def index[A](seq: Seq[A], index: Int): A / Exception[NoSuchElement] = {
 }
 
 /// Random access
-def update[A](seq: Seq[A], index: Int, value: A): Seq[A] / Exception[NoSuchElement] = {
+def update[A](seq: Seq[A], index: Int, value: A): Seq[A] / throw[OutOfBounds] = {
 
   // invariant for all internal functions: element is in the sequence
 
@@ -528,7 +522,7 @@ def update[A](seq: Seq[A], index: Int, value: A): Seq[A] / Exception[NoSuchEleme
       }
   }
 
-  if (index >= seq.size) raise(NoSuchElement(), "...")
+  if (index < 0 || index >= seq.size) do throw(OutOfBounds(index, "Trying to update an element outside the bounds of a sequence"))
   else seq match {
     case Empty() => <{ "Cannot happen!" }>
     case Single(_) => Single(value) // has to be the right one due to the check above
@@ -656,7 +650,7 @@ def toSeq[A](l: List[A]): Seq[A] = {
 
 record Split[A, R](prefix: R, element: A, suffix: R)
 
-def splitAt[A](seq: Seq[A], index: Int): (Seq[A], Seq[A]) / Exception[IndexOutOfBounds] = {
+def splitAt[A](seq: Seq[A], index: Int): (Seq[A], Seq[A]) / throw[OutOfBounds] = {
 
   // invariant index is in digit
   def go(digit: Digit[A], index: Int): Split[A, List[A]] = digit match {
@@ -758,7 +752,7 @@ def splitAt[A](seq: Seq[A], index: Int): (Seq[A], Seq[A]) / Exception[IndexOutOf
   }
 
   if (index < 0) {
-    do raise(IndexOutOfBounds(), "...")
+    do throw(OutOfBounds(index, "Trying to split a sequence at a negative index"))
   } else if (index >= seq.size) {
     (seq, Empty())
   } else seq match {
@@ -788,7 +782,7 @@ def splitAt[A](seq: Seq[A], index: Int): (Seq[A], Seq[A]) / Exception[IndexOutOf
 }
 
 
-def insert[A](seq: Seq[A], value: A, index: Int): Seq[A] / Exception[IndexOutOfBounds] =
+def insert[A](seq: Seq[A], value: A, index: Int): Seq[A] / throw[OutOfBounds] =
   splitAt(seq, index) match {
     case (prefix, suffix) => prefix.concat(cons(value, suffix))
   }

@@ -29,16 +29,16 @@ def resizableArray[T](): ResizableArray[T] = resizableArray(8)
 
 
 /// Throw an OutOfBounds exception if index is not a valid index into arr
-def boundsCheck[T](arr: ResizableArray[T], index: Int): Unit / Exception[OutOfBounds] =
+def boundsCheck[T](arr: ResizableArray[T], index: Int): Unit / throw[OutOfBounds] =
   if (index < 0 || index >= arr.size) {
-    do raise(OutOfBounds(), "Array index out of bounds: " ++ show(index))
+    do throw(OutOfBounds(index, "Array index out of bounds"))
   }
 
 
 /// Get the element at position `index` in the resizable array `arr`
 ///
 /// O(1)
-def get[T](arr: ResizableArray[T], index: Int): T / Exception[OutOfBounds] = {
+def get[T](arr: ResizableArray[T], index: Int): T / throw[OutOfBounds] = {
   arr.boundsCheck(index);
   arr.rawContentPtr.get.get(index)
 }
@@ -46,7 +46,7 @@ def get[T](arr: ResizableArray[T], index: Int): T / Exception[OutOfBounds] = {
 /// Set the element at position `index` in the resizable array `arr` to `value`
 ///
 /// O(1)
-def set[T](arr: ResizableArray[T], index: Int, value: T): Unit / Exception[OutOfBounds] = {
+def set[T](arr: ResizableArray[T], index: Int, value: T): Unit / throw[OutOfBounds] = {
   arr.boundsCheck(index);
   arr.rawContentPtr.get.set(index, value)
 }
@@ -54,7 +54,7 @@ def set[T](arr: ResizableArray[T], index: Int, value: T): Unit / Exception[OutOf
 /// Swap the elements at the given positions in the resizable array `arr`
 ///
 /// O(1)
-def swap[T](arr: ResizableArray[T], index1: Int, index2: Int): Unit / Exception[OutOfBounds] = {
+def swap[T](arr: ResizableArray[T], index1: Int, index2: Int): Unit / throw[OutOfBounds] = {
   arr.boundsCheck(max(index1, index2))
   val raw = arr.rawContentPtr.get
   val tmp = raw.get(index1)
@@ -66,9 +66,9 @@ def swap[T](arr: ResizableArray[T], index1: Int, index2: Int): Unit / Exception[
 /// This only changes the size of the backing array, not the `size`.
 ///
 /// O(n)
-def setCapacity[T](arr: ResizableArray[T], capacity: Int): Unit / Exception[OutOfBounds] = {
+def setCapacity[T](arr: ResizableArray[T], capacity: Int): Unit / throw[OutOfBounds] = {
   if (arr.size > capacity) {
-    do raise(OutOfBounds(), "Cannot change capacity of ResizableArray to " ++ capacity.show ++ " below size " ++ arr.size.show)
+    do throw(OutOfBounds(capacity, "Cannot change capacity of ResizableArray below size " ++ arr.size.show))
   }
   val oldRaw = arr.rawContentPtr.get
   if (oldRaw.size != capacity) {
@@ -81,7 +81,7 @@ def setCapacity[T](arr: ResizableArray[T], capacity: Int): Unit / Exception[OutO
 /// If the shrinkThreshold is reached, shrink by growFactor, otherwise do nothing
 ///
 /// O(n)
-def maybeShrink[T](arr: ResizableArray[T]): Unit / Exception[OutOfBounds] = {
+def maybeShrink[T](arr: ResizableArray[T]): Unit / throw[OutOfBounds] = {
   if (arr.size.toDouble < arr.rawContentPtr.get.size.toDouble * shrinkThreshold) {
     val newCap = max(arr.size, (arr.rawContentPtr.get.size.toDouble / growFactor).ceil)
     arr.setCapacity(newCap)
@@ -91,7 +91,7 @@ def maybeShrink[T](arr: ResizableArray[T]): Unit / Exception[OutOfBounds] = {
 /// Makes sure capacity is at least the given one
 ///
 /// O(given capacity - current capacity) amortized, O(n) worst case // TODO ?
-def ensureCapacity[T](arr: ResizableArray[T], capacity: Int): Unit / Exception[OutOfBounds] = {
+def ensureCapacity[T](arr: ResizableArray[T], capacity: Int): Unit / throw[OutOfBounds] = {
   if (arr.rawContentPtr.get.size < capacity) {
     val curCapd: Double = arr.rawContentPtr.get.size.toDouble
     val minGrowCapacity: Int = (curCapd * growFactor + 1.0).toInt
@@ -104,9 +104,9 @@ def ensureCapacity[T](arr: ResizableArray[T], capacity: Int): Unit / Exception[O
 /// Note: New elements might be uninitialized!!!
 ///
 /// O(max(1,index - n)) amortized, O(n) worst case if index > capacity
-def setResizing[T](arr: ResizableArray[T], index: Int, value: T): Unit / Exception[OutOfBounds] = {
+def setResizing[T](arr: ResizableArray[T], index: Int, value: T): Unit / throw[OutOfBounds] = {
   if (index < 0) {
-    do raise(OutOfBounds(), "Negative index " ++ index.show)
+    do throw(OutOfBounds(index, "Negative index"))
   }
   if (index < arr.size) {
     arr.rawContentPtr.get.set(index, value)
@@ -130,7 +130,7 @@ def add[T](arr: ResizableArray[T], value: T): Int = {
 /// Remove and return the rightmost element in the resizable array.
 ///
 /// O(1) amortized, O(n) worst case
-def popRight[T](arr: ResizableArray[T]): T / Exception[OutOfBounds] = {
+def popRight[T](arr: ResizableArray[T]): T / throw[OutOfBounds] = {
   val last = arr.size - 1
   arr.boundsCheck(last)
   val r = arr.rawContentPtr.get.get(last)

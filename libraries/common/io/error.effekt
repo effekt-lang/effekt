@@ -182,6 +182,8 @@ def message(error: IOError): String = error match {
   case EUNATCH() => "protocol driver not attached"
 }
 
+def display(error: IOError): String = message(error)
+
 /// Corresponding name of a libuv error
 ///
 /// see: https://docs.libuv.org/en/v1.x/errors.html
@@ -479,10 +481,9 @@ extern jsNode """
 }
 
 namespace internal {
-  def checkResult(result: Int): Int / Exception[IOError] =
+  def checkResult(result: Int): Int / throw[IOError] =
     if (result < 0) {
-      val ioError = fromNumber(internal::errorNumber(result));
-      do raise(ioError, message(ioError))
+      do throw(fromNumber(internal::errorNumber(result)))
     } else {
       result
     }

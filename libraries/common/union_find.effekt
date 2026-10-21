@@ -6,36 +6,42 @@ import resizable_array
 record UnionFind(rawElements: ResizableArray[Int])
 
 namespace internal {
+  /// Rethrows out-of-bounds accesses with a reason that talks about nodes
+  def unknownNode[A] { program: => A / throw[OutOfBounds] }: A / throw[OutOfBounds] =
+    try { program() } with throw[OutOfBounds] { exception =>
+      do throw(OutOfBounds(exception.index, "No such node in the union-find data structure"))
+    }
+
   // -(rk + 1) for roots
   // parent for inner nodes
-  def isRoot(u: UnionFind, s: Int): Bool / Exception[MissingValue] = {
-    with on[OutOfBounds].default { do raise(MissingValue(), "No node " ++ s.show) }
+  def isRoot(u: UnionFind, s: Int): Bool / throw[OutOfBounds] = {
+    with unknownNode;
     u.rawElements.get(s) < 0
   }
-  def parent(u: UnionFind, s: Int): Int / Exception[MissingValue] = {
-    with on[OutOfBounds].default { do raise(MissingValue(), "No node " ++ s.show) }
+  def parent(u: UnionFind, s: Int): Int / throw[OutOfBounds] = {
+    with unknownNode;
     val c = u.rawElements.get(s)
     if (c < 0) {
-      do raise(MissingValue(), "Root node " ++ s.show ++ " has no parent.")
+      panic("Root node " ++ s.show ++ " has no parent.")
     } else {
       c
     }
   }
-  def rank(u: UnionFind, s: Int): Int / Exception[MissingValue] = {
-    with on[OutOfBounds].default { do raise(MissingValue(), "No node " ++ s.show) }
+  def rank(u: UnionFind, s: Int): Int / throw[OutOfBounds] = {
+    with unknownNode;
     val c = u.rawElements.get(s)
     if (c < 0) {
       -1 * c - 1
     } else {
-      do raise(MissingValue(), "Only root nodes have a rank.")
+      panic("Only root nodes have a rank.")
     }
   }
-  def setParent(u: UnionFind, child: Int, parent: Int) = {
-    with default[OutOfBounds, Unit] { do raise(MissingValue(), "No node " ++ child.show) }
+  def setParent(u: UnionFind, child: Int, parent: Int): Unit / throw[OutOfBounds] = {
+    with unknownNode;
     u.rawElements.set(child, parent)
   }
-  def setRank(u: UnionFind, root: Int, rank: Int) = {
-    with default[OutOfBounds, Unit] { do raise(MissingValue(), "No node " ++ root.show) }
+  def setRank(u: UnionFind, root: Int, rank: Int): Unit / throw[OutOfBounds] = {
+    with unknownNode;
     u.rawElements.set(root, -1 * rank - 1)
   }
 }
@@ -56,7 +62,7 @@ def makeSet(u: UnionFind): Int = {
 /// Find the representative of the given element.
 ///
 /// O(inverse-ackermann(n)) amortized
-def find(u: UnionFind, s: Int): Int / Exception[MissingValue] = {
+def find(u: UnionFind, s: Int): Int / throw[OutOfBounds] = {
   def goFind(s: Int): Int = {
     if (u.internal::isRoot(s)) {
       s
@@ -81,7 +87,7 @@ def find(u: UnionFind, s: Int): Int / Exception[MissingValue] = {
 /// Make it such that the sets *represented by* x and y are merged
 ///
 /// O(1)
-def unionRoots(u: UnionFind, x: Int, y: Int): Int / Exception[MissingValue] = {
+def unionRoots(u: UnionFind, x: Int, y: Int): Int / throw[OutOfBounds] = {
   if(not(u.internal::isRoot(x) && u.internal::isRoot(y))) {
     panic("unionRoots should only be called on representatives")
   }
@@ -106,7 +112,7 @@ def unionRoots(u: UnionFind, x: Int, y: Int): Int / Exception[MissingValue] = {
 /// Make it so a and b are in the same set
 ///
 /// O(inverse-ackermann(n)) amortized
-def union(u: UnionFind, a: Int, b: Int): Int / Exception[MissingValue] = {
+def union(u: UnionFind, a: Int, b: Int): Int / throw[OutOfBounds] = {
   val x = u.find(a)
   val y = u.find(b)
   u.unionRoots(x, y)

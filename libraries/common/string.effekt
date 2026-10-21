@@ -39,8 +39,6 @@ def substring(str: String, from: Int): String =
 
 /// Checks whether str starts with the given prefix at `from`
 def isSubstringAt(str: String, prefix: String, from: Int): Bool = {
-  with default[OutOfBounds, Bool] { false };
-
   val stringLength = str.length
   val prefixLength = prefix.length
 
@@ -51,7 +49,8 @@ def isSubstringAt(str: String, prefix: String, from: Int): Bool = {
     if (index.done?) true
     else if (index.matches?) go(index + 1) else false
 
-  go(0)
+  if (from < 0 || from + prefixLength > stringLength) false
+  else go(0)
 }
 
 def startsWith(str: String, prefix: String): Bool =
@@ -127,16 +126,17 @@ def toBool(s: String): Bool / fail = s match {
 
 // TODO optimize (right now this will be horribly slow (compared to the native JS version)
 def toInt(str: String): Int / fail = {
-  def go(index: Int, acc: Int): Int = {
-    // wrong index means we're done parsing
-    with on[OutOfBounds].default { () => acc };
+  val length = str.length
 
-    val c = str.charAt(index)
-    val d = char::digitValue(c)
-    go(index + 1, 10 * acc + d)
-  }
+  def go(index: Int, acc: Int): Int =
+    if (index >= length) acc
+    else {
+      val c = str.charAt(index)
+      val d = char::digitValue(c)
+      go(index + 1, 10 * acc + d)
+    }
 
-  with on[OutOfBounds].default {
+  if (length == 0) {
     do fail()
   }
 
@@ -152,16 +152,17 @@ def toInt(str: String, base: Int): Int / fail = {
     do fail()
   }
 
-  def go(index: Int, acc: Int): Int = {
-    // wrong index means we're done parsing
-    with on[OutOfBounds].default { () => acc };
+  val length = str.length
 
-    val c = str.charAt(index)
-    val d = char::digitValue(c, base)
-    go(index + 1, base * acc + d)
-  }
+  def go(index: Int, acc: Int): Int =
+    if (index >= length) acc
+    else {
+      val c = str.charAt(index)
+      val d = char::digitValue(c, base)
+      go(index + 1, base * acc + d)
+    }
 
-  with on[OutOfBounds].default {
+  if (length == 0) {
     do fail()
   }
 
@@ -263,9 +264,10 @@ extern def compareStringBytes(left: String, right: String) at {}: Ordering =
   llvm { compareByteArray(fromString(left), fromString(right)) }
   default { internal::compareCodePoints(left, right) }
 
-def charAt(str: String, index: Int): Char / Exception[OutOfBounds] =
+/// Aborts the program when the index is out of bounds.
+def charAt(str: String, index: Int): Char =
   if (index < 0 || index >= length(str))
-    do raise(OutOfBounds(), "Index out of bounds: " ++ show(index) ++ " in string: '" ++ str ++ "'")
+    panic("Index out of bounds: " ++ show(index) ++ " in string: '" ++ str ++ "'")
   else
     unsafeCharAt(str, index)
 

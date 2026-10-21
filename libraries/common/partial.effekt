@@ -1,7 +1,6 @@
 module partial
 
 import effekt
-import option
 
 
 effect fail(): Nothing
@@ -23,12 +22,6 @@ def onFail[R] { fallback: () => R } { program: () => R / fail }: R =
 def succeeds { program: () => Unit / fail }: Bool =
   try { program(); true } with fail { false }
 
-def optionally[R] { program: () => R / fail }: Option[R] =
-  try {
-    Some(program())
-  } with fail {
-    None()
-  }
 
 def must[R] { program: () => R / stop }: R / fail =
   try { program() } with stop { resume(do fail()) }
@@ -48,11 +41,10 @@ def exhaustively { program: () => Unit / fail }: Unit =
 def crash[R](message: String) { program: () => R / fail }: R =
   attempt { program() } { panic(message) }
 
-def suchThat[A](value: A){ predicate: A => Bool }: Option[A] =
-  if (predicate(value)) { Some(value) } else { None() }
+def suchThat[A](value: A){ predicate: A => Bool }: A / fail =
+  if (predicate(value)) { value } else { do fail() }
 
-def getOrFail[A](option: Option[A]): A / fail =
-  option.getOrElse { do fail() }
+
 
 namespace returning {
 

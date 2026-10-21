@@ -10,15 +10,15 @@ import io/error
 type Connection = Int
 
 /// Reads data from a TCP connection into a buffer at the given offset.
-def read(handle: Connection, buffer: ByteArray, offset: Int, size: Int): Int / Exception[IOError] =
+def read(handle: Connection, buffer: ByteArray, offset: Int, size: Int): Int / throw[IOError] =
   internal::checkResult(internal::read(handle, buffer, offset, size))
 
 /// Writes data from a buffer at the given offset to a TCP connection.
-def write(handle: Connection, buffer: ByteArray, offset: Int, size: Int): Int / Exception[IOError] =
+def write(handle: Connection, buffer: ByteArray, offset: Int, size: Int): Int / throw[IOError] =
   internal::checkResult(internal::write(handle, buffer, offset, size))
 
 /// Establishes a TCP connection to the specified host and port.
-def connect(host: String, port: Int): Connection / Exception[IOError] =
+def connect(host: String, port: Int): Connection / throw[IOError] =
   internal::checkResult(internal::connect(host, port))
 
 /// Closes a TCP connection and releases associated resources.
@@ -29,12 +29,12 @@ def close(handle: Connection): Unit =
 type Listener = Int
 
 /// Creates a TCP listener bound to the specified host and port.
-def bind(host: String, port: Int): Listener / Exception[IOError] =
+def bind(host: String, port: Int): Listener / throw[IOError] =
   internal::checkResult(internal::bind(host, port))
 
 /// Starts listening for incoming connections and handles them with the provided handler function.
 /// Runs until `shutdown` is called on this `Listener`.
-def listen(listener: Listener, handler: Connection => Unit at {io, async, global}): Unit / Exception[IOError] = {
+def listen(listener: Listener, handler: Connection => Unit at {io, async, global}): Unit / throw[IOError] = {
   internal::checkResult(internal::listen(listener, handler)); ()
 }
 
@@ -42,7 +42,7 @@ def listen(listener: Listener, handler: Connection => Unit at {io, async, global
 def shutdown(listener: Listener): Unit =
   internal::shutdown(listener)
 
-def streaming[R](connection: Connection) { program: () => R / {next[ByteArray], emit[ByteArray]} }: R / Exception[IOError] =
+def streaming[R](connection: Connection) { program: () => R / {next[ByteArray], emit[ByteArray]} }: R / throw[IOError] =
   try {
     program()
   } with emit[ByteArray] { bytes =>
