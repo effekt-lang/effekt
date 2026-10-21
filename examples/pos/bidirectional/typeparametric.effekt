@@ -9,19 +9,19 @@ extern def cap[U, V]() at {}: Cap[U, V] at {} =
   llvm "ret %Pos zeroinitializer"
 
 interface Foo[S] {
-  def op[A]() {f: Cap[S, A]}: Cap[S, A] at f / { Exception[S] }
+  def op[A]() {f: Cap[S, A]}: Cap[S, A] at f / { throw[S] }
 }
 
 def main() = {
   def myCap = cap[Int, String]()
   try {
-    report[Int] {
+    ignore[Int] {
       val res: Cap[Int, String] at {} = do op() { myCap };
       ()
     }
   } with Foo[Int] {
     def op[B]() = {
-      resume { {g: Cap[Int, B]} => do raise(42, "") }
+      resume { {g: Cap[Int, B]} => do throw(42) }
     }
   }
 }

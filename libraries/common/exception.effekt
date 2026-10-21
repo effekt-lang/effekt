@@ -7,6 +7,10 @@ import effekt
 
 effect throw[E](exception: E): Nothing
 
+/**
+ * Plain strings can be thrown as exceptions; they are displayed as they are.
+ */
+def display(message: String): String = message
 
 /**
  * Used as a type for `throw` in functions which expect a value to be present,

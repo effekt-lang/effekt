@@ -5,9 +5,9 @@ def foo() = {
   };
 
   [1, 2, 3].foreach { x =>
-    raise(x.show)
+    do throw(x.show)
   };
 
 }
 
-def main() = report[RuntimeError] { foo() }
+def main() = report[String] { foo() }

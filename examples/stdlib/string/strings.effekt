@@ -1,25 +1,16 @@
-import exception
-
 def main() = {
   val str = "hello world"
   val c = 'a'
 
-  def charOrOutOfBounds { p: => Char / Exception[OutOfBounds] }: Unit = {
-    with on[OutOfBounds].default { println("<OutOfBounds>") }
-    println(p().show)
-  }
-
   def intOrWrongFormat { p: => Int / fail }: Unit =
     attempt { println(p().show) } { println("<WrongFormat>") }
 
-  charOrOutOfBounds { str.charAt(0) }     // 104
-  charOrOutOfBounds { str.charAt(10) }    // 100
+  println(str.charAt(0).show)     // 104
+  println(str.charAt(10).show)    // 100
 
   println(utf8ByteCount('a'))      // 1
   println(utf8ByteCount('\u0a00')) // 3
 
-
-  charOrOutOfBounds { str.charAt(11) }
 
   println(str.isSubstringAt("hello", 0)) // true
   println(str.isSubstringAt("", 0))      // true
