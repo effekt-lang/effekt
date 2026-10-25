@@ -22,6 +22,7 @@
     EffektPy = { url = "github:effekt-community/EffektPy"; inputs.nixpkgs.follows = "nixpkgs"; inputs.effekt-nix.follows = "effekt-nix"; };
     fair-minesweeper = { url = "github:effekt-community/fair-minesweeper"; inputs.nixpkgs.follows = "nixpkgs"; inputs.effekt-nix.follows = "effekt-nix"; };
     FairSweeper = { url = "github:effekt-community/FairSweeper"; inputs.nixpkgs.follows = "nixpkgs"; inputs.effekt-nix.follows = "effekt-nix"; };
+    Linguistic-Effects = { url = "github:effekt-community/Linguistic-Effects"; inputs.nixpkgs.follows = "nixpkgs"; inputs.effekt-nix.follows = "effekt-nix"; };
     LinkedIn-Games-in-Effekt = { url = "github:effekt-community/LinkedIn-Games-in-Effekt"; inputs.nixpkgs.follows = "nixpkgs"; inputs.effekt-nix.follows = "effekt-nix"; };
     nette-effekte = { url = "github:effekt-community/nette-effekte"; inputs.nixpkgs.follows = "nixpkgs"; inputs.effekt-nix.follows = "effekt-nix"; };
     Real-Time-Stream-Processing-Library = { url = "github:effekt-community/Real-Time-Stream-Processing-Library"; inputs.nixpkgs.follows = "nixpkgs"; inputs.effekt-nix.follows = "effekt-nix"; };
