@@ -48,7 +48,7 @@
       };
 
       version = "0.999.999+nightly";
-      depsSha256 = "sha256-4uHi4+ahCHXdGNUyJo9AEYeS4twTcELDl5iFs5lVsyQ=";
+      depsSha256 = "sha256-YVGYTc76xAYJW2tj6o3TRBoAEhw7I2KNaFJRrQo8XJw=";
 
       perSystem = system:
         let
