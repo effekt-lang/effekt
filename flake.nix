@@ -44,6 +44,7 @@
 
       # projects known to fail with the reason why (CI checks that they still fail)
       broken = {
+        tracing-effective-rays = "the test overflows the JS stack at run time with RETURN frames ('RangeError: Maximum call stack size exceeded')";
         # foobar = "fails since 0.99.0: 'Cannot typecheck call' in test/foobar.effekt";
       };
 
