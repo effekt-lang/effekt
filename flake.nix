@@ -75,7 +75,7 @@
         then project.packages.${system}.default.override { inherit (allSystems.${system}) effekt; }
         else throw "community project '${name}' publishes no packages";
 
-      # every backend of a project as a job ('<pname>-<backend>', see 'flakePackages'), none if the project offers
+      # every backend of a project as a job (named by backend, see 'variantsOf'), none if the project offers
       # no package for the system or its package is not meant for it ('meta.platforms')
       jobsFor = system: name:
         let
@@ -84,7 +84,7 @@
           offered = !(project ? packages) || project.packages ? ${system};
         in
         lib.optionalAttrs (offered && lib.meta.availableOn (lib.systems.elaborate system) package)
-          (allSystems.${system}.effektLib.flakePackages package);
+          (allSystems.${system}.effektLib.variantsOf package);
 
       # jobs grouped by expectation (both groups always exist, so that CI finds 'broken' even when it is empty)
       jobs = forAllSystems (system:
@@ -101,7 +101,7 @@
         default = allSystems.${system}.effekt;
       });
 
-      # the jobs, as '<expectation>.<project>.<pname>-<backend>' ('community' expected to build, 'broken' to fail)
+      # the jobs, as '<expectation>.<project>.<backend>' ('community' expected to build, 'broken' to fail)
       legacyPackages = jobs;
 
       lib = {
