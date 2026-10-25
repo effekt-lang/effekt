@@ -42,12 +42,17 @@
       # everything that is not our infrastructure is a community project
       projects = builtins.removeAttrs inputs [ "self" "nixpkgs" "effekt-nix" ];
 
+      # projects known to fail with the reason why (CI checks that they still fail)
+      broken = {
+        # foobar = "fails since 0.99.0: 'Cannot typecheck call' in test/foobar.effekt";
+      };
+
       version = "0.999.999+nightly";
       depsSha256 = "sha256-4uHi4+ahCHXdGNUyJo9AEYeS4twTcELDl5iFs5lVsyQ=";
 
-      perSystem = forAllSystems (system:
+      perSystem = system:
         let
-          effektLib = mkLib (import nixpkgs { inherit system; });
+          effektLib = mkLib nixpkgs.legacyPackages.${system};
         in
         {
           inherit effektLib;
@@ -56,32 +61,60 @@
             src = self;
             backends = _: effektLib.availableBackends version;
           };
-        });
+        };
 
-      # filter out projects that don't offer package for the given system
-      projectsFor = system: lib.filterAttrs
-        (_: project: !(project ? packages) || project.packages ? ${system}) projects;
+      allSystems = forAllSystems perSystem;
 
-      # return the package for the given project with an overriden Effekt, checking that the project has a package to begin with
-      packageFor = system: effekt: name: project:
+      # what is expected of a project with the compiler under test
+      expectationOf = name: if broken ? ${name} then "broken" else "community";
+
+      # returns the package for the given project with an overriden Effekt,
+      # checking that the project has a package to begin with
+      packageUnderTest = system: name: project:
         if project ? packages
-        then project.packages.${system}.default.override { inherit effekt; }
+        then project.packages.${system}.default.override { inherit (allSystems.${system}) effekt; }
         else throw "community project '${name}' publishes no packages";
-    in {
-      # one package per community project ~> a parallel builder reports each one separately
-      packages = forAllSystems (system:
+
+      # every backend of a project as a job ('<pname>-<backend>', see 'flakePackages'), none if the project offers
+      # no package for the system or its package is not meant for it ('meta.platforms')
+      jobsFor = system: name:
         let
-          inherit (perSystem.${system}) effekt;
+          project = projects.${name};
+          package = packageUnderTest system name project;
+          offered = !(project ? packages) || project.packages ? ${system};
         in
-        lib.mapAttrs (packageFor system effekt) (projectsFor system)
-        // {
-          inherit effekt;
-          default = effekt;
-        });
+        lib.optionalAttrs (offered && lib.meta.availableOn (lib.systems.elaborate system) package)
+          (allSystems.${system}.effektLib.flakePackages package);
+
+      # jobs grouped by expectation (both groups always exist, so that CI finds 'broken' even when it is empty)
+      jobs = forAllSystems (system:
+        lib.mapAttrs (_: names: lib.genAttrs names (jobsFor system))
+          ({ community = [ ]; broken = [ ]; } // builtins.groupBy expectationOf (builtins.attrNames projects)));
+
+      unknownBroken = builtins.filter (name: !(projects ? ${name})) (builtins.attrNames broken);
+    in
+    assert lib.assertMsg (unknownBroken == [ ]) "'broken' names unknown community projects: ${toString unknownBroken}";
+    {
+      # the compiler under test
+      packages = forAllSystems (system: {
+        inherit (allSystems.${system}) effekt;
+        default = allSystems.${system}.effekt;
+      });
+
+      # the jobs, as '<expectation>.<project>.<pname>-<backend>' ('community' expected to build, 'broken' to fail)
+      legacyPackages = jobs;
+
+      lib = {
+        inherit broken;
+
+        # the projects not built for each system (broken, or without a package meant for it)
+        skipped = forAllSystems (system:
+          builtins.filter (name: (jobs.${system}.community.${name} or { }) == { }) (builtins.attrNames projects));
+      };
 
       devShells = forAllSystems (system:
         let
-          inherit (perSystem.${system}) effektLib effekt;
+          inherit (allSystems.${system}) effektLib effekt;
         in
         {
           default = effektLib.mkDevShell {

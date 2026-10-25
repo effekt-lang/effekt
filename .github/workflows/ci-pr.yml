@@ -27,8 +27,8 @@ jobs:
           extra_nix_config: |
             accept-flake-config = true
 
-      - name: Set up nix-fast-build
-        run: nix profile install nixpkgs#nix-fast-build
+      - name: Set up nix-fast-build and jq
+        run: nix profile install --inputs-from . nixpkgs#nix-fast-build nixpkgs#jq
 
       - name: Lock the community projects at their current state
         run: nix flake lock
@@ -37,4 +37,10 @@ jobs:
         run: nix-fast-build --no-nom --skip-cached --flake '.#packages.x86_64-linux.effekt'
 
       - name: Build community projects with given Effekt
-        run: nix-fast-build --no-nom --skip-cached --flake '.#packages.x86_64-linux'
+        run: nix-fast-build --no-nom --skip-cached --flake '.#legacyPackages.x86_64-linux.community'
+
+      - name: Check that broken community projects still fail
+        run: |
+          nix-fast-build --no-nom --flake '.#legacyPackages.x86_64-linux.broken' \
+            --result-format json --result-file broken.json || true
+          jq -f .github/broken-verdict.jq broken.json
