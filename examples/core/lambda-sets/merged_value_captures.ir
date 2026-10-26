@@ -1,0 +1,52 @@
+def main(flag: Bool, left: Int, right: Int) = {
+  def takeLeft(ignored: Int) = {
+    return left: Int
+  }
+  def takeRight(ignored: Int) = {
+    return right: Int
+  }
+  val boxed = if (flag: Bool) {
+    return box {} (takeLeft: (Int) => Int @ {})
+  } else {
+    return box {} (takeRight: (Int) => Int @ {})
+  };
+  (unbox boxed: (Int) => Int at {})(0)
+}
+
+/// LAMBDA_SETS
+
+S = ∅
+generic = { takeLeft, takeRight }
+
+/// LAMBDA_SPECIALIZE
+
+type Closure {
+  TakeLeft(left_captured: Int)
+  TakeRight(right_captured: Int)
+}
+
+def main(flag: Bool, left: Int, right: Int) = {
+  def takeLeft(ignored: Int) = {
+    return left: Int
+  }
+  def takeRight(ignored: Int) = {
+    return right: Int
+  }
+  val boxed = if (flag: Bool) {
+    return make Closure TakeLeft(left: Int)
+  } else {
+    return make Closure TakeRight(right: Int)
+  };
+  (applyClosure: (Closure, Int) => Int @ {})(boxed: Closure, 0)
+}
+
+def applyClosure(closure: Closure, arg: Int) = {
+  closure: Closure match[Int] {
+    TakeLeft : { (leftCaptured: Int) =>
+      return leftCaptured: Int
+    }
+    TakeRight : { (rightCaptured: Int) =>
+      return rightCaptured: Int
+    }
+  }
+}
