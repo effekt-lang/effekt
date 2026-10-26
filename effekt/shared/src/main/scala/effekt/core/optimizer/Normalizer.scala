@@ -320,14 +320,17 @@ object Normalizer { normal =>
           Stmt.Def(k, kDef, f(Block.BlockVar(k, kDef.tpe, kDef.capt))(using C.bind(k, kDef)))
       }
 
-      def normalizeVal(id: Id, binding: Stmt, body: Stmt)(using C: Context): Stmt = normalize(binding) match {
+      /**
+       * [[ val id = binding; body ]]  where `binding` is already in normal form.
+       *
+       * Commutes the bindings on the spine of `binding` and normalizes `body` exactly once.
+       */
+      def normalizeVal(id: Id, binding: Stmt, body: Stmt)(using C: Context): Stmt = binding match {
 
         // [[ val x: A = shift(p) { {k: A => R} => body2 }; body: B ]] = shift(p) { {k: >>>B<<< => R} => body2 }
-        case abort @ Stmt.Shift(p, BlockParam(k, BlockType.Interface(Type.ResumeSymbol, List(tpeA, answer)), captures), body2)
+        case Stmt.Shift(p, BlockParam(k, BlockType.Interface(Type.ResumeSymbol, List(tpeA, answer)), captures), body2)
               if !body2.free.contains(k) =>
-            val tpeB = body.tpe
-            Stmt.Shift(p, BlockParam(k, BlockType.Interface(Type.ResumeSymbol, List(tpeB, answer)), captures),
-                normalize(body2))
+            Stmt.Shift(p, BlockParam(k, BlockType.Interface(Type.ResumeSymbol, List(body.tpe, answer)), captures), body2)
 
         // [[ val x: A = sc match [A] { case ... => body2: A }; body: B ]] == sc match [B] { case ... => [[ val x: A = body2; body: B ]] }
         case Stmt.Match(sc, tpe, List((id2, clause @ BlockLit(tparams2, cparams2, vparams2, bparams2, body2))), None) =>
@@ -377,20 +380,20 @@ object Normalizer { normal =>
         // Commute val and bindings
         // [[ val x = { def f = ...; STMT }; STMT ]] = def f = ...; val x = STMT; STMT
         case Stmt.Def(id2, block2, body2) =>
-          Stmt.Def(id2, block2, normalizeVal(id, body2, body))
+          Stmt.Def(id2, block2, normalizeVal(id, body2, body)(using C.bind(id2, block2)))
 
         // Commute val and bindings
         // [[ val x = { let y = ...; STMT }; STMT ]] = let y = ...; val x = STMT; STMT
         case Stmt.Let(id2, binding2, body2) =>
-          Stmt.Let(id2, binding2, normalizeVal(id, body2, body))
+          Stmt.Let(id2, binding2, normalizeVal(id, body2, body)(using C.bind(id2, binding2)))
 
         case Stmt.ImpureApp(id2, callee2, targs2, vargs2, bargs2, body2) =>
           Stmt.ImpureApp(id2, callee2, targs2, vargs2, bargs2, normalizeVal(id, body2, body))
 
         // Flatten vals. This should be non-leaking since we use garbage free refcounting.
-        // [[ val x = { val y = stmt1; stmt2 }; stmt3 ]] = [[ val y = stmt1; val x = stmt2; stmt3 ]]
+        // [[ val x = { val y = stmt1; stmt2 }; stmt3 ]] = val y = stmt1; [[ val x = stmt2; stmt3 ]]
         case Stmt.Val(id2, binding2, body2) =>
-          normalizeVal(id2, binding2, normalizeVal(id, body2, body))
+          Stmt.Val(id2, binding2, normalizeVal(id, body2, body))
 
         // [[ val x = { var y in r = e; stmt2 }; stmt1 ]] = var y in r = e; [[ val x = stmt2; stmt1 ]]
         case Stmt.Alloc(id2, init2, region2, body2) =>
@@ -413,7 +416,7 @@ object Normalizer { normal =>
           case normalizedBody => Stmt.Val(id, other, normalizedBody)
         }
       }
-      normalizeVal(id, binding, body)
+      normalizeVal(id, normalize(binding), body)
 
 
     // "Congruences"
@@ -459,10 +462,7 @@ object Normalizer { normal =>
     // [[ box (unbox e) ]] = [[ e ]]
     case Expr.Box(b, annotatedCapture) => active(b) match {
       case NormalizedBlock.Known(Unbox(p), boundBy) => p
-      case _ => normalize(b) match {
-        case Block.Unbox(expr) => expr
-        case b => Expr.Box(b, annotatedCapture)
-      }
+      case normalized => Expr.Box(normalized.shared, annotatedCapture)
     }
 
     // congruences
