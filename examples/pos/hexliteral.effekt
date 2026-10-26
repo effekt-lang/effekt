@@ -1,0 +1,6 @@
+def main() = {
+    println(0x00000000)
+    println(0xffffffff)
+    println(0x00bc614e)
+    println(0x000000ff)
+}
