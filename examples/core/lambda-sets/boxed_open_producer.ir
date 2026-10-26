@@ -1,0 +1,30 @@
+def inc(x: Int) = {
+  return x: Int
+}
+
+def main(flag: Bool) = {
+  val boxed = if (flag: Bool) {
+    return box {} (inc: (Int) => Int @ {})
+  } else {
+    <> : (Int) => Int at {}
+  };
+  (unbox boxed: (Int) => Int at {})(42)
+}
+
+// All producers of one boxed value component must use one representation.
+// An opaque producer therefore keeps the known branch in the original boxed
+// representation as well.
+/// LAMBDA_SPECIALIZE
+
+def inc(x: Int) = {
+  return x: Int
+}
+
+def main(flag: Bool) = {
+  val boxed = if (flag: Bool) {
+    return box {} (inc: (Int) => Int @ {})
+  } else {
+    <> : (Int) => Int at {}
+  };
+  (unbox boxed: (Int) => Int at {})(42)
+}

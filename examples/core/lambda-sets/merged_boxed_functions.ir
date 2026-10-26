@@ -1,0 +1,56 @@
+def inc(x: Int) = {
+  return x: Int
+}
+
+def dec(x: Int) = {
+  return x: Int
+}
+
+def main(flag: Bool) = {
+  val boxed = if (flag: Bool) {
+    return box {} (inc: (Int) => Int @ {})
+  } else {
+    return box {} (dec: (Int) => Int @ {})
+  };
+  (unbox boxed: (Int) => Int at {})(42)
+}
+
+/// LAMBDA_SETS
+
+S = ∅
+generic = { dec, inc }
+
+/// LAMBDA_SPECIALIZE
+
+type Closure_ls1 {
+  dec_1()
+  inc_1()
+}
+
+def inc(x: Int) = {
+  return x: Int
+}
+
+def dec(x: Int) = {
+  return x: Int
+}
+
+def main(flag: Bool) = {
+  val boxed = if (flag: Bool) {
+    return make Closure_ls1 inc_1()
+  } else {
+    return make Closure_ls1 dec_1()
+  };
+  (apply_ls1: (Closure_ls1, Int) => Int @ {})(boxed: Closure_ls1, 42)
+}
+
+def apply_ls1(closure: Closure_ls1, arg0: Int) = {
+  closure: Closure_ls1 match[Int] {
+    dec_1 : { () =>
+      return arg0: Int
+    }
+    inc_1 : { () =>
+      return arg0: Int
+    }
+  }
+}

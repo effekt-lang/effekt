@@ -1,0 +1,36 @@
+def inc(x: Int) = {
+  return x: Int
+}
+
+def dec(x: Int) = {
+  return x: Int
+}
+
+def compose(x: Int){g: (Int) => Int}{h: (Int) => Int} = {
+  val intermediate = (h: (Int) => Int @ {h})(x: Int);
+  (g: (Int) => Int @ {g})(intermediate: Int)
+}
+
+def duplicate(x: Int){f: (Int) => Int} = {
+  (compose: (Int){g: (Int) => Int}{h: (Int) => Int} => Int @ {})(x: Int){
+    (f: (Int) => Int @ {f})
+  }{
+    (f: (Int) => Int @ {f})
+  }
+}
+
+def main() = {
+  val first = (duplicate: (Int){f: (Int) => Int} => Int @ {})(0){
+    (inc: (Int) => Int @ {})
+  };
+  (duplicate: (Int){f: (Int) => Int} => Int @ {})(first: Int){
+    (dec: (Int) => Int @ {})
+  }
+}
+
+/// LAMBDA_SETS
+
+S = compose ↦ { <dec, dec>, <inc, inc> },
+    dec ↦ { <> },
+    duplicate ↦ { <dec>, <inc> },
+    inc ↦ { <> }

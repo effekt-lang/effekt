@@ -1,0 +1,54 @@
+def apply(x: Bool){f: (Bool) => Int} = {
+  (f: (Bool) => Int @ {f})(x: Bool)
+}
+
+def main(flag: Bool, left: Int, right: Int) = {
+  def choose(b: Bool) = {
+    if (b: Bool) {
+      return left: Int
+    } else {
+      return right: Int
+    }
+  }
+  (apply: (Bool){f: (Bool) => Int} => Int @ {})(flag: Bool){
+    (choose: (Bool) => Int @ {})
+  }
+}
+
+/// LAMBDA_SETS
+
+S = apply ↦ { <choose> },
+    choose ↦ { <> }
+
+/// LAMBDA_SPECIALIZE
+
+// choose closes over left and right. The call to apply records <choose> <: apply,
+// so apply is specialized to call choose directly. Since choose has free
+// variables, its closure (the values of left and right) is passed instead.
+
+def apply(x: Bool){f: (Bool) => Int} = {
+  (f: (Bool) => Int @ {f})(x: Bool)
+}
+
+def main(flag: Bool, left: Int, right: Int) = {
+  def choose(b: Bool) = {
+    if (b: Bool) {
+      return left: Int
+    } else {
+      return right: Int
+    }
+  }
+  (apply_choose: (Bool, Int, Int) => Int @ {})(flag: Bool, left: Int, right: Int)
+}
+
+def apply_choose(x: Bool, f_left: Int, f_right: Int) = {
+  (choose_specialized: (Bool, Int, Int) => Int @ {})(x: Bool, f_left: Int, f_right: Int)
+}
+
+def choose_specialized(b: Bool, left_captured: Int, right_captured: Int) = {
+  if (b: Bool) {
+    return left_captured: Int
+  } else {
+    return right_captured: Int
+  }
+}

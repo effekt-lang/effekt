@@ -1003,7 +1003,10 @@ object Mono extends Phase[CoreTransformed, CoreTransformed] {
     def monomorphize(decl: Declaration)(using ctx: State)(using DeclarationContext): List[Declaration] = decl match
       case Data(id, tparams, constructors) =>
         val monoTypes = ctx.variants(id)
-        if (monoTypes.isEmpty) {
+        // a polymorphic type without instances is unused
+        if (monoTypes.isEmpty && tparams.nonEmpty) {
+          Nil
+        } else if (monoTypes.isEmpty) {
           List(Data(id, tparams, constructors.flatMap(monomorphize(_, Vector.empty))))
         } else {
           monoTypes.map { variant =>
