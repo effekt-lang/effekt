@@ -16,7 +16,7 @@ module seq
 type Seq[A] {
   Empty()
   Single(value: A)
-  Deep(size: Int, prefix: Digit[A], middle: Tree[A], suffix: Digit[A])
+  Deep(size: Int, prefix: Digit[A], middle: Seq[Node[A]], suffix: Digit[A])
 }
 
 /// Result of splitting a sequence at the front or back.
@@ -64,34 +64,8 @@ type Digit[A] {
 
 /// Internal representation of a 2-3 tree
 type Node[A] {
-  // These are necessary to avoid polymorphic recursion
-  Leaf2(first: A, second: A)
-  Leaf3(first: A, second: A, third: A)
-  Node2(size: Int, first: Node[A], second: Node[A])
-  Node3(size: Int, first: Node[A], second: Node[A], third: Node[A])
-}
-
-/// Internal duplicate of Seq
-///
-/// splitting into two type parameters is necessary since our MLton backend does
-/// not support mutually recursive data type declarations.
-type Finger[A, N] {
-  NoFinger()
-  SingleFinger(value: Node[A])
-  DeepFinger(size: Int, prefix: N, middle: Finger[A, N], suffix: N)
-}
-
-/**
- * Internal
- */
-type Tree[A] = Finger[A, Digit[Node[A]]]
-
-/**
- * Internal
- */
-type TreeView[A] {
-  TreeIsEmpty()
-  TreeView(element: Node[A], rest: Tree[A])
+  Node2(size: Int, first: A, second: A)
+  Node3(size: Int, first: A, second: A, third: A)
 }
 
 
@@ -107,8 +81,6 @@ def size[A](node: Digit[A]): Int = node match {
 }
 
 def size[A](node: Node[A]): Int = node match {
-  case Leaf2(_, _) => 2
-  case Leaf3(_, _, _) => 3
   case Node2(size, _, _) => size
   case Node3(size, _, _, _) => size
 }
@@ -120,10 +92,10 @@ def sizeDeep[A](node: Digit[Node[A]]): Int = node match {
   case Four(a, b, c, d) => a.size + b.size + c.size + d.size
 }
 
-def size[A](tree: Tree[A]): Int = tree match {
-  case NoFinger() => 0
-  case SingleFinger(value) => value.size
-  case DeepFinger(size, _, _, _) => size
+def sizeNodes[A](tree: Seq[Node[A]]): Int = tree match {
+  case Empty() => 0
+  case Single(value) => value.size
+  case Deep(size, _, _, _) => size
 }
 
 /// The size of the given sequence
@@ -137,90 +109,90 @@ def size[A](seq: Seq[A]): Int = seq match {
 // Internal smart constructors
 // ---------------------------
 
-def deepFinger[A](prefix: Digit[Node[A]], middle: Tree[A], suffix: Digit[Node[A]]): Tree[A] =
-  DeepFinger(prefix.sizeDeep + middle.size + suffix.sizeDeep, prefix, middle, suffix)
+def deepNodes[A](prefix: Digit[Node[A]], middle: Seq[Node[Node[A]]], suffix: Digit[Node[A]]): Seq[Node[A]] =
+  Deep(prefix.sizeDeep + middle.sizeNodes + suffix.sizeDeep, prefix, middle, suffix)
 
-def deep[A](prefix: Digit[A], middle: Tree[A], suffix: Digit[A]): Seq[A] =
-  Deep(prefix.size + middle.size + suffix.size, prefix, middle, suffix)
+def deep[A](prefix: Digit[A], middle: Seq[Node[A]], suffix: Digit[A]): Seq[A] =
+  Deep(prefix.size + middle.sizeNodes + suffix.size, prefix, middle, suffix)
 
-def node2[A](first: Node[A], second: Node[A]): Node[A] =
+def node2[A](first: Node[A], second: Node[A]): Node[Node[A]] =
   Node2(first.size + second.size, first, second)
 
-def node3[A](first: Node[A], second: Node[A], third: Node[A]): Node[A] =
+def node3[A](first: Node[A], second: Node[A], third: Node[A]): Node[Node[A]] =
   Node3(first.size + second.size + third.size, first, second, third)
 
 
 // Adding an element to the left
 // -----------------------------
 
-def consFinger[A](head: Node[A], tail: Tree[A]): Tree[A] = tail match {
-  case NoFinger()                          => SingleFinger(head)
-  case SingleFinger(b)                     => deepFinger(One(head), NoFinger(), One(b))
-  case DeepFinger(_, One(b), m, s)         => deepFinger(Two(head, b), m, s)
-  case DeepFinger(_, Two(b, c), m, s)      => deepFinger(Three(head, b, c), m, s)
-  case DeepFinger(_, Three(b, c, d), m, s) => deepFinger(Four(head, b, c, d), m, s)
-  case DeepFinger(_, Four(b, c, d, e), m, s) =>
-    deepFinger(Two(head, b), consFinger(node3(c, d, e), m), s)
+def consNodes[A](head: Node[A], tail: Seq[Node[A]]): Seq[Node[A]] = tail match {
+  case Empty()                          => Single(head)
+  case Single(b)                        => Deep(head.size + b.size, One(head), Empty(), One(b))
+  case Deep(size, One(b), m, s)         => Deep(size + head.size, Two(head, b), m, s)
+  case Deep(size, Two(b, c), m, s)      => Deep(size + head.size, Three(head, b, c), m, s)
+  case Deep(size, Three(b, c, d), m, s) => Deep(size + head.size, Four(head, b, c, d), m, s)
+  case Deep(size, Four(b, c, d, e), m, s) =>
+    Deep(size + head.size, Two(head, b), consNodes[Node[A]](node3(c, d, e), m), s)
 }
 
 def cons[A](head: A, tail: Seq[A]): Seq[A] = tail match {
   case Empty()                            => Single(head)
-  case Single(b)                          => Deep(2, One(head), NoFinger(), One(b))
+  case Single(b)                          => Deep(2, One(head), Empty(), One(b))
   case Deep(size, One(b), m, s)           => Deep(size + 1, Two(head, b), m, s)
   case Deep(size, Two(b, c), m, s)        => Deep(size + 1, Three(head, b, c), m, s)
   case Deep(size, Three(b, c, d), m, s)   => Deep(size + 1, Four(head, b, c, d), m, s)
   case Deep(size, Four(b, c, d, e), m, s) =>
-    Deep(size + 1, Two(head, b), consFinger(Leaf3(c, d, e), m), s)
+    Deep(size + 1, Two(head, b), consNodes(Node3(3, c, d, e), m), s)
 }
 
 
 // Adding an element to the right
 // ------------------------------
 
-def consFingerRight[A](init: Tree[A], last: Node[A]): Tree[A] = init match {
-  case NoFinger()                          => SingleFinger(last)
-  case SingleFinger(b)                     => deepFinger(One(b), NoFinger(), One(last))
-  case DeepFinger(_, p, m, One(b))         => deepFinger(p, m, Two(b, last))
-  case DeepFinger(_, p, m, Two(b, c))      => deepFinger(p, m, Three(b, c, last))
-  case DeepFinger(_, p, m, Three(b, c, d)) => deepFinger(p, m, Four(b, c, d, last))
-  case DeepFinger(_, p, m, Four(b, c, d, e)) =>
-    deepFinger(p, consFingerRight(m, node3(b, c, d)), Two(e, last))
+def consNodesRight[A](init: Seq[Node[A]], last: Node[A]): Seq[Node[A]] = init match {
+  case Empty()                          => Single(last)
+  case Single(b)                        => Deep(b.size + last.size, One(b), Empty(), One(last))
+  case Deep(size, p, m, One(b))         => Deep(size + last.size, p, m, Two(b, last))
+  case Deep(size, p, m, Two(b, c))      => Deep(size + last.size, p, m, Three(b, c, last))
+  case Deep(size, p, m, Three(b, c, d)) => Deep(size + last.size, p, m, Four(b, c, d, last))
+  case Deep(size, p, m, Four(b, c, d, e)) =>
+    Deep(size + last.size, p, consNodesRight[Node[A]](m, node3(b, c, d)), Two(e, last))
 }
 
 def consRight[A](init: Seq[A], last: A): Seq[A] = init match {
   case Empty()                          => Single(last)
-  case Single(b)                        => Deep(2, One(b), NoFinger(), One(last))
+  case Single(b)                        => Deep(2, One(b), Empty(), One(last))
   case Deep(size, p, m, One(b))         => Deep(size + 1, p, m, Two(b, last))
   case Deep(size, p, m, Two(b, c))      => Deep(size + 1, p, m, Three(b, c, last))
   case Deep(size, p, m, Three(b, c, d)) => Deep(size + 1, p, m, Four(b, c, d, last))
   case Deep(size, p, m, Four(b, c, d, e)) =>
-    Deep(size + 1, p, consFingerRight(m, Leaf3(b, c, d)), Two(e, last))
+    Deep(size + 1, p, consNodesRight(m, Node3(3, b, c, d)), Two(e, last))
 }
 
 
 // Splitting the sequence on the left
 // ----------------------------------
 
-def unconsFinger[A](seq: Tree[A]): TreeView[A] = seq match {
-  case NoFinger()      => TreeIsEmpty()
-  case SingleFinger(v) => TreeView(v, NoFinger())
+def unconsNodes[A](seq: Seq[Node[A]]): View[Node[A]] = seq match {
+  case Empty()   => IsEmpty()
+  case Single(v) => View(v, Empty())
   // TODO this is a tail-call-modulo-context
-  case DeepFinger(size, One(a), m, s) => TreeView(a, unconsFinger(m) match {
-    case TreeIsEmpty() => s.toTree
-    case TreeView(b, m2) => DeepFinger(size - a.size, b.toDigitNode, m2, s)
+  case Deep(size, One(a), m, s) => View(a, unconsNodes[Node[A]](m) match {
+    case IsEmpty() => s.toSeqNodes
+    case View(b, m2) => Deep(size - a.size, b.toDigit, m2, s)
   })
-  case DeepFinger(size, Two(a, b), m, s)        => TreeView(a, DeepFinger(size - a.size, One(b), m, s))
-  case DeepFinger(size, Three(a, b, c), m, s)   => TreeView(a, DeepFinger(size - a.size, Two(b, c), m, s))
-  case DeepFinger(size, Four(a, b, c, d), m, s) => TreeView(a, DeepFinger(size - a.size, Three(b, c, d), m, s))
+  case Deep(size, Two(a, b), m, s)        => View(a, Deep(size - a.size, One(b), m, s))
+  case Deep(size, Three(a, b, c), m, s)   => View(a, Deep(size - a.size, Two(b, c), m, s))
+  case Deep(size, Four(a, b, c, d), m, s) => View(a, Deep(size - a.size, Three(b, c, d), m, s))
 }
 
 // this could be called "uncons", "first", "front", "head", "popFront", "start", "popStart"
 def uncons[A](seq: Seq[A]): View[A] = seq match {
   case Empty()   => IsEmpty()
   case Single(v) => View(v, Empty())
-  case Deep(size, One(a), m, s) => View(a, unconsFinger(m) match {
-    case TreeIsEmpty() => s.toSeq
-    case TreeView(b, m2) => Deep(size - 1, b.toDigit, m2, s)
+  case Deep(size, One(a), m, s) => View(a, unconsNodes(m) match {
+    case IsEmpty() => s.toSeq
+    case View(b, m2) => Deep(size - 1, b.toDigit, m2, s)
   })
   case Deep(size, Two(a, b), m, s) => View(a, Deep(size - 1, One(b), m, s))
   case Deep(size, Three(a, b, c), m, s) => View(a, Deep(size - 1, Two(b, c), m, s))
@@ -241,26 +213,26 @@ def tail[A](seq: Seq[A]): Seq[A] / Exception[NoSuchElement] = seq.uncons match {
 // Splitting the sequence on the right
 // -----------------------------------
 
-def unconsRightFinger[A](seq: Tree[A]): TreeView[A] = seq match {
-  case NoFinger()      => TreeIsEmpty()
-  case SingleFinger(v) => TreeView(v, NoFinger())
+def unconsRightNodes[A](seq: Seq[Node[A]]): View[Node[A]] = seq match {
+  case Empty()   => IsEmpty()
+  case Single(v) => View(v, Empty())
   // TODO this is a tail-call-modulo-context
-  case DeepFinger(size, p, m, One(a)) => TreeView(a, unconsRightFinger(m) match {
-    case TreeIsEmpty() => p.toTree
-    case TreeView(b, m2) => DeepFinger(size - a.size, p, m2, b.toDigitNode)
+  case Deep(size, p, m, One(a)) => View(a, unconsRightNodes[Node[A]](m) match {
+    case IsEmpty() => p.toSeqNodes
+    case View(b, m2) => Deep(size - a.size, p, m2, b.toDigit)
   })
-  case DeepFinger(size, p, m, Two(a, b))        => TreeView(b, DeepFinger(size - b.size, p, m, One(a)))
-  case DeepFinger(size, p, m, Three(a, b, c))   => TreeView(c, DeepFinger(size - c.size, p, m, Two(a, b)))
-  case DeepFinger(size, p, m, Four(a, b, c, d)) => TreeView(d, DeepFinger(size - d.size, p, m, Three(a, b, c)))
+  case Deep(size, p, m, Two(a, b))        => View(b, Deep(size - b.size, p, m, One(a)))
+  case Deep(size, p, m, Three(a, b, c))   => View(c, Deep(size - c.size, p, m, Two(a, b)))
+  case Deep(size, p, m, Four(a, b, c, d)) => View(d, Deep(size - d.size, p, m, Three(a, b, c)))
 }
 
 // this could be called "uncons", "first", "front", "head", "popFront", "start", "popStart"
 def unconsRight[A](seq: Seq[A]): View[A] = seq match {
   case Empty()   => IsEmpty()
   case Single(v) => View(v, Empty())
-  case Deep(size, p, m, One(a)) => View(a, unconsFinger(m) match {
-    case TreeIsEmpty() => p.toSeq
-    case TreeView(b, m2) => Deep(size - 1, p, m2, b.toDigit)
+  case Deep(size, p, m, One(a)) => View(a, unconsRightNodes(m) match {
+    case IsEmpty() => p.toSeq
+    case View(b, m2) => Deep(size - 1, p, m2, b.toDigit)
   })
   case Deep(size, p, m, Two(a, b))        => View(b, Deep(size - 1, p, m, One(a)))
   case Deep(size, p, m, Three(a, b, c))   => View(c, Deep(size - 1, p, m, Two(a, b)))
@@ -271,25 +243,25 @@ def unconsRight[A](seq: Seq[A]): View[A] = seq match {
 // Concatenating Sequences
 // -----------------------
 
-def concatTree[A](first: Tree[A], middle: List[Node[A]], second: Tree[A]): Tree[A] = {
+def concatNodes[A](first: Seq[Node[A]], middle: List[Node[A]], second: Seq[Node[A]]): Seq[Node[A]] = {
 
   // can we get rid of the list?
 
-  def prepend(nodes: List[Node[A]], tree: Tree[A]): Tree[A] = nodes match {
+  def prepend(nodes: List[Node[A]], tree: Seq[Node[A]]): Seq[Node[A]] = nodes match {
     case Nil() => tree
-    case Cons(head, tail) => consFinger(head, prepend(tail, tree))
+    case Cons(head, tail) => consNodes(head, prepend(tail, tree))
   }
 
-  def append(tree: Tree[A], nodes: List[Node[A]]): Tree[A] = nodes match {
+  def append(tree: Seq[Node[A]], nodes: List[Node[A]]): Seq[Node[A]] = nodes match {
     case Nil() => tree
-    case Cons(head, tail) => append(consFingerRight(tree, head), tail)
+    case Cons(head, tail) => append(consNodesRight(tree, head), tail)
   }
 
-  def consFinger(digit: Digit[Node[A]], tree: Tree[A]): Tree[A] = digit match {
-    case One(a) => consFinger(a, tree)
-    case Two(a, b) => consFinger(a, consFinger(b, tree))
-    case Three(a, b, c) => consFinger(a, consFinger(b, consFinger(c, tree)))
-    case Four(a, b, c, d) => consFinger(a, consFinger(b, consFinger(c, consFinger(d, tree))))
+  def consDigit(digit: Digit[Node[A]], tree: Seq[Node[A]]): Seq[Node[A]] = digit match {
+    case One(a) => consNodes(a, tree)
+    case Two(a, b) => consNodes(a, consNodes(b, tree))
+    case Three(a, b, c) => consNodes(a, consNodes(b, consNodes(c, tree)))
+    case Four(a, b, c, d) => consNodes(a, consNodes(b, consNodes(c, consNodes(d, tree))))
   }
 
   def toList(digit: Digit[Node[A]]): List[Node[A]] = digit match {
@@ -299,7 +271,7 @@ def concatTree[A](first: Tree[A], middle: List[Node[A]], second: Tree[A]): Tree[
     case Four(a, b, c, d) => Cons(a, Cons(b, Cons(c, Cons(d, Nil()))))
   }
 
-  def rebalance(nodes: List[Node[A]]): List[Node[A]] = nodes match {
+  def rebalance(nodes: List[Node[A]]): List[Node[Node[A]]] = nodes match {
     case Cons(a, Cons(b, Nil())) => Cons(node2(a, b), Nil())
     case Cons(a, Cons(b, Cons(c, Nil()))) => Cons(node3(a, b, c), Nil())
     case Cons(a, Cons(b, Cons(c, Cons(d, Nil())))) => Cons(node2(a, b), Cons(node2(c, d), Nil()))
@@ -307,26 +279,23 @@ def concatTree[A](first: Tree[A], middle: List[Node[A]], second: Tree[A]): Tree[
     case _ => <>
   }
 
-  def go(prefix: Tree[A], middle: List[Node[A]], suffix: Tree[A]): Tree[A] =
-    (prefix, suffix) match {
-      case (NoFinger(), s)      => prepend(middle, s)
-      case (p, NoFinger())      => append(p, middle)
-      case (SingleFinger(v), s) => consFinger(v, prepend(middle, s))
-      case (p, SingleFinger(v)) => consFingerRight(append(p, middle), v)
-      case (DeepFinger(size1, p1, m1, s1), DeepFinger(size2, p2, m2, s2)) =>
-        val list = s1.toList.append(middle).append(p2.toList)
-        DeepFinger(size1 + size2, p1, go(m1, rebalance(list), m2), s2)
-    }
-
-  go(first, middle, second)
+  (first, second) match {
+    case (Empty(), s)      => prepend(middle, s)
+    case (p, Empty())      => append(p, middle)
+    case (Single(v), s)    => consNodes(v, prepend(middle, s))
+    case (p, Single(v))    => consNodesRight(append(p, middle), v)
+    case (Deep(size1, p1, m1, s1), Deep(size2, p2, m2, s2)) =>
+      val list = s1.toList.append(middle).append(p2.toList)
+      Deep(size1 + size2, p1, concatNodes[Node[A]](m1, rebalance(list), m2), s2)
+  }
 }
 
 def concat[A](first: Seq[A], second: Seq[A]): Seq[A] = {
   def rebalance(t: List[A]): List[Node[A]] = t match {
-    case Cons(a, Cons(b, Nil())) => Cons(Leaf2(a, b), Nil())
-    case Cons(a, Cons(b, Cons(c, Nil()))) => Cons(Leaf3(a, b, c), Nil())
-    case Cons(a, Cons(b, Cons(c, Cons(d, Nil())))) => Cons(Leaf2(a, b), Cons(Leaf2(c, d), Nil()))
-    case Cons(a, Cons(b, Cons(c, rest))) => Cons(Leaf3(a, b, c), rebalance(rest))
+    case Cons(a, Cons(b, Nil())) => Cons(Node2(2, a, b), Nil())
+    case Cons(a, Cons(b, Cons(c, Nil()))) => Cons(Node3(3, a, b, c), Nil())
+    case Cons(a, Cons(b, Cons(c, Cons(d, Nil())))) => Cons(Node2(2, a, b), Cons(Node2(2, c, d), Nil()))
+    case Cons(a, Cons(b, Cons(c, rest))) => Cons(Node3(3, a, b, c), rebalance(rest))
     case _ => <>
   }
 
@@ -336,7 +305,7 @@ def concat[A](first: Seq[A], second: Seq[A]): Seq[A] = {
     case (Single(v), other) => cons(v, other)
     case (other, Single(v)) => consRight(other, v)
     case (Deep(size1, p1, m1, s1), Deep(size2, p2, m2, s2)) =>
-      Deep(size1 + size2, p1, concatTree(m1, rebalance(s1.toList.append(p2.toList)), m2), s2)
+      Deep(size1 + size2, p1, concatNodes(m1, rebalance(s1.toList.append(p2.toList)), m2), s2)
   }
 }
 
@@ -354,229 +323,185 @@ def nonEmpty[A](seq: Seq[A]): Bool = seq match {
   case _ => true
 }
 
-def reverse[A](seq: Seq[A]): Seq[A] = {
-
-  // invariant for all internal functions: element is in the sequence
-
-  // this is tail-recursive-modulo-context
-  def go(node: Node[A]): Node[A] = node match {
-    case Leaf2(a, b) => Leaf2(b, a)
-    case Leaf3(a, b, c) => Leaf3(c, b, a)
-    case Node2(size, a, b) => Node2(size, go(b), go(a))
-    case Node3(size, a, b, c) => Node3(size, go(c), go(b), go(a))
-  }
-  def go(digit: Digit[A]): Digit[A] = digit match {
-    case One(a) => One(a)
-    case Two(a, b) => Two(b, a)
-    case Three(a, b, c) => Three(c, b, a)
-    case Four(a, b, c, d) => Four(d, c, b, a)
-  }
-  def go(digits: Digit[Node[A]]): Digit[Node[A]] = digits match {
-    case One(a) => One(go(a))
-    case Two(a, b) => Two(go(b), go(a))
-    case Three(a, b, c) => Three(go(c), go(b), go(a))
-    case Four(a, b, c, d) => Four(go(d), go(c), go(b), go(a))
-  }
-  def go(tree: Tree[A]): Tree[A] = tree match {
-    case NoFinger() => NoFinger()
-    case SingleFinger(value) => SingleFinger(go(value))
-    case DeepFinger(size, p, m, s) => DeepFinger(size, go(s), go(m), go(p))
-  }
-
-  seq match {
-    case Empty() => Empty()
-    case Single(value) => Single(value)
-    case Deep(size, p, m, s) => Deep(size, go(s), go(m), go(p))
-  }
+def reverseNode[A](node: Node[A]) { reverseElement: A => A }: Node[A] = node match {
+  case Node2(size, a, b) => Node2(size, reverseElement(b), reverseElement(a))
+  case Node3(size, a, b, c) => Node3(size, reverseElement(c), reverseElement(b), reverseElement(a))
 }
+
+def reverseDigit[A](digit: Digit[A]) { reverseElement: A => A }: Digit[A] = digit match {
+  case One(a) => One(reverseElement(a))
+  case Two(a, b) => Two(reverseElement(b), reverseElement(a))
+  case Three(a, b, c) => Three(reverseElement(c), reverseElement(b), reverseElement(a))
+  case Four(a, b, c, d) => Four(reverseElement(d), reverseElement(c), reverseElement(b), reverseElement(a))
+}
+
+def reverseWith[A](seq: Seq[A]) { reverseElement: A => A }: Seq[A] = seq match {
+  case Empty() => Empty()
+  case Single(value) => Single(reverseElement(value))
+  case Deep(size, p, m, s) => Deep(
+    size,
+    reverseDigit(s) { reverseElement },
+    reverseWith[Node[A]](m) { node => reverseNode(node) { reverseElement } },
+    reverseDigit(p) { reverseElement }
+  )
+}
+
+def reverse[A](seq: Seq[A]): Seq[A] = reverseWith(seq) { value => value }
 
 
 /// Random access
-def index[A](seq: Seq[A], index: Int): A / Exception[NoSuchElement] = {
-
-  // invariant for all internal functions: element is in the sequence
-
-  def go(node: Node[A], index: Int): A = node match {
-    case Leaf2(a, b) => if (index == 0) a else b
-    case Leaf3(a, b, c) => if (index == 0) a else if (index == 1) b else c
-    case Node2(_, a, b) =>
-      val asize = a.size
-      if (index < asize) go(a, index) else go(b, index - asize)
-    case Node3(_, a, b, c) =>
-      val asize = a.size
-      if (index < asize) go(a, index) else {
-        val bsize = asize + b.size
-        if (index < bsize) go(b, index - asize) else go(c, index - bsize)
-      }
-  }
-  def go(digit: Digit[A], index: Int): A = digit match {
-    case One(a) => a
-    case Two(a, b) => if (index == 0) a else b
-    case Three(a, b, c) => if (index == 0) a else if (index == 1) b else c
-    case Four(a, b, c, d) => if (index == 0) a else if (index == 1) b else if (index == 2) c else d
-  }
-  def go(digits: Digit[Node[A]], index: Int): A = digits match {
-    case One(a) => go(a, index)
-    case Two(a, b) =>
-      val asize = a.size
-      if (index < asize) go(a, index) else go(b, index - asize)
-    case Three(a, b, c) =>
-      val asize = a.size
-      if (index < asize) go(a, index) else {
-        val bsize = asize + b.size
-        if (index < bsize) go(b, index - asize) else {
-          go(c, index - bsize)
-        }
-      }
-    case Four(a, b, c, d) =>
-      val asize = a.size
-      if (index < asize) go(a, index) else {
-        val bsize = asize + b.size
-        if (index < bsize) go(b, index - asize) else {
-          val csize = bsize + c.size
-          if (index < csize) go(c, index - bsize) else {
-            go(d, index - csize)
-          }
-        }
-      }
-  }
-  def go(tree: Tree[A], index: Int): A = tree match {
-    case NoFinger() => <{ "Cannot happen!" }>
-    case SingleFinger(value) => go(value, index)
-    case DeepFinger(_, p, m, s) =>
-      val psize = p.sizeDeep
-      if (index < psize) { go(p, index) } else {
-        val msize = psize + m.size
-        if (index < msize) { go(m, index - psize) }
-        else { go(s, index - msize) }
-      }
-  }
-
-  if (index >= seq.size) raise(NoSuchElement(), "...")
-  else seq match {
-    case Empty() => <{ "Cannot happen!" }>
-    case Single(v) => v // has to be the right one due to the check above
-    case Deep(_, p, m, s) =>
-      val psize = p.size
-      if (index < psize) { go(p, index) } else {
-        val msize = psize + m.size
-        if (index < msize) { go(m, index - psize) }
-        else { go(s, index - msize) }
-      }
-  }
+def measureDigit[A](digit: Digit[A]) { measure: A => Int }: Int = digit match {
+  case One(a) => measure(a)
+  case Two(a, b) => measure(a) + measure(b)
+  case Three(a, b, c) => measure(a) + measure(b) + measure(c)
+  case Four(a, b, c, d) => measure(a) + measure(b) + measure(c) + measure(d)
 }
+
+def indexNode[A, R](node: Node[A], index: Int)
+  { measure: A => Int }
+  { select: (A, Int) => R }: R = node match {
+  case Node2(_, a, b) =>
+    val asize = measure(a)
+    if (index < asize) select(a, index) else select(b, index - asize)
+  case Node3(_, a, b, c) =>
+    val asize = measure(a)
+    if (index < asize) select(a, index) else {
+      val bsize = asize + measure(b)
+      if (index < bsize) select(b, index - asize) else select(c, index - bsize)
+    }
+}
+
+def indexDigit[A, R](digit: Digit[A], index: Int)
+  { measure: A => Int }
+  { select: (A, Int) => R }: R = digit match {
+  case One(a) => select(a, index)
+  case Two(a, b) =>
+    val asize = measure(a)
+    if (index < asize) select(a, index) else select(b, index - asize)
+  case Three(a, b, c) =>
+    val asize = measure(a)
+    if (index < asize) select(a, index) else {
+      val bsize = asize + measure(b)
+      if (index < bsize) select(b, index - asize) else select(c, index - bsize)
+    }
+  case Four(a, b, c, d) =>
+    val asize = measure(a)
+    if (index < asize) select(a, index) else {
+      val bsize = asize + measure(b)
+      if (index < bsize) select(b, index - asize) else {
+        val csize = bsize + measure(c)
+        if (index < csize) select(c, index - bsize) else select(d, index - csize)
+      }
+    }
+}
+
+def indexWith[A, R](seq: Seq[A], index: Int)
+  { measure: A => Int }
+  { select: (A, Int) => R }: R = seq match {
+  case Empty() => <{ "Cannot happen!" }>
+  case Single(value) => select(value, index)
+  case Deep(_, p, m, s) =>
+    val psize = measureDigit(p) { measure }
+    if (index < psize) indexDigit(p, index) { measure } { select } else {
+      val msize = psize + m.sizeNodes
+      if (index < msize) {
+        indexWith[Node[A], R](m, index - psize)
+          { node => node.size }
+          { (node, offset) => indexNode(node, offset) { measure } { select } }
+      } else indexDigit(s, index - msize) { measure } { select }
+    }
+}
+
+def index[A](seq: Seq[A], index: Int): A / Exception[NoSuchElement] =
+  if (index < 0 || index >= seq.size) raise(NoSuchElement(), "...")
+  else indexWith[A, A](seq, index) { _ => 1 } { (value, _) => value }
 
 /// Random access
-def update[A](seq: Seq[A], index: Int, value: A): Seq[A] / Exception[NoSuchElement] = {
-
-  // invariant for all internal functions: element is in the sequence
-
-  // this is tail-recursive-modulo-context
-  def go(node: Node[A], index: Int): Node[A] = node match {
-    case Leaf2(a, b) => if (index == 0) Leaf2(value, b) else Leaf2(a, value)
-    case Leaf3(a, b, c) => if (index == 0) Leaf3(value, b, c) else if (index == 1) Leaf3(a, value, c) else Leaf3(a, b, value)
-    case Node2(size, a, b) =>
-      val asize = a.size
-      if (index < asize) Node2(size, go(a, index), b) else Node2(size, a, go(b, index - asize))
-    case Node3(size, a, b, c) =>
-      val asize = a.size
-      if (index < asize) Node3(size, go(a, index), b, c) else {
-        val bsize = asize + b.size
-        if (index < bsize) Node3(size, a, go(b, index - asize), c) else Node3(size, a, b, go(c, index - bsize))
-      }
-  }
-  def go(digit: Digit[A], index: Int): Digit[A] = digit match {
-    case One(a) => One(value)
-    case Two(a, b) => if (index == 0) Two(value, b) else Two(a, value)
-    case Three(a, b, c) => if (index == 0) Three(value, b, c) else if (index == 1) Three(a, value, c) else Three(a, b, value)
-    case Four(a, b, c, d) => if (index == 0) Four(value, b, c, d) else if (index == 1) Four(a, value, c, d) else if (index == 2) Four(a, b, value, d) else Four(a, b, c, value)
-  }
-  def go(digits: Digit[Node[A]], index: Int): Digit[Node[A]] = digits match {
-    case One(a) => One(go(a, index))
-    case Two(a, b) =>
-      val asize = a.size
-      if (index < asize) Two(go(a, index), b) else Two(a, go(b, index - asize))
-    case Three(a, b, c) =>
-      val asize = a.size
-      if (index < asize) Three(go(a, index), b, c) else {
-        val bsize = asize + b.size
-        if (index < bsize) Three(a, go(b, index - asize), c) else {
-          Three(a, b, go(c, index - bsize))
-        }
-      }
-    case Four(a, b, c, d) =>
-      val asize = a.size
-      if (index < asize) Four(go(a, index), b, c, d) else {
-        val bsize = asize + b.size
-        if (index < bsize) Four(a, go(b, index - asize), c, d) else {
-          val csize = bsize + c.size
-          if (index < csize) Four(a, b, go(c, index - bsize), d) else {
-            Four(a, b, c, go(d, index - csize))
-          }
-        }
-      }
-  }
-  def go(tree: Tree[A], index: Int): Tree[A] = tree match {
-    case NoFinger() => <{ "Cannot happen!" }>
-    case SingleFinger(value) => SingleFinger(go(value, index))
-    case DeepFinger(size, p, m, s) =>
-      val psize = p.sizeDeep
-      if (index < psize) { DeepFinger(size, go(p, index), m, s) } else {
-        val msize = psize + m.size
-        if (index < msize) { DeepFinger(size, p, go(m, index - psize), s) }
-        else { DeepFinger(size, p, m, go(s, index - msize)) }
-      }
-  }
-
-  if (index >= seq.size) raise(NoSuchElement(), "...")
-  else seq match {
-    case Empty() => <{ "Cannot happen!" }>
-    case Single(_) => Single(value) // has to be the right one due to the check above
-    case Deep(size, p, m, s) =>
-      val psize = p.size
-      if (index < psize) { Deep(size, go(p, index), m, s) } else {
-        val msize = psize + m.size
-        if (index < msize) { Deep(size, p, go(m, index - psize), s) }
-        else { Deep(size, p, m, go(s, index - msize)) }
-      }
-  }
+def updateNode[A](node: Node[A], index: Int)
+  { measure: A => Int }
+  { updateElement: (A, Int) => A }: Node[A] = node match {
+  case Node2(size, a, b) =>
+    val asize = measure(a)
+    if (index < asize) Node2(size, updateElement(a, index), b)
+    else Node2(size, a, updateElement(b, index - asize))
+  case Node3(size, a, b, c) =>
+    val asize = measure(a)
+    if (index < asize) Node3(size, updateElement(a, index), b, c) else {
+      val bsize = asize + measure(b)
+      if (index < bsize) Node3(size, a, updateElement(b, index - asize), c)
+      else Node3(size, a, b, updateElement(c, index - bsize))
+    }
 }
 
+def updateDigit[A](digit: Digit[A], index: Int)
+  { measure: A => Int }
+  { updateElement: (A, Int) => A }: Digit[A] = digit match {
+  case One(a) => One(updateElement(a, index))
+  case Two(a, b) =>
+    val asize = measure(a)
+    if (index < asize) Two(updateElement(a, index), b)
+    else Two(a, updateElement(b, index - asize))
+  case Three(a, b, c) =>
+    val asize = measure(a)
+    if (index < asize) Three(updateElement(a, index), b, c) else {
+      val bsize = asize + measure(b)
+      if (index < bsize) Three(a, updateElement(b, index - asize), c)
+      else Three(a, b, updateElement(c, index - bsize))
+    }
+  case Four(a, b, c, d) =>
+    val asize = measure(a)
+    if (index < asize) Four(updateElement(a, index), b, c, d) else {
+      val bsize = asize + measure(b)
+      if (index < bsize) Four(a, updateElement(b, index - asize), c, d) else {
+        val csize = bsize + measure(c)
+        if (index < csize) Four(a, b, updateElement(c, index - bsize), d)
+        else Four(a, b, c, updateElement(d, index - csize))
+      }
+    }
+}
 
-def each[A](seq: Seq[A]) { consume: (A) => Unit }: Unit = {
+def updateWith[A](seq: Seq[A], index: Int)
+  { measure: A => Int }
+  { updateElement: (A, Int) => A }: Seq[A] = seq match {
+  case Empty() => <{ "Cannot happen!" }>
+  case Single(value) => Single(updateElement(value, index))
+  case Deep(size, p, m, s) =>
+    val psize = measureDigit(p) { measure }
+    if (index < psize) Deep(size, updateDigit(p, index) { measure } { updateElement }, m, s) else {
+      val msize = psize + m.sizeNodes
+      if (index < msize) Deep(size, p,
+        updateWith[Node[A]](m, index - psize)
+          { node => node.size }
+          { (node, offset) => updateNode(node, offset) { measure } { updateElement } },
+        s)
+      else Deep(size, p, m, updateDigit(s, index - msize) { measure } { updateElement })
+    }
+}
 
-  def go(digit: Digit[A]): Unit = digit match {
-    case One(a) => consume(a)
-    case Two(a, b) => consume(a); consume(b)
-    case Three(a, b, c) => consume(a); consume(b); consume(c)
-    case Four(a, b, c, d) => consume(a); consume(b); consume(c); consume(d)
-  }
+def update[A](seq: Seq[A], index: Int, value: A): Seq[A] / Exception[NoSuchElement] =
+  if (index < 0 || index >= seq.size) raise(NoSuchElement(), "...")
+  else updateWith(seq, index) { _ => 1 } { (_, _) => value }
 
-  def go(node: Node[A]): Unit = node match {
-    case Leaf2(a, b) => consume(a); consume(b)
-    case Leaf3(a, b, c) => consume(a); consume(b); consume(c)
-    case Node2(_, a, b) => go(a); go(b)
-    case Node3(_, a, b, c) => go(a); go(b); go(c)
-  }
 
-  def go(digit: Digit[Node[A]]): Unit = digit match {
-    case One(a) => go(a)
-    case Two(a, b) => go(a); go(b)
-    case Three(a, b, c) => go(a); go(b); go(c)
-    case Four(a, b, c, d) => go(a); go(b); go(c); go(d)
-  }
+def eachDigit[A](digit: Digit[A]) { consume: A => Unit }: Unit = digit match {
+  case One(a) => consume(a)
+  case Two(a, b) => consume(a); consume(b)
+  case Three(a, b, c) => consume(a); consume(b); consume(c)
+  case Four(a, b, c, d) => consume(a); consume(b); consume(c); consume(d)
+}
 
-  def go(tree: Tree[A]): Unit = tree match {
-    case NoFinger() => ()
-    case SingleFinger(v) => go(v)
-    case DeepFinger(_, p, m, s) => go(p); go(m); go(s)
-  }
+def eachNode[A](node: Node[A]) { consume: A => Unit }: Unit = node match {
+  case Node2(_, a, b) => consume(a); consume(b)
+  case Node3(_, a, b, c) => consume(a); consume(b); consume(c)
+}
 
-  seq match {
-    case Empty() => ()
-    case Single(v) => consume(v)
-    case Deep(_, p, m, s) => go(p); go(m); go(s)
-  }
+def each[A](seq: Seq[A]) { consume: (A) => Unit }: Unit = seq match {
+  case Empty() => ()
+  case Single(v) => consume(v)
+  case Deep(_, p, m, s) =>
+    eachDigit(p) { consume }
+    each[Node[A]](m) { node => eachNode(node) { consume } }
+    eachDigit(s) { consume }
 }
 
 def each[A](seq: Seq[A]) { f: (A) {Label} => Unit }: Unit = try {
@@ -591,40 +516,25 @@ def each[A](seq: Seq[A]) { f: (A) {Label} => Unit }: Unit = try {
   def continue() = ()
 }
 
-def eachReverse[A](seq: Seq[A]) { consume: A => Unit }: Unit = {
+def eachDigitReverse[A](digit: Digit[A]) { consume: A => Unit }: Unit = digit match {
+  case One(a) => consume(a)
+  case Two(a, b) => consume(b); consume(a)
+  case Three(a, b, c) => consume(c); consume(b); consume(a)
+  case Four(a, b, c, d) => consume(d); consume(c); consume(b); consume(a)
+}
 
-  def go(digit: Digit[A]): Unit = digit match {
-    case One(a) => consume(a)
-    case Two(a, b) => consume(b); consume(a)
-    case Three(a, b, c) => consume(c); consume(b); consume(a)
-    case Four(a, b, c, d) => consume(d); consume(c); consume(b); consume(a)
-  }
+def eachNodeReverse[A](node: Node[A]) { consume: A => Unit }: Unit = node match {
+  case Node2(_, a, b) => consume(b); consume(a)
+  case Node3(_, a, b, c) => consume(c); consume(b); consume(a)
+}
 
-  def go(node: Node[A]): Unit = node match {
-    case Leaf2(a, b) => consume(b); consume(a)
-    case Leaf3(a, b, c) => consume(c); consume(b); consume(a)
-    case Node2(_, a, b) => go(b); go(a)
-    case Node3(_, a, b, c) => go(c); go(b); go(a)
-  }
-
-  def go(digit: Digit[Node[A]]): Unit = digit match {
-    case One(a) => go(a)
-    case Two(a, b) => go(b); go(a)
-    case Three(a, b, c) => go(c); go(b); go(a)
-    case Four(a, b, c, d) => go(d); go(c); go(b); go(a)
-  }
-
-  def go(tree: Tree[A]): Unit = tree match {
-    case NoFinger() => ()
-    case SingleFinger(v) => go(v)
-    case DeepFinger(_, p, m, s) => go(s); go(m); go(p)
-  }
-
-  seq match {
-    case Empty() => ()
-    case Single(v) => consume(v)
-    case Deep(_, p, m, s) => go(s); go(m); go(p)
-  }
+def eachReverse[A](seq: Seq[A]) { consume: A => Unit }: Unit = seq match {
+  case Empty() => ()
+  case Single(v) => consume(v)
+  case Deep(_, p, m, s) =>
+    eachDigitReverse(s) { consume }
+    eachReverse[Node[A]](m) { node => eachNodeReverse(node) { consume } }
+    eachDigitReverse(p) { consume }
 }
 
 def eachReverse[A](seq: Seq[A]) { f: (A) {Label} => Unit }: Unit = try {
@@ -656,105 +566,79 @@ def toSeq[A](l: List[A]): Seq[A] = {
 
 record Split[A, R](prefix: R, element: A, suffix: R)
 
-def splitAt[A](seq: Seq[A], index: Int): (Seq[A], Seq[A]) / Exception[IndexOutOfBounds] = {
+def splitDigit[A](digit: Digit[A], index: Int)
+  { measure: A => Int }: Split[A, List[A]] = digit match {
+  case One(a) => Split([], a, [])
+  case Two(a, b) =>
+    if (index < measure(a)) Split([], a, [b]) else Split([a], b, [])
+  case Three(a, b, c) =>
+    val asize = measure(a)
+    if (index < asize) Split([], a, [b, c])
+    else if (index < asize + measure(b)) Split([a], b, [c])
+    else Split([a, b], c, [])
+  case Four(a, b, c, d) =>
+    val asize = measure(a)
+    val bsize = asize + measure(b)
+    val csize = bsize + measure(c)
+    if (index < asize) Split([], a, [b, c, d])
+    else if (index < bsize) Split([a], b, [c, d])
+    else if (index < csize) Split([a, b], c, [d])
+    else Split([a, b, c], d, [])
+}
 
-  // invariant index is in digit
-  def go(digit: Digit[A], index: Int): Split[A, List[A]] = digit match {
-    case One(a) => Split([], a, [])
-    case Two(a, b) => if (index == 0) Split([], a, [b]) else Split([a], b, [])
-    case Three(a, b, c) =>
-      if (index == 0) Split([], a, [b, c])
-      else if (index == 1) Split([a], b, [c])
-      else Split([a, b], c, [])
-    case Four(a, b, c, d) =>
-      if (index == 0) Split([], a, [b, c, d])
-      else if (index == 1) Split([a], b, [c, d])
-      else if (index == 2) Split([a, b], c, [d])
-      else  Split([a, b, c], d, [])
+def leftNodes[A](p: List[Node[A]], m: Seq[Node[Node[A]]], s: Digit[Node[A]]): Seq[Node[A]] = p match {
+  case Nil() => unconsNodes[Node[A]](m) match {
+    case IsEmpty() => s.toSeqNodes
+    case View(a, m2) => deepNodes(a.toDigit, m2, s)
   }
+  case _ => deepNodes(p.toDigit, m, s)
+}
 
-  def go(digit: Digit[Node[A]], index: Int): Split[Node[A], List[Node[A]]] = digit match {
-    case One(a) => Split([], a, [])
-    case Two(a, b) =>
-      val asize = a.size
-      if (index < asize) Split([], a, [b]) else Split([a], b, [])
-    case Three(a, b, c) =>
-      val asize = a.size
-      if (index < asize) Split([], a, [b, c])
-      else {
-        val bsize = asize + b.size
-        if (index < bsize) Split([a], b, [c])
-        else Split([a, b], c, [])
-      }
-    case Four(a, b, c, d) =>
-      val asize = a.size
-      if (index < asize) Split([], a, [b, c, d])
-      else {
-        val bsize = asize + b.size
-        if (index < bsize) Split([a], b, [c, d])
-        else {
-          val csize = bsize + c.size
-          if (index < csize) Split([a, b], c, [d])
-          else Split([a, b, c], d, [])
-        }
-      }
+def rightNodes[A](p: Digit[Node[A]], m: Seq[Node[Node[A]]], s: List[Node[A]]): Seq[Node[A]] = s match {
+  case Nil() => unconsRightNodes[Node[A]](m) match {
+    case IsEmpty() => p.toSeqNodes
+    case View(a, m2) => deepNodes(p, m2, a.toDigit)
   }
+  case _ => deepNodes(p, m, s.toDigit)
+}
 
-  def left(p: List[Node[A]], m: Tree[A], s: Digit[Node[A]]): Tree[A] = p match {
-    case Nil() => m.unconsFinger match {
-      case TreeIsEmpty() => s.toTree
-      case TreeView(a, m2) => deepFinger(a.toDigitNode, m2, s)
-    }
-    case _ => deepFinger(p.toDigitNode, m, s)
-  }
-
-  def left(p: List[A], m: Tree[A], s: Digit[A]): Seq[A] = p match {
-    case Nil() => m.unconsFinger match {
-      case TreeIsEmpty() => s.toSeq
-      case TreeView(a, m2) => deep(a.toDigit, m2, s)
-    }
-    case _ => deep(p.toDigitNode, m, s)
-  }
-  def right(p: Digit[A], m: Tree[A], s: List[A]): Seq[A] = s match {
-    case Nil() => m.unconsRightFinger match {
-      case TreeIsEmpty() => p.toSeq
-      case TreeView(a, m2) => deep(p, m2, a.toDigit)
-    }
-    case _ => deep(p, m, s.toDigitNode)
-  }
-
-
-  def right(p: Digit[Node[A]], m: Tree[A], s: List[Node[A]]): Tree[A] = s match {
-    case Nil() => m.unconsRightFinger match {
-      case TreeIsEmpty() => p.toTree
-      case TreeView(a, m2) => deepFinger(p, m2, a.toDigitNode)
-    }
-    case _ => deepFinger(p, m, s.toDigitNode)
-  }
-
-  def go(tree: Tree[A], index: Int): Split[Node[A], Tree[A]] = tree match {
-    case NoFinger() => println("Cannot happen!"); <{ "Cannot happen!" }>
-    case SingleFinger(value) => Split(NoFinger(), value, NoFinger())
-    case DeepFinger(size, p, m, s) =>
-      val psize = p.sizeDeep;
-      // It is in the prefix
-      if (index < psize) {
-        val Split(pp, v, ps) = go(p, index);
-        Split(pp.toTree, v, left(ps, m, s))
+def splitNodes[A](tree: Seq[Node[A]], index: Int): Split[Node[A], Seq[Node[A]]] = tree match {
+  case Empty() => <{ "Cannot happen!" }>
+  case Single(value) => Split(Empty(), value, Empty())
+  case Deep(_, p, m, s) =>
+    val psize = p.sizeDeep
+    if (index < psize) {
+      val Split(pp, v, ps) = splitDigit(p, index) { node => node.size }
+      Split(pp.toSeqNodes, v, leftNodes(ps, m, s))
+    } else {
+      val msize = psize + m.sizeNodes
+      if (index < msize) {
+        val Split(mp, v, ms) = splitNodes[Node[A]](m, index - psize)
+        val mpsize = psize + mp.sizeNodes
+        val Split(vp, w, vs) = splitDigit(v.toDigit, index - mpsize) { node => node.size }
+        Split(rightNodes(p, mp, vp), w, leftNodes(vs, ms, s))
       } else {
-        val msize = psize + m.size
-        // It is somewhere in the spine
-        if (index < msize) {
-          val Split(mp, v, ms) = go(m, index - psize);
-          val mpsize = psize + mp.size;
-          val Split(vp, w, vs) = go(v.toDigitNode, index - mpsize);
-          Split(right(p, mp, vp), w, left(vs, ms, s))
-        // It is somewhere in the suffix
-        } else {
-          val Split(sp, v, ss) = go(s, index - msize)
-          Split(right(p, m, sp), v, ss.toTree)
-        }
+        val Split(sp, v, ss) = splitDigit(s, index - msize) { node => node.size }
+        Split(rightNodes(p, m, sp), v, ss.toSeqNodes)
       }
+    }
+}
+
+def splitAt[A](seq: Seq[A], index: Int): (Seq[A], Seq[A]) / Exception[IndexOutOfBounds] = {
+  def left(p: List[A], m: Seq[Node[A]], s: Digit[A]): Seq[A] = p match {
+    case Nil() => unconsNodes(m) match {
+      case IsEmpty() => s.toSeq
+      case View(a, m2) => deep(a.toDigit, m2, s)
+    }
+    case _ => deep(p.toDigit, m, s)
+  }
+
+  def right(p: Digit[A], m: Seq[Node[A]], s: List[A]): Seq[A] = s match {
+    case Nil() => unconsRightNodes(m) match {
+      case IsEmpty() => p.toSeq
+      case View(a, m2) => deep(p, m2, a.toDigit)
+    }
+    case _ => deep(p, m, s.toDigit)
   }
 
   if (index < 0) {
@@ -763,24 +647,21 @@ def splitAt[A](seq: Seq[A], index: Int): (Seq[A], Seq[A]) / Exception[IndexOutOf
     (seq, Empty())
   } else seq match {
     case Empty() => (Empty(), Empty())
-    case Single(v) => (Empty(), seq)
-    case Deep(size, p, m, s) =>
-      val psize = p.size;
-      // It is in the prefix
+    case Single(_) => (Empty(), seq)
+    case Deep(_, p, m, s) =>
+      val psize = p.size
       if (index < psize) {
-        val Split(pp, v, ps) = go(p, index);
+        val Split(pp, v, ps) = splitDigit(p, index) { _ => 1 }
         (toSeq(pp), left(Cons(v, ps), m, s))
       } else {
-        val msize = psize + m.size
-        // It is somewhere in the spine
+        val msize = psize + m.sizeNodes
         if (index < msize) {
-          val Split(mp, v, ms) = go(m, index - psize);
-          val mpsize = psize + mp.size;
-          val Split(vp, w, vs) = go(v.toDigit, index - mpsize);
+          val Split(mp, v, ms) = splitNodes(m, index - psize)
+          val mpsize = psize + mp.sizeNodes
+          val Split(vp, w, vs) = splitDigit(v.toDigit, index - mpsize) { _ => 1 }
           (right(p, mp, vp), left(Cons(w, vs), ms, s))
-        // It is somewhere in the suffix
         } else {
-          val Split(sp, v, ss) = go(s, index - msize);
+          val Split(sp, v, ss) = splitDigit(s, index - msize) { _ => 1 }
           (right(p, m, sp), Cons(v, ss).toSeq)
         }
       }
@@ -798,46 +679,39 @@ def insert[A](seq: Seq[A], value: A, index: Int): Seq[A] / Exception[IndexOutOfB
 // Internal conversions
 // --------------------
 
-def toTree[A](digit: Digit[Node[A]]): Tree[A] = digit match {
-  case One(a) => SingleFinger(a)
-  case Two(a, b) => deepFinger(One(a), NoFinger(), One(b))
-  case Three(a, b, c) => deepFinger(Two(a, b), NoFinger(), One(c))
-  case Four(a, b, c, d) => deepFinger(Three(a, b, c), NoFinger(), One(d))
+def toSeqNodes[A](digit: Digit[Node[A]]): Seq[Node[A]] = digit match {
+  case One(a) => Single(a)
+  case Two(a, b) => deepNodes(One(a), Empty(), One(b))
+  case Three(a, b, c) => deepNodes(Two(a, b), Empty(), One(c))
+  case Four(a, b, c, d) => deepNodes(Three(a, b, c), Empty(), One(d))
 }
 
-def toTree[A](digit: List[Node[A]]): Tree[A] = digit match {
-  case Nil() => NoFinger()
-  case Cons(a, Nil()) => SingleFinger(a)
-  case Cons(a, Cons(b, Nil())) => deepFinger(One(a), NoFinger(), One(b))
-  case Cons(a, Cons(b, Cons(c, Nil()))) => deepFinger(Two(a, b), NoFinger(), One(c))
-  case Cons(a, Cons(b, Cons(c, Cons(d, Nil())))) => deepFinger(Three(a, b, c), NoFinger(), One(d))
+def toSeqNodes[A](digit: List[Node[A]]): Seq[Node[A]] = digit match {
+  case Nil() => Empty()
+  case Cons(a, Nil()) => Single(a)
+  case Cons(a, Cons(b, Nil())) => deepNodes(One(a), Empty(), One(b))
+  case Cons(a, Cons(b, Cons(c, Nil()))) => deepNodes(Two(a, b), Empty(), One(c))
+  case Cons(a, Cons(b, Cons(c, Cons(d, Nil())))) => deepNodes(Three(a, b, c), Empty(), One(d))
   case _ => <>
 }
 
 def toSeq[A](d: Digit[A]): Seq[A] =  d match {
   case One(a) => Single(a)
-  case Two(a, b) => Deep(2, One(a), NoFinger(), One(b))
-  case Three(a, b, c) => Deep(3, Two(a, b), NoFinger(), One(c))
-  case Four(a, b, c, d) => Deep(4, Three(a, b, c), NoFinger(), One(d))
+  case Two(a, b) => Deep(2, One(a), Empty(), One(b))
+  case Three(a, b, c) => Deep(3, Two(a, b), Empty(), One(c))
+  case Four(a, b, c, d) => Deep(4, Three(a, b, c), Empty(), One(d))
 }
 
-def toDigitNode[A](n: Node[A]): Digit[Node[A]] = n match {
+def toDigit[A](n: Node[A]): Digit[A] = n match {
   case Node2(_, a, b) => Two(a, b)
   case Node3(_, a, b, c) => Three(a, b, c)
-  case _ => <{ "Should not happen" }>
 }
 
-def toDigitNode[A](n: List[A]): Digit[A] = n match {
+def toDigit[A](n: List[A]): Digit[A] = n match {
   case Cons(a, Nil()) => One(a)
   case Cons(a, Cons(b, Nil())) => Two(a, b)
   case Cons(a, Cons(b, Cons(c, Nil()))) => Three(a, b, c)
   case Cons(a, Cons(b, Cons(c, Cons(d, Nil())))) => Four(a, b, c, d)
-  case _ => <{ "Should not happen" }>
-}
-
-def toDigit[A](n: Node[A]): Digit[A] = n match {
-  case Leaf2(a, b) => Two(a, b)
-  case Leaf3(a, b, c) => Three(a, b, c)
   case _ => <{ "Should not happen" }>
 }
 

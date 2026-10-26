@@ -1,0 +1,22 @@
+module examples/pos/polymorphic_recursion/hallett_kfoury_2005/bar
+
+// Hallett and Kfoury (2005), Section 5.2: BAR.
+interface Fn[A, B] { def apply(value: A): B }
+
+def twice[A](): Fn[Fn[A, A] at {}, Fn[A, A] at {}] at {} =
+  box new Fn[Fn[A, A] at {}, Fn[A, A] at {}] {
+    def apply(function) = box new Fn[A, A] {
+      def apply(value) = (unbox function).apply((unbox function).apply(value))
+    }
+  }
+
+def bar[A](x: Int, function: Fn[A, A] at {}, value: A): A =
+  if (x >= 4) (unbox function).apply(value)
+  else (unbox bar[Fn[A, A] at {}](x * 2, twice[A](), function)).apply(value)
+
+def main() = {
+  val timesTwo: Fn[Int, Int] at {} = box new Fn[Int, Int] {
+    def apply(value) = value * 2
+  }
+  println(bar(1, timesTwo, 5))
+}

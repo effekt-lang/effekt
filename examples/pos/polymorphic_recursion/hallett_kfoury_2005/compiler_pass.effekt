@@ -1,0 +1,34 @@
+module examples/pos/polymorphic_recursion/hallett_kfoury_2005/compiler_pass
+
+// Hallett and Kfoury (2005), Section 3.5: Compiler Pass.
+interface Fn[A, B] { def apply(value: A): B }
+
+type Exp {
+  Variable(name: String)
+  Let(binding: Bind, body: Exp)
+}
+
+type Bind { MkBind(name: String, expression: Exp) }
+
+def doBinds(bindings: List[Bind]): List[Bind] = bindings match {
+  case Nil() => Nil()
+  case Cons(binding, rest) => doBindAndScope(binding, box new Fn[Bind, List[Bind]] {
+    def apply(result) = Cons(result, doBinds(rest))
+  })
+}
+
+def doExp(expression: Exp): Exp = expression match {
+  case Variable(name) => Variable(name)
+  case Let(binding, body) => doBindAndScope(binding, box new Fn[Bind, Exp] {
+    def apply(result) = Let(result, doExp(body))
+  })
+}
+
+def doBindAndScope[A](binding: Bind, continuation: Fn[Bind, A] at {}): A = binding match {
+  case MkBind(name, expression) => (unbox continuation).apply(MkBind(name, doExp(expression)))
+}
+
+def main() = {
+  doExp(Let(MkBind("x", Variable("y")), Variable("x")))
+  println("ok")
+}

@@ -1,0 +1,19 @@
+module examples/pos/polymorphic_recursion/hallett_kfoury_2005/collect
+
+// Hallett and Kfoury (2005), Section 5.1: Collect.
+type Tree[A] {
+  Empty()
+  Node(value: A, children: Tree[Tree[A]])
+}
+
+def collect[A](tree: Tree[A]): List[A] = tree match {
+  case Empty() => Nil()
+  case Node(value, children) => Cons(value, flattenCollected(collect(children)))
+}
+
+def flattenCollected[A](trees: List[Tree[A]]): List[A] = trees match {
+  case Nil() => Nil()
+  case Cons(tree, rest) => collect(tree).append(flattenCollected(rest))
+}
+
+def main() = println(collect[Int](Empty()))

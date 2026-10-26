@@ -1,0 +1,41 @@
+module examples/pos/polymorphic_recursion/church
+
+interface Fun[A, B] {
+  def apply(value: A): B
+}
+
+interface ChurchNum {
+  def iterate[X](function: (Fun[X, X] at {}), initial: X): X
+}
+
+def two(): ChurchNum at {} = box new ChurchNum {
+  def iterate[X](function, initial) = {
+    def f = unbox function
+    f.apply(f.apply(initial))
+  }
+}
+
+def churchExp(m: ChurchNum at {}, n: ChurchNum at {}): ChurchNum at {} =
+  box new ChurchNum {
+    def iterate[X](function, initial) = {
+      def base = unbox m
+      def exponent = unbox n
+      val raise: Fun[Fun[X, X] at {}, Fun[X, X] at {}] at {} = box new Fun[Fun[X, X] at {}, Fun[X, X] at {}] {
+        def apply(g) = box new Fun[X, X] {
+          def apply(value) = base.iterate[X](g, value)
+        }
+      }
+      val iterated = exponent.iterate[Fun[X, X] at {}](raise, function)
+      (unbox iterated).apply(initial)
+    }
+  }
+
+def main() = {
+  val four = churchExp(two(), two())
+  val twoFiftySix = churchExp(four, four)
+  val successor: Fun[Int, Int] at {} = box new Fun[Int, Int] {
+    def apply(value) = value + 1
+  }
+  def number = unbox twoFiftySix
+  println(number.iterate[Int](successor, 0))
+}

@@ -1,0 +1,10 @@
+module examples/pos/polymorphic_recursion/flow_directed
+
+def first[A](x: A, y: A): A = x
+
+def second[B](x: B, y: B): B = first[B](y, x)
+
+def main() = {
+  println(second[Int](1, 2))
+  println(second[Bool](true, false))
+}

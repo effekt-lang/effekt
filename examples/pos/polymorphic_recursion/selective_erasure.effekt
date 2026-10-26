@@ -1,0 +1,21 @@
+module examples/pos/polymorphic_recursion/selective_erasure
+
+type Box[A] {
+  Wrap(value: A)
+}
+
+type Chain[A] {
+  End()
+  Link(head: A, tail: Chain[A])
+}
+
+def nest[A](value: A, depth: Int): Int =
+  if (depth == 0) 0
+  else 1 + nest[Box[A]](Wrap(value), depth - 1)
+
+def main() = {
+  val boxed: Chain[Box[Int]] = Link(Wrap(123), End())
+  val plain: Chain[Int] = Link(123, End())
+  println(nest[Chain[Box[Int]]](boxed, 3))
+  println(nest[Chain[Int]](plain, 3))
+}

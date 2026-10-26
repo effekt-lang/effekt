@@ -1,0 +1,14 @@
+module examples/pos/polymorphic_recursion/basic
+
+type Box[A] {
+  Wrap(value: A)
+}
+
+def nest[A](value: A, depth: Int): Int =
+  if (depth == 0) 0
+  else {
+    println(depth)
+    1 + nest[Box[A]](Wrap(value), depth - 1)
+  }
+
+def main() = println(nest[Int](42, 5))

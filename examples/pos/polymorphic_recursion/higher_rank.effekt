@@ -1,0 +1,17 @@
+module examples/pos/polymorphic_recursion/higher_rank
+
+type Box[A] {
+  Wrap(value: A)
+}
+
+interface Forall {
+  def recur[A](value: A, depth: Int): Int
+}
+
+def loop(): Forall at {} = box new Forall {
+  def recur[A](value, depth) =
+    if (depth == 0) 0
+    else 1 + (unbox loop()).recur[Box[A]](Wrap(value), depth - 1)
+}
+
+def main() = println((unbox loop()).recur[Int](0, 4))

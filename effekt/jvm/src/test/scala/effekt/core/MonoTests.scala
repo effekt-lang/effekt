@@ -339,6 +339,50 @@ class MonoTests extends CoreTests {
       id("a") -> Set.empty))
   }
 
+  // Selective erasure
+
+  test("erase: leaves finite flows precise") {
+    val list = id("List")
+    val constraints = List(
+      Flow(Vector(Data(list, List(variable("source", 0)))), id("target")),
+      Flow(Vector(TInt), id("source")))
+    given DeclarationContext = DeclarationContext(
+      List(Declaration.Data(list, List(Id("A")), Nil)),
+      Nil)
+
+    assertEquals(Mono.erase(constraints), Mono.erase.Result(constraints, Set.empty))
+  }
+
+  test("erase: erases a constructor on a growing self-cycle") {
+    val box = id("Box")
+    val recursive = Flow(Vector(Data(box, List(variable("nest", 0)))), id("nest"))
+    val seed = Flow(Vector(TInt), id("nest"))
+    given DeclarationContext = DeclarationContext(
+      List(Declaration.Data(box, List(Id("A")), Nil)),
+      Nil)
+
+    assertEquals(
+      Mono.erase(List(recursive, seed)),
+      Mono.erase.Result(
+        List(Flow(Vector(Data(box, Nil)), id("nest")), seed),
+        Set(box)))
+  }
+
+  test("erase: finds growing cycles through mutually recursive flows") {
+    val box = id("Box")
+    val intoFirst = Flow(Vector(Data(box, List(variable("second", 0)))), id("first"))
+    val intoSecond = Flow(Vector(variable("first", 0)), id("second"))
+    given DeclarationContext = DeclarationContext(
+      List(Declaration.Data(box, List(Id("A")), Nil)),
+      Nil)
+
+    assertEquals(
+      Mono.erase(List(intoFirst, intoSecond)),
+      Mono.erase.Result(
+        List(Flow(Vector(Data(box, Nil)), id("first")), intoSecond),
+        Set(box)))
+  }
+
   private def collectConstraints(input: ModuleDecl): Flows = Mono.collect(input)
 
   private def showFlowType(arg: FlowType): String = arg match {

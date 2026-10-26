@@ -1,0 +1,22 @@
+module examples/pos/polymorphic_recursion/hallett_kfoury_2005/confusing_alleviated
+
+// Hallett and Kfoury (2005), Section 3.6.3: Confusing -- Alleviated.
+def confusingInt(n: Int, x: Int, y: Int): Int =
+  if (n == 0) n
+  else if (n >= 100)
+    if (n < 200) n else confusingInt(n / 2, x * y, y)
+  else if (n < 50)
+    confusingDouble(n * n, 0.03, 1.0)
+  else
+    confusingInt(n * n, 1, 1)
+
+def confusingDouble(n: Int, x: Double, y: Double): Int =
+  if (n == 0) n
+  else if (n >= 100)
+    if (n < 200) n else confusingDouble(n / 2, x * y, y)
+  else if (n < 50)
+    confusingDouble(n * n, 0.03, 1.0)
+  else
+    confusingInt(n * n, 1, 1)
+
+def main() = println(confusingInt(3, 5, 6))
