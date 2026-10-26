@@ -1,0 +1,6 @@
+def main() = {
+  val neststr = s#|Not with ${"""
+                   """
+                 $|} foo
+  println(neststr)
+}
