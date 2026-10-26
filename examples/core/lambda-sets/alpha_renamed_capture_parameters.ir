@@ -30,6 +30,7 @@ def main(n: Int) = {
 // The actual and formal function types differ only in the names of their
 // bound capture parameters. The singleton lambda set is nevertheless known,
 // so its captured value is passed directly without a nominal closure.
+
 /// LAMBDA_SPECIALIZE
 
 interface Reader {

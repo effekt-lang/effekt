@@ -1,0 +1,72 @@
+def apply(x: Int){f: (Int) => Int} = {
+  (f: (Int) => Int @ {f})(x: Int)
+}
+
+def main(flag: Bool, n: Int) = {
+  def identity(x: Int) = {
+    return x: Int
+  }
+  def constant(x: Int) = {
+    return n: Int
+  }
+  val f = if (flag: Bool) {
+    return box {} (identity: (Int) => Int @ {})
+  } else {
+    return box {} (constant: (Int) => Int @ {})
+  };
+  (apply: (Int){f: (Int) => Int} => Int @ {})(0){
+    (unbox f: (Int) => Int at {})
+  }
+}
+
+/// LAMBDA_SETS
+
+S = apply ↦ { <?> }
+generic = { constant, identity }
+
+/// LAMBDA_SPECIALIZE
+
+// Two functions flow into the same box, so the function passed to apply is not
+// known statically. The functions are defunctionalized: each becomes a
+// constructor of a data type carrying its closure (constant captures n,
+// identity captures nothing). apply is specialized to take this data instead
+// of a function, and calls applyClosure, which dispatches on the constructor.
+
+type Closure {
+  Constant(n_captured: Int)
+  Identity()
+}
+
+def apply(x: Int){f: (Int) => Int} = {
+  (f: (Int) => Int @ {f})(x: Int)
+}
+
+def main(flag: Bool, n: Int) = {
+  def identity(x: Int) = {
+    return x: Int
+  }
+  def constant(x: Int) = {
+    return n: Int
+  }
+  val f = if (flag: Bool) {
+    return make Closure Identity()
+  } else {
+    return make Closure Constant(n: Int)
+  };
+  (apply_closure: (Int, Closure) => Int @ {})(0, f: Closure)
+}
+
+def apply_closure(x: Int, f: Closure) = {
+  (applyClosure: (Closure, Int) => Int @ {})(f: Closure, x: Int)
+}
+
+def applyClosure(closure: Closure, x: Int) = {
+  closure: Closure match[Int] {
+    Constant : { (n: Int) =>
+      return n: Int
+    }
+    Identity : { () =>
+      return x: Int
+    }
+  }
+}

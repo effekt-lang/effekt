@@ -10,13 +10,101 @@ import effekt.util.messages.ErrorMessageReifier
 import java.util.IdentityHashMap
 import scala.collection.mutable
 
-/** Relational flow analysis for block implementations after monomorphization.
-  *
-  * A solution associates every callable with the complete vectors of block
-  * implementations observed at its entries. Free block variables are treated
-  * as hidden parameters and precede the explicit block parameters in a vector.
-  * Keeping vectors intact preserves correlations between their components.
-  */
+/**
+ * Specializes higher-order functions with argument functions.
+ *
+ *   def inc(x: Int) = x + 1
+ *   def dec(x: Int) = x - 1
+ *
+ *   def apply(x: Int, f: Int => Int, g: Int => Int) =
+ *     f(g(x))
+ *
+ *   def main() = apply(42, inc, dec)
+ *
+ * becomes
+ *
+ *   def inc(x: Int) = x + 1
+ *   def dec(x: Int) = x - 1
+ *
+ *   def apply_inc_dec(x: Int) =
+ *     inc(dec(x))
+ *
+ *   def main() = apply_inc_dec(42)
+ *
+ * Noticeably, we do not inline inc or dec here, but replace the _unknown calls_
+ * with _known calls_.
+ *
+ * This is achieved by some kind of data-flow analysis. In this example,
+ * at the call to apply, we record
+ *
+ *   <inc, dec> <: apply
+ *
+ * that is, at the call to apply the argument vector <inc, dec> flows
+ * into the parameters of apply. We use vectors to correlate inc and dec
+ * and prevent combinatorial explosion (like in Mono).
+ *
+ * If the argument functions have free variables, we cannot simply drop them
+ * as argument. In this case, we pass their _closure_. For example
+ *
+ *   def apply(x: Bool, f: Bool => Int) =
+ *     f(x)
+ *
+ *   def main(flag: Bool, left: Int, right: Int) = {
+ *     def choose(b: Bool) =
+ *       if (b) { left } else { right }
+ *
+ *     apply(flag, choose)
+ *   }
+ *
+ * becomes
+ *
+ *   def apply_choose(x: Bool, f_left: Int, f_right: Int) =
+ *     choose(x, f_left, f_right)
+ *
+ *   def choose(b: Bool, left: Int, right: Int) =
+ *     if (b) { left } else { right }
+ *
+ *   def main(flag: Bool, left: Int, right: Int) =
+ *     apply_choose(flag, left, right)
+ *
+ * passing the closed over values `left` and `right` as additional
+ * arguments.
+ *
+ * If multiple functions (with different closures) flow into the same argument,
+ * we will create a data type and dispatch. For example,
+ *
+ *   def apply(x: Int, f: Int => Int) =
+ *     f(x)
+ *
+ *   def main(flag: Bool, n: Int) = {
+ *     def identity(x: Int) = x
+ *     def constant(x: Int) = n
+ *
+ *     val f = if (flag) box identity else box constant
+ *     apply(0, unbox f)
+ *   }
+ *
+ * becomes
+ *
+ *   type Closure {
+ *     Constant(n: Int)
+ *     Identity()
+ *   }
+ *
+ *   def applyClosure(closure: Closure, x: Int) =
+ *     closure match {
+ *       case Constant(n) => n
+ *       case Identity() => x
+ *     }
+ *
+ *   def apply_closure(x: Int, f: Closure) =
+ *     applyClosure(f, x)
+ *
+ *   def main(flag: Bool, n: Int) = {
+ *     val f = if (flag) Identity() else Constant(n)
+ *     apply_closure(0, f)
+ *   }
+ */
 object LambdaSets extends Phase[CoreTransformed, CoreTransformed] {
 
   override val phaseName: String = "lambda-set-specialization"
