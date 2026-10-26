@@ -1,0 +1,34 @@
+type ListData { Nil() Cons(head: Int, tail: ListData) }
+
+def consume(xs, k) {
+  xs match {
+    case Nil() => k(0)
+    case Cons(head, tail) => k(head)
+  }
+}
+def forward(xs, k) {
+  consume(xs, k)
+}
+def main(k) {
+  forward(make Cons(42, make Nil()), k)
+}
+
+// Representation demand propagates backwards through known calls.
+/// ARITY_SHAPES
+
+consume
+  <Cons(_, _), ?>
+forward
+  <Cons(_, _), ?>
+
+/// ARITY_RAISE
+
+def consume(xs_0, xs_1, k) {
+  k(xs_0)
+}
+def forward(xs_0, xs_1, k) {
+  consume(xs_0, xs_1, k)
+}
+def main(k) {
+  forward(42, make Nil(), k)
+}

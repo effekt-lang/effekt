@@ -71,7 +71,8 @@ object Show extends Phase[CoreTransformed, CoreTransformed] {
     case CoreTransformed(source, tree, mod, core) => {
       // Synthesize `show` definitions, create (ValueType -> (show) Id) map for context
 
-      given ctx: ShowContext = ShowContext(collection.mutable.Map.empty, collection.mutable.Map.empty, collection.mutable.Map.empty)
+      // The normalizer visits definitions in order; hash iteration would make inlining depend on symbol IDs.
+      given ctx: ShowContext = ShowContext(collection.mutable.Map.empty, collection.mutable.LinkedHashMap.empty, collection.mutable.Map.empty)
       given dctx: DeclarationContext = DeclarationContext(core.declarations, core.externs)
 
       Some(CoreTransformed(source, tree, mod, transform(core)))

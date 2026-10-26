@@ -1,0 +1,53 @@
+def main(n, ks, k) {
+  def stateful(value, ks1, k1) {
+    var state = value @ ks1;
+    def loop() {
+      get current = state;
+      run done = eq(current, 0);
+      if (done) {
+        k1(current)
+      } else {
+        run next = sub(current, 1);
+        put state = next;
+        loop()
+      }
+    }
+    loop()
+  }
+  let result = stateful!(n, ks, return);
+  k(result, ks)
+}
+
+// Parameter dropping turns the recursive worker into a nullary lexical
+// block. Its tail call and one-argument continuation application are still
+// part of `stateful`'s control region, so neither prevents a direct boundary.
+/// CALLING_CONVENTIONS
+
+direct
+  main = 0 adapter
+  stateful = 0
+
+/// JAVASCRIPT
+
+function main_0(n_0, ks_0, k_0) {
+  let result_0 = undefined;
+  stateful_return_0: {
+    let state_0 = n_0;
+    loop_0: {
+
+    }
+    loop_0: while (true) {
+      const current_0 = state_0;
+      const done_0 = eq_0(current_0, 0);
+      if (done_0) {
+        result_0 = current_0;
+        break stateful_return_0;
+      } else {
+        const next_0 = sub_0(current_0, 1);
+        state_0 = next_0;
+        continue loop_0;
+      }
+    }
+  }
+  return k_0(result_0, ks_0);
+}

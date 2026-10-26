@@ -1,0 +1,30 @@
+def main(ks, k) {
+  def worker(value, workerKs, workerK) {
+    workerK(value, workerKs)
+  }
+  let result = worker!(42, ks, return);
+  k(result, ks)
+}
+
+// A definition is used at the call itself, not in the call's remainder.
+// Sinking may therefore not commute it past that call and discard it.
+/// SINK_BLOCKS
+
+def main(ks, k) {
+  def worker(value, workerKs, workerK) {
+    workerK(value, workerKs)
+  }
+  let result = worker!(42, ks, return);
+  k(result, ks)
+}
+
+/// JAVASCRIPT
+
+function main_0(ks_0, k_0) {
+  let value_0 = 42;
+  let result_0 = undefined;
+  worker_return_0: {
+    result_0 = value_0;
+  }
+  return k_0(result_0, ks_0);
+}

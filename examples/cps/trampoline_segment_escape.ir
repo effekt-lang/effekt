@@ -1,0 +1,24 @@
+def apply(f, x, ks) {
+  f(x, ks)
+}
+
+def main(p0, ks0, k0) {
+  shift(p0) { r, ks, k =>
+    apply(k, 1, ks)
+  } @ ks0, k0
+}
+
+// A closed known call preserves segment-entry provenance through its formal
+// parameter, so the bounce is paid when the parameter is invoked.
+/// JAVASCRIPT
+
+function apply_0(f_0, x_0, ks_0) {
+  return () => f_0(x_0, ks_0);
+}
+
+function main_0(p_0, ks_1, k_0) {
+  {
+    const [r_0, ks_2, k_1] = SHIFT(p_0, ks_1, k_0);
+    return apply_0(k_1, 1, ks_2);
+  }
+}

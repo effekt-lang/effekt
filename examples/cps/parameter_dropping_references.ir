@@ -1,0 +1,17 @@
+def main(handler, k) {
+  def call(receiver, value) {
+    receiver.apply(value)
+  }
+  call(handler, 42)
+}
+
+// Dropping `receiver` requires substituting it in an identifier-valued
+// position, not merely in expressions.
+/// DROP_PARAMETERS
+
+def main(handler, k) {
+  def call() {
+    handler.apply(42)
+  }
+  call()
+}

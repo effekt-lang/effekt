@@ -1,0 +1,29 @@
+def foo(x, ks, k) {
+  k(x, ks)
+}
+def main(ks, k) {
+  foo(10, ks, k)
+}
+
+/// INLINE
+def main(ks, k) {
+  k(10, ks)
+}
+
+/// SINK_BLOCKS
+
+def main(ks, k) {
+  k(10, ks)
+}
+
+/// DROP_PARAMETERS
+
+def main(ks, k) {
+  k(10, ks)
+}
+
+/// JAVASCRIPT
+
+function main_0(ks_0, k_0) {
+  return k_0(10, ks_0);
+}

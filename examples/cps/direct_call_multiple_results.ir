@@ -1,0 +1,36 @@
+def duplicate(x, ks1, k1) {
+  k1(x, x, ks1)
+}
+def first(x, ks2, k2) {
+  let (a, b) = duplicate!(x, ks2, return);
+  k2(a, ks2)
+}
+def main(x, ks, k) {
+  let result = first!(x, ks, return);
+  k(result, ks)
+}
+
+// JavaScript packages multiple results only while crossing a function
+// boundary. The caller immediately unpacks that array.
+/// CALLING_CONVENTIONS
+
+direct
+  duplicate = 0
+  first = 1
+  main = 2 adapter
+
+/// JAVASCRIPT
+
+function duplicate_0(x_0) {
+  return [x_0, x_0];
+}
+
+function first_0(x_1) {
+  const [a_0, b_0] = duplicate_0(x_1);
+  return a_0;
+}
+
+function main_0(x_2, ks_0, k_0) {
+  const result_0 = first_0(x_2);
+  return k_0(result_0, ks_0);
+}

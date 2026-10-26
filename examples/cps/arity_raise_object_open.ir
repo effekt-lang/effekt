@@ -1,0 +1,23 @@
+def use(reader, k) { reader.read(k) }
+def main(unknown, flag, k0) {
+  if (flag) { use(unknown, k0) } else {
+    new source : Reader {
+      def read(done) = { done(1) }
+    }
+    use(source, k0)
+  }
+}
+
+// An external alternative keeps the consumer's object parameter bundled.
+// If the known producer is only needed as a whole, keep its implementation
+// instead of extracting operations merely to wrap them again.
+/// ARITY_RAISE
+def use(reader, k) { reader.read(k) }
+def main(unknown, flag, k0) {
+  if (flag) { use(unknown, k0) } else {
+    new source : Reader {
+      def read(done) = { done(1) }
+    }
+    use(source, k0)
+  }
+}

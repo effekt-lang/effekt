@@ -1,0 +1,36 @@
+def inc(x: Int) = {
+  return x: Int
+}
+
+def apply['A](x: 'A){f: ('A) => 'A} = {
+  (f: ('A) => 'A @ {f})(x: 'A)
+}
+
+def main() = {
+  (apply: ['A]('A){f: ('A) => 'A} => 'A @ {})[Int](0){
+    (inc: (Int) => Int @ {})
+  }
+}
+
+/// MONO_LAMBDA_SETS
+
+S = applyInt ↦ { <inc> },
+    inc ↦ { <> }
+
+/// MONO_LAMBDA_SPECIALIZE
+
+def inc(x: Int) = {
+  return x: Int
+}
+
+def applyInt(x: Int){f: (Int) => Int} = {
+  (f: (Int) => Int @ {f})(x: Int)
+}
+
+def main() = {
+  (applyInt_inc: (Int) => Int @ {})(0)
+}
+
+def applyInt_inc(x: Int) = {
+  (inc: (Int) => Int @ {})(x: Int)
+}

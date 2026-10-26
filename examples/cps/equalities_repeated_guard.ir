@@ -1,0 +1,34 @@
+def main(choice, k) {
+  def apply(flag, f, g, x, y) {
+    if (flag) {
+      f(x)
+    } else {
+      g(y)
+    }
+  }
+  def inc(x_inc) {
+    k(x_inc)
+  }
+  def dec(x_dec) {
+    k(x_dec)
+  }
+  if (choice) {
+    apply(choice, inc, inc, 1, 1)
+  } else {
+    apply(choice, inc, dec, 1, 0)
+  }
+}
+
+// A guard is the complete shape carrying the focused closure. Treating its
+// two occurrences in the first call independently would merge that call with
+// the second one at `f`, spuriously losing `inc`'s constant argument.
+/// EQUALITIES
+
+main
+---
+apply:
+  entry flag = choice, x = 1
+inc:
+  entry x_inc = 1
+dec:
+  entry x_dec = 0

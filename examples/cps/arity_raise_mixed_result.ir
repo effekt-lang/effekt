@@ -1,0 +1,43 @@
+type ListData { Cons(first: Int, second: Int) }
+
+def produce(x, ks1, k1) {
+  k1(make Cons(x, x), ks1)
+}
+def ignore(pair, ks2, k2) {
+  k2(0, ks2)
+}
+def consume(pair, ks3, k3) {
+  pair match {
+    case Cons(first, second) => k3(first, ks3)
+  }
+}
+def main(ks, k) {
+  let ignored = produce!(1, ks, return);
+  let unused = ignore!(ignored, ks, return);
+  let observed = produce!(2, ks, return);
+  consume(observed, ks, k)
+}
+
+// Both calls of `produce` share one monovariant result convention. Since only
+// one result is observed component-wise, the common convention stays boxed.
+// The boxed result cannot in turn supply a split argument to `consume` without
+// inserting a new match at its call site.
+/// ARITY_RAISE
+
+def produce(x, ks1, k1) {
+  k1(make Cons(x, x), ks1)
+}
+def ignore(pair, ks2, k2) {
+  k2(0, ks2)
+}
+def consume(pair, ks3, k3) {
+  pair match {
+    case Cons(first, second) => k3(first, ks3)
+  }
+}
+def main(ks, k) {
+  let ignored = produce!(1, ks, return);
+  let unused = ignore!(ignored, ks, return);
+  let observed = produce!(2, ks, return);
+  consume(observed, ks, k)
+}

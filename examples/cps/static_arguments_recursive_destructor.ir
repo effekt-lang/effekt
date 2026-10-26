@@ -1,0 +1,86 @@
+type TreeData {
+  Leaf(value: Int)
+  Node(left: TreeData, right: TreeData)
+}
+
+def main(tree, ks, k) {
+  def lookup(current, ks1, k1) {
+    current match {
+      case Leaf(value) => k1(value, ks1)
+      case Node(left, right) => lookup(left, ks1, k1)
+    }
+  }
+  lookup(tree, ks, k)
+}
+
+/// STATIC_ARGUMENTS
+
+/// JAVASCRIPT
+
+function main_0(tree_0, ks_0, k_0) {
+  let current_0 = undefined;
+  lookup_worker_0: {
+    current_0 = tree_0;
+  }
+  lookup_worker_0: while (true) {
+    switch (current_0.__tag) {
+      case 0:  const value_1 = current_0.value_0;return k_0(value_1, ks_0);
+      case 1:
+        const left_1 = current_0.left_0;
+        current_0 = left_1;
+        continue lookup_worker_0;
+    }
+  }
+}
+
+class Leaf_0 {
+  constructor(value_0) {
+    this.__tag = 0;
+    this.value_0 = value_0;
+  }
+  __reflect() {
+    return { __tag: 0, __name: "Leaf", __data: [this.value_0] };
+  }
+  __equals(other0) {
+    if (!other0) {
+      return false;
+    }
+    if (!($effekt.equals(this.__tag, other0.__tag))) {
+      return false;
+    }
+    if (!($effekt.equals(this.value_0, other0.value_0))) {
+      return false;
+    }
+    return true;
+  }
+}
+
+class Node_0 {
+  constructor(left_0, right_0) {
+    this.__tag = 1;
+    this.left_0 = left_0;
+    this.right_0 = right_0;
+  }
+  __reflect() {
+    return {
+      __tag: 1,
+      __name: "Node",
+      __data: [this.left_0, this.right_0]
+    };
+  }
+  __equals(other1) {
+    if (!other1) {
+      return false;
+    }
+    if (!($effekt.equals(this.__tag, other1.__tag))) {
+      return false;
+    }
+    if (!($effekt.equals(this.left_0, other1.left_0))) {
+      return false;
+    }
+    if (!($effekt.equals(this.right_0, other1.right_0))) {
+      return false;
+    }
+    return true;
+  }
+}

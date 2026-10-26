@@ -1,0 +1,27 @@
+type ListData { Nil() Cons(head: Int, tail: ListData) }
+
+def use(xs, k) {
+  xs match {
+    case Nil() => k(0)
+    case Cons(head, tail) => k(head)
+  }
+}
+def main(k) {
+  run ignored = println(use);
+  use(make Cons(42, make Nil()), k)
+}
+
+// A monovariant pass cannot change the convention of a function that escapes.
+
+/// ARITY_RAISE
+
+def use(xs, k) {
+  xs match {
+    case Nil() => k(0)
+    case Cons(head, tail) => k(head)
+  }
+}
+def main(k) {
+  run ignored = println(use);
+  use(make Cons(42, make Nil()), k)
+}

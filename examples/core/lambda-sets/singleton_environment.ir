@@ -1,0 +1,55 @@
+def apply(x: Int){f: (Int) => Int} = {
+  (f: (Int) => Int @ {f})(x: Int)
+}
+
+def main(captured: Int) = {
+  def inner(ignored: Int) = {
+    return captured: Int
+  }
+  def outer(value: Int) = {
+    (inner: (Int) => Int @ {})(value: Int)
+  }
+  (apply: (Int){f: (Int) => Int} => Int @ {})(0){
+    (outer: (Int) => Int @ {})
+  }
+}
+
+/// LAMBDA_SETS
+
+S = apply ↦ { <outer> },
+    inner ↦ { <> },
+    outer ↦ { <inner> }
+
+/// LAMBDA_SPECIALIZE
+
+// A singleton lambda set is statically a code pointer paired with a product
+// of environments. Here outer's environment contains inner's singleton
+// environment, which contains captured. The two products are flattened into
+// one Int parameter: no nominal closure declaration, constructor, dispatcher,
+// or adapter is necessary.
+
+def apply(x: Int){f: (Int) => Int} = {
+  (f: (Int) => Int @ {f})(x: Int)
+}
+
+def main(captured: Int) = {
+  def inner(ignored: Int) = {
+    return captured: Int
+  }
+  def outer(value: Int) = {
+    (inner_specialized: (Int, Int) => Int @ {})(value: Int, captured: Int)
+  }
+  (apply_outer_inner: (Int, Int) => Int @ {})(0, captured: Int)
+}
+
+def inner_specialized(ignored: Int, captured_captured: Int) = {
+  return captured_captured: Int
+}
+
+def apply_outer_inner(x: Int, f_environment: Int) = {
+  (outer_inner: (Int, Int) => Int @ {})(x: Int, f_environment: Int)
+}
+
+def outer_inner(value: Int, inner_environment: Int) = {
+  (inner_specialized: (Int, Int) => Int @ {})(value: Int, inner_environment: Int)
+}

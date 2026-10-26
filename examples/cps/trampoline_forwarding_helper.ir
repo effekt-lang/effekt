@@ -1,0 +1,60 @@
+def apply(k, x) {
+  k(x)
+}
+def loop(flag, k) {
+  if (flag) {
+    def next(value) {
+      loop(false, k)
+    }
+    apply(next, 0)
+  } else {
+    k(1)
+  }
+}
+def main(flag, k) {
+  loop(flag, k)
+}
+
+// apply invokes the continuation that loop passes to it. This indirect edge
+// closes the otherwise hidden loop -> apply -> next -> loop cycle.
+// Consequently next needs a stack-safe value entry. There is, however, no
+// statically known direct call to next: its direct worker is referenced only
+// by the stack-safe adapter. This is the canonical worker-adapter fusion case.
+/// CONTROL_FLOW
+
+ranks
+  main = 2
+  next = 2
+  loop = 1
+  apply = 0
+transfers
+  apply -> k: safe [?]
+  next -> loop: direct [loop]
+  loop -> apply: direct [apply]
+  loop -> k: safe [?]
+  main -> loop: direct [loop]
+
+/// SAFE_ENTRIES
+
+function next
+
+/// JAVASCRIPT
+
+function apply_0(k_0, x_0) {
+  return k_0(x_0);
+}
+
+function loop_0(flag_0, k_1) {
+  if (flag_0) {
+    function next_0(value_0) {
+      return () => loop_0(false, k_1);
+    }
+    return apply_0(next_0, 0);
+  } else {
+    return k_1(1);
+  }
+}
+
+function main_0(flag_1, k_2) {
+  return loop_0(flag_1, k_2);
+}

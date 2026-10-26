@@ -1,0 +1,23 @@
+type PairData { Pair(first: Int, second: Int) }
+
+def main(ks, k) {
+  new box : Box {
+    def consume(pair, ks1, k1) = {
+      pair match {
+        case Pair(first, second) => k1(first, ks1)
+      }
+    }
+  }
+  box.consume(make Pair(1, 2), ks, k)
+}
+
+// Operation parameters and their invocation arguments use the same convention
+// inferred for ordinary functions and continuations.
+/// ARITY_RAISE
+
+def main(ks, k) {
+  def box_consume(pair_0, pair_1, ks1, k1) {
+    k1(pair_0, ks1)
+  }
+  box_consume(1, 2, ks, k)
+}

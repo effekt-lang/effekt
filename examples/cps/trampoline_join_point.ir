@@ -1,0 +1,32 @@
+def main(choice, k) {
+  def join(x) {
+    k(x)
+  }
+  if (choice) {
+    join(1)
+  } else {
+    join(2)
+  }
+}
+
+// A nonescaping local definition is a labeled join point, not a JS call.
+/// CONTROL_FLOW
+
+ranks
+  main = 0
+transfers
+  main -> join: jump
+  main -> join: jump
+  main -> k: safe [?]
+
+/// JAVASCRIPT
+
+function main_0(choice_0, k_0) {
+  let x_0 = undefined;
+  if (choice_0) {
+    x_0 = 1;
+  } else {
+    x_0 = 2;
+  }
+  return k_0(x_0);
+}

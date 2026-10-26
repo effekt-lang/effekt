@@ -1,0 +1,42 @@
+def main(k) {
+  def f(y) { k(y) }
+  def g(x) { x(2) }
+  // here f is passed, but to a **known** function
+  // so we _could_ adapt parameters
+  g(f)
+}
+
+/// FLOWS
+
+main
+---
+y_3 !-> 2
+x_5 !-> f_2
+
+/// SINK_BLOCKS
+
+def main(k) {
+  def g(x) {
+    x(2)
+  }
+  def f(y) {
+    k(y)
+  }
+  g(f)
+}
+
+/// DROP_PARAMETERS
+def main(k) {
+  def g(x) {
+    x()
+  }
+  def f() {
+    k(2)
+  }
+  g(f)
+}
+
+/// INLINE
+def main(k) {
+  k(2)
+}

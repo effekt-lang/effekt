@@ -194,4 +194,3 @@ def expectedResultFor(f: File): Option[String] = {
   val checkfile = path / (baseName + ".check")
   if checkfile.exists() then Some(IO.read(checkfile)) else None
 }
-

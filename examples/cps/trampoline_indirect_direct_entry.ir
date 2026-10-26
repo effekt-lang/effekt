@@ -1,0 +1,57 @@
+def main(choice, value, ks, k) {
+  def step(current, ks1, k1) {
+    k1(current, ks1)
+  }
+  def stop(current, ks2, k2) {
+    return(current)
+  }
+  def loop(f, current, ks3, k3) {
+    def next(result, ks4) {
+      loop(f, result, ks4, k3)
+    }
+    f(current, ks3, next)
+  }
+  let seed = step!(value, ks, return);
+  run ignored = println(step);
+  if (choice) {
+    loop(step, seed, ks, k)
+  } else {
+    loop(stop, seed, ks, k)
+  }
+}
+
+// The closed indirect call in `loop` enters a function value. For `step`
+// that value is its CPS adapter, not the direct worker. The activation graph
+// must therefore retain the adapter's edge to `next` and cut the resulting
+// cycle.
+/// JAVASCRIPT
+
+function step_0(current_0) {
+  return current_0;
+}
+
+function step_cps_0(current_0, ks_1, k_1) {
+  const result_0 = step_0(current_0);
+  return k_1(result_0, ks_1);
+}
+
+function stop_0(current_1, ks_2, k_2) {
+  return { result: current_1 };
+}
+
+function loop_0(f_0, current_2, ks_4, k_3) {
+  function next_0(result_1, ks_3) {
+    return loop_0(f_0, result_1, ks_3, k_3);
+  }
+  return () => f_0(current_2, ks_4, next_0);
+}
+
+function main_0(choice_0, value_0, ks_0, k_0) {
+  const seed_0 = step_0(value_0);
+  const ignored_0 = println_0(step_cps_0);
+  if (choice_0) {
+    return loop_0(step_cps_0, seed_0, ks_0, k_0);
+  } else {
+    return loop_0(stop_0, seed_0, ks_0, k_0);
+  }
+}

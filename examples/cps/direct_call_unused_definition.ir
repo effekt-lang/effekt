@@ -1,0 +1,19 @@
+def unused(x, ks1, k1) {
+  k1(x, ks1)
+}
+def main(ks, k) {
+  k(42, ks)
+}
+
+// No entry of unused is demanded, even without dead-code elimination.
+/// CALLING_CONVENTIONS
+
+direct
+  main = 0 adapter
+  unused = 0
+
+/// JAVASCRIPT
+
+function main_0(ks_0, k_0) {
+  return k_0(42, ks_0);
+}

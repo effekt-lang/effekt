@@ -1,0 +1,19 @@
+def main(handler, ks, k) {
+  def call(receiver, ks1, k1) {
+    let result | returnedKs = receiver.apply!(ks1, return);
+    k1(result, returnedKs)
+  }
+  call(handler, ks, k)
+}
+
+// A reconstructed parameter must be substituted wherever it denotes a
+// value, including the receiver of a compositional operation call.
+/// DROP_PARAMETERS
+
+def main(handler, ks, k) {
+  def call() {
+    let result | returnedKs = handler.apply!(ks, return);
+    k(result, returnedKs)
+  }
+  call()
+}

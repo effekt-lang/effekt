@@ -1,0 +1,48 @@
+type ListData { Nil() Cons(head: Int, tail: ListData) }
+
+def main(tail, index, k) {
+  let list = make Cons(1, tail);
+  def go(current, j) {
+    current match {
+      case Nil() => k(0)
+      case Cons(head, rest) =>
+        run done = eq(j, 0);
+        if (done) {
+          k(head)
+        } else {
+          run previous = sub(j, 1);
+          go(rest, previous)
+        }
+    }
+  }
+  go(list, index)
+}
+
+// A known constructor entry is only the first iteration. Destructuring it and
+// recurring with a field must invalidate the entry equalities.
+/// EQUALITIES
+
+main
+---
+go:
+  entry -
+
+/// DROP_PARAMETERS
+
+def main(tail, index, k) {
+  let list = make Cons(1, tail);
+  def go(current, j) {
+    current match {
+      case Nil() => k(0)
+      case Cons(head, rest) =>
+        run done = eq(j, 0);
+        if (done) {
+          k(head)
+        } else {
+          run previous = sub(j, 1);
+          go(rest, previous)
+        }
+    }
+  }
+  go(make Cons(1, tail), index)
+}

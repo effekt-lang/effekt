@@ -1,0 +1,42 @@
+def inc(x, ks, k) {
+  run y = add(x, 1);
+  k(y, ks)
+}
+def dec(x1, ks1, k1) {
+  run y1 = sub(x1, 1);
+  k1(y1, ks1)
+}
+def use(f, external, value, ks2, k2) {
+  let result = f!(value, ks2, return);
+  external(result, ks2, k2)
+}
+def main(external0, value0, ks0, k0) {
+  let first = use!(inc, external0, value0, ks0, return);
+  use(dec, external0, first, ks0, k0)
+}
+
+// Both inc and dec flow into the same parameter. Their implementations
+// differ, but their bounded direct calling conventions agree.
+// No arity-raising or inlining pass is run.
+/// JAVASCRIPT
+function inc_0(x_0) {
+  const y_0 = add_0(x_0, 1);
+  return y_0;
+}
+
+function dec_0(x_1) {
+  const y_1 = sub_0(x_1, 1);
+  return y_1;
+}
+
+function use_0(f_0, external_0, value_0, ks_0, k_0) {
+  const result_0 = f_0(value_0);
+  return external_0(result_0, ks_0, k_0);
+}
+
+function main_0(external_1, value_1, ks_1, k_1) {
+  function k_2(first_0, ks_2) {
+    return use_0(dec_0, external_1, first_0, ks_1, k_1);
+  }
+  return use_0(inc_0, external_1, value_1, ks_1, k_2);
+}

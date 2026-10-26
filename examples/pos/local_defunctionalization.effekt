@@ -1,0 +1,17 @@
+def nested(n: Int): Int = {
+  def outer(i: Int): Int =
+    if (i == 0) {
+      0
+    } else {
+      def inner(j: Int): Int =
+        if (j == 0) {
+          outer(i - 1)
+        } else {
+          1 + inner(j - 1)
+        }
+      inner(2)
+    }
+  outer(n)
+}
+
+def main() = println(nested(3))

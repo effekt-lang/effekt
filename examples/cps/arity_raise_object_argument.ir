@@ -1,0 +1,20 @@
+def use(reader, k) {
+  reader.read(k)
+}
+def main(k0) {
+  new source : Reader {
+    def read(done) = { done(42) }
+  }
+  use(source, k0)
+}
+
+// A method invocation demands an object's operation, just as a match demands
+// a constructor's fields. The operation crosses the parameter boundary alone.
+/// ARITY_RAISE
+def use(reader_read, k) {
+  reader_read(k)
+}
+def main(k0) {
+  def source_read(done) { done(42) }
+  use(source_read, k0)
+}

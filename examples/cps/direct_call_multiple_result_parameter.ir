@@ -1,0 +1,78 @@
+def main(flag, x, ks, k) {
+  def duplicate(value, ks1, k1) {
+    k1(value, value, ks1)
+  }
+  def applyDirect(f, value, ks2, k2) {
+    let (a, b) = f!(value, ks2, return);
+    k2(a, b, ks2)
+  }
+  def applyPlain(f, value, ks3, k3) {
+    run ignored = println(f);
+    k3(value, value, ks3)
+  }
+  def dispatch(target, f, value, ks4, k4) {
+    let (a, b) = target!(f, value, ks4, return);
+    k4(a, b, ks4)
+  }
+  if (flag) {
+    let (a, b) = dispatch!(applyDirect, duplicate, x, ks, return);
+    k(a, ks)
+  } else {
+    let (a, b) = dispatch!(applyPlain, duplicate, x, ks, return);
+    k(a, ks)
+  }
+}
+
+// Function-parameter conventions include both argument and result arity. The
+// dynamically selected direct target therefore expects a function returning
+// two values, even when the value arrives through its CPS-facing entry.
+/// CALLING_CONVENTIONS
+
+direct
+  applyDirect = 1 [direct: 0]
+  applyPlain = 0 [direct: 0]
+  dispatch = 2 [direct: 0]
+  duplicate = 0 adapter
+  main = 3 adapter
+
+/// JAVASCRIPT
+
+function duplicate_0(value_0) {
+  return [value_0, value_0];
+}
+
+function duplicate_cps_0(value_0, ks_1, k_1) {
+  const [result_0, result_1] = duplicate_0(value_0);
+  return k_1(result_0, result_1, ks_1);
+}
+
+function applyDirect_0(f_0, value_1) {
+  const [a_0, b_0] = f_0(value_1);
+  return [a_0, b_0];
+}
+
+function applyPlain_0(f_1, value_2) {
+  const ignored_0 = println_0((arg_2, ks_3, k_4) => {
+    const [result_5, result_6] = f_1(arg_2);
+    return k_4(result_5, result_6, ks_3);
+  });
+  return [value_2, value_2];
+}
+
+function dispatch_0(target_0, f_2, value_3) {
+  const [a_1, b_1] = target_0((arg_7) =>
+    RUN_TOPLEVEL((ks_8, k_9) =>
+      f_2(arg_7, ks_8, (result_10, result_11) =>
+        ({ result: [result_10, result_11] }))), value_3);
+  return [a_1, b_1];
+}
+
+function main_0(flag_0, x_0, ks_0, k_0) {
+  if (flag_0) {
+    const [a_2, b_2] = dispatch_0(applyDirect_0, duplicate_cps_0, x_0);
+    return k_0(a_2, ks_0);
+  } else {
+    const [a_3, b_3] = dispatch_0(applyPlain_0, duplicate_cps_0, x_0);
+    return k_0(a_3, ks_0);
+  }
+}

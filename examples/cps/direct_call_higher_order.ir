@@ -1,0 +1,35 @@
+def main(x, ks, k) {
+  def inc(value, ks1, k1) {
+    run result = add(value, 1);
+    k1(result, ks1)
+  }
+  def apply(f, value, ks2, k2) {
+    let result = f!(value, ks2, return);
+    k2(result, ks2)
+  }
+  let result = apply!(inc, x, ks, return);
+  k(result, ks)
+}
+
+/// CALLING_CONVENTIONS
+
+direct
+  apply = 1 [direct: 0]
+  inc = 0
+  main = 0 adapter
+
+/// JAVASCRIPT
+
+function inc_0(value_0) {
+  const result_0 = add_0(value_0, 1);
+  return result_0;
+}
+
+function main_0(x_0, ks_0, k_0) {
+  let result_1 = undefined;
+  apply_return_0: {
+    const result_2 = inc_0(x_0);
+    result_1 = result_2;
+  }
+  return k_0(result_1, ks_0);
+}

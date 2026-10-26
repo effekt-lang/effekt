@@ -1,0 +1,33 @@
+def touch(ks1, k1) {
+  k1(ks1)
+}
+def main(ks, k) {
+  run ignored = println(touch);
+  let () = touch!(ks, return);
+  k(42, ks)
+}
+
+// Zero CPS results become a statement call. Both the direct function and its
+// CPS-facing adapter avoid manufacturing a Unit value.
+/// CALLING_CONVENTIONS
+
+direct
+  main = 1 adapter
+  touch = 0 adapter
+
+/// JAVASCRIPT
+
+function touch_0() {
+  return;
+}
+
+function touch_cps_0(ks_0, k_0) {
+  touch_0();
+  return k_0(ks_0);
+}
+
+function main_0(ks_1, k_1) {
+  const ignored_0 = println_0(touch_cps_0);
+  touch_0();
+  return k_1(42, ks_1);
+}

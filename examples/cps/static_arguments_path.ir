@@ -1,0 +1,54 @@
+def main(ks, k) {
+  def loop(ks1, k1) {
+    def step(again, ks2, k2) {
+      if (again) {
+        loop(ks2, k2)
+      } else {
+        k2(ks2)
+      }
+    }
+    step(false, ks1, k1)
+  }
+  def done(ks3) {
+    k(ks3)
+  }
+  loop(ks, done)
+}
+
+/// STATIC_ARGUMENTS
+
+def main(ks, k) {
+  def done(ks3) {
+    k(ks3)
+  }
+  def loop_worker() {
+    def step(again, ks2, k2) {
+      if (again) {
+        loop_worker()
+      } else {
+        k2(ks2)
+      }
+    }
+    step(false, ks, done)
+  }
+  loop_worker()
+}
+
+/// DROP_PARAMETERS
+
+def main(ks, k) {
+  def done() {
+    k(ks)
+  }
+  def loop_worker() {
+    def step() {
+      if (false) {
+        loop_worker()
+      } else {
+        done()
+      }
+    }
+    step()
+  }
+  loop_worker()
+}
