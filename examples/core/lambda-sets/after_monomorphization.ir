@@ -14,7 +14,7 @@ def main() = {
 
 /// MONO_LAMBDA_SETS
 
-S = applyInt ↦ { <inc> },
+S = apply ↦ { <inc> },
     inc ↦ { <> }
 
 /// MONO_LAMBDA_SPECIALIZE

@@ -11,7 +11,7 @@ def main() = {
 /// MONO_LAMBDA_SETS
 
 S = callPoly ↦ { <implementation1> },
-    implementation1.applyInt ↦ { <> }
+    implementation1.apply ↦ { <> }
 
 /// MONO_LAMBDA_SPECIALIZE
 
