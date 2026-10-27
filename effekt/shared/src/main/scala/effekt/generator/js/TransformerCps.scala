@@ -462,14 +462,25 @@ object TransformerCps extends Transformer {
     C.resets += arity
     js.Variable(JSName(s"RETURN_$arity"))
 
-  // const RETURN_n = (x0, ..., xn, ks) => ks.rest.stack(x0, ..., xn, ks.rest)
+  // A reset in tail position of another reset's body returns to a frame whose stack is again
+  // RETURN_n. We pop all such frames at once, instead of recursing through them (which can
+  // overflow the JS stack for deep handler recursion):
+  //
+  //   function RETURN_n(x0, ..., xn, ks) {
+  //     let rest = ks.rest
+  //     while (rest.stack === RETURN_n) rest = rest.rest
+  //     return rest.stack(x0, ..., xn, rest)
+  //   }
   def returns(using C: TransformerContext): List[js.Stmt] =
     C.resets.toList.sorted.map { arity =>
-      val values = List.tabulate(arity) { i => JSName(s"x$i") }
-      val ks = JSName("ks")
-      val rest = js.Member(js.Variable(ks), JSName("rest"))
-      js.Const(JSName(s"RETURN_$arity"),
-        js.Lambda(values :+ ks, js.Return(js.Call(js.Member(rest, JSName("stack")), values.map(js.Variable.apply) :+ rest))))
+      val name = s"RETURN_$arity"
+      val values = List.tabulate(arity) { i => s"x$i" }
+      js.RawStmt(
+        s"""function ${name}(${(values :+ "ks").mkString(", ")}) {
+           |  let rest = ks.rest
+           |  while (rest.stack === ${name}) rest = rest.rest
+           |  return rest.stack(${(values :+ "rest").mkString(", ")})
+           |}""".stripMargin)
     }
 
   def toJS(scrutinee: js.Expr, variant: Id, clause: cps.Clause)(using C: TransformerContext): (js.Expr, Binding[List[js.Stmt]]) =
