@@ -1,7 +1,7 @@
 package effekt
 package core
 
-import effekt.core.Type.{PromptSymbol, ResumeSymbol, TChar}
+import effekt.core.Type.TChar
 import effekt.source.FeatureFlag
 import kiama.output.ParenPrettyPrinter
 import kiama.output.PrettyPrinterTypes.Document
@@ -332,9 +332,11 @@ class PrettyPrinter(printDetails: Boolean, printInternalIds: Boolean = true) ext
       tps <> vps <> bps <+> "=>" <+> resultToDoc(result)
     case core.BlockType.Interface(symbol, Nil) => toDoc(symbol)
     case core.BlockType.Interface(symbol, targs) => toDoc(symbol) <> brackets(targs.map(toDoc))
+    case core.BlockType.Prompt(answer) => "Prompt" <> brackets(resultToDoc(answer))
+    case core.BlockType.Resume(result, answer) => parens(result.map(toDoc)) <+> "~>" <+> resultToDoc(answer)
   }
 
-  // After `=>` the grammar expects a primValueType. If the result is a boxed value type
+  // After `=>` and `~>` the grammar expects a primValueType. If the result is a boxed value type
   // (i.e., contains `at { ... }`), we must parenthesize it so it parses via `( valueType )`.
   def resultToDoc(result: List[core.ValueType]): Doc = result match {
     case List(tpe @ core.ValueType.Data(_, _)) => toDoc(tpe)

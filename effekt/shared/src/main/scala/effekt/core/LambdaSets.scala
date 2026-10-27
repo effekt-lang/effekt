@@ -1377,7 +1377,7 @@ object LambdaSets extends Phase[CoreTransformed, CoreTransformed] {
           rep.dispatcher,
           BlockType.Function(Nil, cparams, rep.tpe :: vparams, bparams, result),
           selectedCapture(rep.set))
-      case _: BlockType.Interface =>
+      case _ =>
         Context.abort(pretty"An implementation is dispatched through one of its operations")
     }
 
@@ -1469,6 +1469,8 @@ object LambdaSets extends Phase[CoreTransformed, CoreTransformed] {
             literal.vparams, literal.bparams, literal.body)
         }
         New(Implementation(interface, operations))
+      case other =>
+        Context.abort(pretty"Prompts and resumptions cannot be boxed")
     }
 
     private case class CaseLayout(
@@ -1618,7 +1620,7 @@ object LambdaSets extends Phase[CoreTransformed, CoreTransformed] {
                     targs.map(rewrite),
                     closureExpression(receiver, set, receiver.tpe) :: vargs.map(rewrite),
                     bargs.map(rewrite))
-                case _: BlockType.Interface =>
+                case _ =>
                   Context.abort(pretty"An operation must have a function type")
               }
               case None => super.rewrite(stmt)
@@ -1801,7 +1803,7 @@ object LambdaSets extends Phase[CoreTransformed, CoreTransformed] {
                 case BlockCase.Function(id) => Callable.Function(id)
                 case _ => Context.abort(pretty"A function lambda set contains a non-function case")
               }
-            case _: BlockType.Interface => ()
+            case _ => ()
           }
         }
         while pendingOperationDispatchers.nonEmpty do {

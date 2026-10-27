@@ -108,6 +108,8 @@ class Reachable(
         bparams.foreach(process)
         result.foreach(process)
       case BlockType.Interface(name, targs) => process(name); targs.foreach(process)
+      case BlockType.Prompt(answer) => answer.foreach(process)
+      case BlockType.Resume(result, answer) => result.foreach(process); answer.foreach(process)
     }
 
   def process(s: Stmt)(using defs: Definitions): Unit = s match {

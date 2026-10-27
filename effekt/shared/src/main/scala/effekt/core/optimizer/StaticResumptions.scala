@@ -28,7 +28,7 @@ object StaticResumptions {
         val inner = shift.withBody(rewrite(shift.body))
         reuse(inner, atPrompt = false).getOrElse { inner.stmt }
 
-      case Stmt.Reset(BlockLit(tparams, cparams, vparams, List(prompt @ BlockParam(_, Type.TPrompt(answer), _)), body)) =>
+      case Stmt.Reset(BlockLit(tparams, cparams, vparams, List(prompt @ BlockParam(_, BlockType.Prompt(answer), _)), body)) =>
         Stmt.Reset(BlockLit(tparams, cparams, vparams, List(prompt),
           reduceShifts(Prompt(prompt, cparams.head, answer), rewrite(body), joinable = true)))
 
@@ -36,7 +36,7 @@ object StaticResumptions {
     }
   }
 
-  case class Prompt(param: BlockParam, capture: Id, answer: ValueType) {
+  case class Prompt(param: BlockParam, capture: Id, answer: List[ValueType]) {
     val id: Id = param.id
 
     /** The names it owns ~> what a copy must rename, and what must not escape into one. */
@@ -124,7 +124,7 @@ object StaticResumptions {
   }
   /** Reads a `Stmt.Shift` into a [[Shift]]. */
   private def asShift(stmt: Stmt): Option[Shift] = stmt match {
-    case shift @ Stmt.Shift(_, BlockParam(k, Type.TResume(result, _), _), _) => Some(Shift(shift, k, result))
+    case shift @ Stmt.Shift(_, BlockParam(k, BlockType.Resume(result, _), _), _) => Some(Shift(shift, k, result))
     case _ => None
   }
 
@@ -223,16 +223,16 @@ object StaticResumptions {
   private def jumpsToJoin(prompt: Prompt, stmt: Stmt, jump: Stmt => Stmt, transparent: Set[Id] = Set.empty): Stmt =
     tailPositions(stmt) match {
       case Some(positions) =>
-        retypeAnswer(positions.rewrite(jumpsToJoin(prompt, _, jump, transparent ++ positions.transparent)), List(prompt.answer))
+        retypeAnswer(positions.rewrite(jumpsToJoin(prompt, _, jump, transparent ++ positions.transparent)), prompt.answer)
       case None => stmt match {
         case prompt.Shift(shift) if shift.resumesOnly => shift.replaceResumptions(jump)
 
         // [[ f(…) ]] = f(…)   a tail call to a block only ever tail-called
         case Stmt.App(Block.BlockVar(f, BlockType.Function(tps, cps, vps, bps, _), capt), targs, vargs, bargs) if transparent.contains(f) =>
-          Stmt.App(Block.BlockVar(f, BlockType.Function(tps, cps, vps, bps, List(prompt.answer)), capt), targs, vargs, bargs)
+          Stmt.App(Block.BlockVar(f, BlockType.Function(tps, cps, vps, bps, prompt.answer), capt), targs, vargs, bargs)
 
         // an exit that never returns is no exit
-        case leaf if leaf.tpe == List(Type.TBottom) => retypeAnswer(leaf, List(prompt.answer))
+        case leaf if leaf.tpe == List(Type.TBottom) => retypeAnswer(leaf, prompt.answer)
 
         // a leaf produces the frame's value where it stands, so it jumps with that value: the frames
         // moved into the join point, the leaf did not
@@ -329,6 +329,8 @@ object StaticResumptions {
     case BlockType.Function(_, cparams, vparams, bparams, result) =>
       (vparams.flatMap(captures) ++ bparams.flatMap(captures) ++ result.flatMap(captures)).toSet -- cparams
     case BlockType.Interface(_, targs) => targs.flatMap(captures).toSet
+    case BlockType.Prompt(answer) => answer.flatMap(captures).toSet
+    case BlockType.Resume(result, answer) => (result ++ answer).flatMap(captures).toSet
   }
 
   /**

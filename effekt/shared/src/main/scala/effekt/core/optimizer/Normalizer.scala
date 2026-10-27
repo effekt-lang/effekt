@@ -340,8 +340,8 @@ object Normalizer { normal =>
       def normalizeVal(ids: List[Id], binding: Stmt, body: Stmt)(using C: Context): Stmt = binding match {
 
         // [[ val x: A = shift(p) { {k: A => R} => body2 }; body: B ]] = shift(p) { {k: >>>B<<< => R} => body2 }
-        case Stmt.Shift(p, BlockParam(k, Type.TResume(tpeA, answer), captures), body2) if !body2.free.contains(k) =>
-            Stmt.Shift(p, BlockParam(k, Type.TResume(body.tpe, answer), captures), body2)
+        case Stmt.Shift(p, BlockParam(k, BlockType.Resume(tpeA, answer), captures), body2) if !body2.free.contains(k) =>
+            Stmt.Shift(p, BlockParam(k, BlockType.Resume(body.tpe, answer), captures), body2)
 
         // [[ val x: A = sc match [A] { case ... => body2: A }; body: B ]] == sc match [B] { case ... => [[ val x: A = body2; body: B ]] }
         case Stmt.Match(sc, tpe, List((id2, clause @ BlockLit(tparams2, cparams2, vparams2, bparams2, body2))), None) =>

@@ -1,7 +1,6 @@
 package effekt
 package core
 
-import effekt.core.Type.{PromptSymbol, ResumeSymbol}
 import effekt.source.{FeatureFlag, Span}
 import effekt.symbols.builtins
 import effekt.util.UByte
@@ -94,6 +93,7 @@ class EffektLexers extends Parsers {
   lazy val `case` = keyword("case")
   lazy val `do` = keyword("do")
   lazy val `resume` = keyword("resume")
+  lazy val `Prompt` = keyword("Prompt")
   lazy val `reset` = keyword("reset")
   lazy val `shift` = keyword("shift")
   lazy val `match` = keyword("match")
@@ -568,11 +568,15 @@ class CoreParsers(names: Names) extends EffektLexers {
     id ~ maybeTypeArgs ^^ { case id ~ targs => ValueType.Data(id, targs) : ValueType.Data }
 
   lazy val blockType: P[BlockType] =
-    ( maybeTypeParams ~ maybeValueTypes ~ many(blockTypeParam) ~ (`=>` ~/> (`(` ~> manySep(valueType, `,`) <~ `)` | primValueType ^^ { tpe => List(tpe) })) ^^ {
+    ( maybeTypeParams ~ maybeValueTypes ~ many(blockTypeParam) ~ (`=>` ~/> arrowResult) ^^ {
       case tparams ~ vparams ~ bcparams ~ result =>
         val (cparams, bparams) = bcparams.unzip
         BlockType.Function(tparams, cparams, vparams, bparams, result)
       }
+    | (`(` ~> manySep(valueType, `,`) <~ `)`) ~ (literal("~>") ~/> arrowResult) ^^ {
+        case result ~ answer => BlockType.Resume(result, answer)
+      }
+    | `Prompt` ~> (`[` ~> resultTypes <~ `]`) ^^ BlockType.Prompt.apply
     | interfaceType
     )
 
@@ -581,6 +585,10 @@ class CoreParsers(names: Names) extends EffektLexers {
     ( `(` ~> manySep(valueType, `,`) <~ `)`
     | success(Nil)
     )
+
+  // after `=>` and `~>`: a parenthesized list of values, or a single primitive value type
+  lazy val arrowResult: P[List[ValueType]] =
+    `(` ~> manySep(valueType, `,`) <~ `)` | primValueType ^^ { tpe => List(tpe) }
 
   // a statement returns either a single value, or a parenthesized list of values
   lazy val resultTypes: P[List[ValueType]] =

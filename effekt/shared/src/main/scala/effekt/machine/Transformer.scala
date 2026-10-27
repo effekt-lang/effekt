@@ -348,9 +348,8 @@ object Transformer {
       case core.Reset(core.BlockLit(Nil, cparams, Nil, List(prompt), body)) =>
         noteParameters(List(prompt))
 
-        val answerType = core.Type.single(stmt.tpe)
-        val variable = Variable(freshName("returned"), transform(answerType))
-        val returnClause = Clause(List(variable), Return(List(variable)))
+        val variables = stmt.tpe.map { tpe => Variable(freshName("returned"), transform(tpe)) }
+        val returnClause = Clause(variables, Return(variables))
 
         transform(body).map { body =>
           Reset(Variable(transform(prompt.id), Type.Prompt()), returnClause, body)
@@ -358,7 +357,7 @@ object Transformer {
 
       case core.Shift(prompt, k, body) =>
 
-        noteParameter(k.id, core.Type.TResume(List(core.Type.TUnit), core.Type.TUnit))
+        noteParameter(k.id, core.BlockType.Resume(List(core.Type.TUnit), List(core.Type.TUnit)))
 
         transform(body).map { body =>
           Shift(Variable(transform(k.id), Type.Stack()), Variable(transform(prompt.id), Type.Prompt()), body)
@@ -373,22 +372,23 @@ object Transformer {
         val prompt = transform(region)
         noteParameters(List(region))
 
-        // Variables allocated in the region live in frames below the reset, so we box the result of the region
-        transform(core.Type.single(body.tpe)) match {
-          case Positive() =>
-            val returned = Variable(freshName("returned"), Positive())
-            transform(body).map { body =>
-              Reset(prompt, Clause(List(returned), Return(List(returned))), body)
-            }
-          case returnType =>
-            val returned = Variable(freshName("returned"), returnType)
-            val boxed = Variable(freshName("boxed"), Positive())
-            val received = Variable(freshName("boxed"), Positive())
-            val unboxed = Variable(freshName("unboxed"), returnType)
-            transform(body).map { body =>
-              PushFrame(Clause(List(received), Coerce(unboxed, received, Return(List(unboxed)))),
+        // Variables allocated in the region live in frames below the reset, so we box the result of the region:
+        // a single value is coerced to a positive one, several values are packed into one
+        val returned = body.tpe.map { tpe => Variable(freshName("returned"), transform(tpe)) }
+        val boxed = Variable(freshName("boxed"), Positive())
+        val received = Variable(freshName("boxed"), Positive())
+        val unboxed = returned.map { r => Variable(freshName("unboxed"), r.tpe) }
+        transform(body).map { body =>
+          returned match {
+            case List(Variable(_, Positive())) =>
+              Reset(prompt, Clause(returned, Return(returned)), body)
+            case List(returned) =>
+              PushFrame(Clause(List(received), Coerce(unboxed.head, received, Return(unboxed))),
                 Reset(prompt, Clause(List(returned), Coerce(boxed, returned, Return(List(boxed)))), body))
-            }
+            case returned =>
+              PushFrame(Clause(List(received), Switch(received, List(0 -> Clause(unboxed, Return(unboxed))), None)),
+                Reset(prompt, Clause(returned, Construct(boxed, 0, returned, Return(List(boxed)))), body))
+          }
         }
 
       case core.Alloc(ref, init, region, body) =>
@@ -400,7 +400,7 @@ object Transformer {
         transform(body).flatMap { body =>
           transform(init).map { value =>
             Shift(temporary, Variable(transform(region), Type.Prompt()),
-              Var(Variable(transform(ref), Type.Reference(value.tpe)), value, Positive(),
+              Var(Variable(transform(ref), Type.Reference(value.tpe)), value, List(Positive()),
                 Resume(temporary, body)))
           }.run(x => Trampoline.Done(x))
         }
@@ -410,10 +410,10 @@ object Transformer {
         // TODO ref should be BlockParam
         noteParameter(ref, core.Type.TState(init.tpe))
 
-        val returnType = transform(core.Type.single(body.tpe))
+        val returnTypes = body.tpe.map { tpe => transform(tpe) }
         transform(body).flatMap { body =>
           transform(init).map { value =>
-            Var(Variable(transform(ref), Type.Reference(value.tpe)), value, returnType, body)
+            Var(Variable(transform(ref), Type.Reference(value.tpe)), value, returnTypes, body)
           }.run(x => Trampoline.Done(x))
         }
 
@@ -611,8 +611,8 @@ object Transformer {
 
   def transform(tpe: core.BlockType)(using DeclarationContext, ErrorReporter): Type = tpe match {
     case core.Type.TState(stateType) => Type.Reference(transform(stateType))
-    case core.Type.TPrompt(answer) => Type.Prompt()
-    case core.Type.TResume(result, answer) => Type.Stack()
+    case core.BlockType.Prompt(answer) => Type.Prompt()
+    case core.BlockType.Resume(result, answer) => Type.Stack()
     case core.Type.TRegion => Type.Prompt()
     case core.BlockType.Function(tparams, cparams, vparams, bparams, result) => Negative()
     case core.BlockType.Interface(symbol, targs) => Negative()

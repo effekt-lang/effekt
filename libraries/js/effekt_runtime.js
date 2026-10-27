@@ -130,7 +130,12 @@ function CAPTURE(body) {
   }
 }
 
-const RETURN = (x, ks) => ks.rest.stack(x, ks.rest)
+// Returns the answer of a reset to the stack below; the single-value case does not allocate.
+function RETURN(x, ks) {
+  if (arguments.length === 2) return ks.rest.stack(x, ks.rest)
+  const rest = arguments[arguments.length - 1].rest
+  return rest.stack(...Array.prototype.slice.call(arguments, 0, -1), rest)
+}
 
 // HANDLE(ks, ks, (p, ks, k) => { STMT })
 function RESET(prog, ks, k) {

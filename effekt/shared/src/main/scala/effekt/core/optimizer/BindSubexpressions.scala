@@ -159,6 +159,8 @@ object BindSubexpressions {
       BlockType.Function(tparams, cparams, vparams.map(transform), bparams.map(transform), result.map(transform))
     case BlockType.Interface(name, targs) =>
       BlockType.Interface(name, targs.map(transform))
+    case BlockType.Prompt(answer) => BlockType.Prompt(answer.map(transform))
+    case BlockType.Resume(result, answer) => BlockType.Resume(result.map(transform), answer.map(transform))
   }
   def transform(captures: Captures)(using Env): Captures = captures.map(transform)
 }

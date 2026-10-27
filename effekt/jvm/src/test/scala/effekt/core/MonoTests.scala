@@ -358,6 +358,9 @@ class MonoTests extends CoreTests {
       s"$tparams$values$blocks => ${result.map(showFlowType).mkString(", ")}"
     case MonoBlockType.Interface(name, Nil) => name.name.name
     case MonoBlockType.Interface(name, targs) => s"${name.name.name}[${targs.map(showFlowType).mkString(", ")}]"
+    case MonoBlockType.Prompt(answer) => s"Prompt[${answer.map(showFlowType).mkString(", ")}]"
+    case MonoBlockType.Resume(result, answer) =>
+      s"(${result.map(showFlowType).mkString(", ")}) ~> (${answer.map(showFlowType).mkString(", ")})"
   }
 
   private def showCaptures(captures: Set[MonoCapture]): String =

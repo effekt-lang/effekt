@@ -239,6 +239,8 @@ class TestRenamer(names: Names = Names(Map.empty), prefix: String = "$", preserv
       }
     case BlockType.Interface(name, targs) =>
       BlockType.Interface(rewrite(name), targs map rewrite)
+    case BlockType.Prompt(answer) => BlockType.Prompt(answer map rewrite)
+    case BlockType.Resume(result, answer) => BlockType.Resume(result map rewrite, answer map rewrite)
   }
 
   override def rewrite(b: BlockType.Interface): BlockType.Interface = b match {

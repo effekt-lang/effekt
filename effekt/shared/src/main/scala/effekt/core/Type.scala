@@ -27,6 +27,8 @@ type Captures = Set[Capture]
  *     │─ [[ BlockType ]]
  *     │  │─ [[ Function ]]
  *     │  │─ [[ Interface ]]
+ *     │  │─ [[ Prompt ]]
+ *     │  │─ [[ Resume ]]
  *     │
  *
  * -------------------------------------------
@@ -48,6 +50,12 @@ enum BlockType extends Type {
   //  tparams   vparams   cparams zip bparams    result
   case Function(tparams: List[Id], cparams: List[Id], vparams: List[ValueType], bparams: List[BlockType], result: List[ValueType])
   case Interface(name: Id, targs: List[ValueType])
+
+  // Prompt[(A₁, …, Aₙ)]: delimits computations with answer A₁ … Aₙ
+  case Prompt(answer: List[ValueType])
+
+  // (R₁, …, Rₙ) ~> (A₁, …, Aₘ): resuming with values of types R₁ … Rₙ computes the answer A₁ … Aₘ
+  case Resume(result: List[ValueType], answer: List[ValueType])
 }
 
 
@@ -77,9 +85,6 @@ object Type {
 
   val TRegion = BlockType.Interface(symbols.builtins.RegionSymbol, Nil)
 
-  val PromptSymbol = Id("Prompt")
-  val ResumeSymbol = Id("Resume")
-
   def equals(tpe1: ValueType, tpe2: ValueType): Boolean = (tpe1, tpe2) match {
     case (ValueType.Var(name1), ValueType.Var(name2)) => name1 == name2
     case (ValueType.Data(name1, args1), ValueType.Data(name2, args2)) => name1 == name2 && all(args1, args2, equals)
@@ -107,30 +112,16 @@ object Type {
 
     case (BlockType.Interface(name1, args1), BlockType.Interface(name2, args2)) =>
       name1 == name2 && all(args1, args2, equals)
+    case (BlockType.Prompt(answer1), BlockType.Prompt(answer2)) =>
+      equals(answer1, answer2)
+    case (BlockType.Resume(result1, answer1), BlockType.Resume(result2, answer2)) =>
+      equals(result1, result2) && equals(answer1, answer2)
     case _ => false
   }
 
   def equals(tpes1: List[ValueType], tpes2: List[ValueType]): Boolean = all(tpes1, tpes2, equals)
 
   def equals(capt1: Captures, capt2: Captures): Boolean = capt1 == capt2
-
-  // Resume[R₁, …, Rₙ, A]: resuming with values of types R₁ … Rₙ computes the answer A
-  object TResume {
-    def apply(result: List[ValueType], answer: ValueType) = BlockType.Interface(ResumeSymbol, result :+ answer)
-    def unapply(tpe: BlockType): Option[(List[ValueType], ValueType)] = tpe match {
-      case BlockType.Interface(ResumeSymbol, targs) if targs.nonEmpty => Some((targs.init, targs.last))
-      case _ => None
-    }
-  }
-
-  object TPrompt {
-    def apply(answer: ValueType): BlockType.Interface = BlockType.Interface(PromptSymbol, List(answer))
-    def unapply(tpe: BlockType): Option[ValueType] =
-      tpe match {
-        case BlockType.Interface(PromptSymbol, List(answer)) => Some(answer)
-        case _ => None
-      }
-  }
 
   object TState {
     def apply(tpe: ValueType) = BlockType.Interface(symbols.builtins.TState.interface, List(tpe))
@@ -174,6 +165,12 @@ object Type {
 
     case BlockType.Interface(sym, targs) =>
       BlockType.Interface(sym, targs map { tpe => substitute(tpe, vsubst, csubst) })
+
+    case BlockType.Prompt(answer) =>
+      BlockType.Prompt(answer map { tpe => substitute(tpe, vsubst, csubst) })
+
+    case BlockType.Resume(result, answer) =>
+      BlockType.Resume(result map { tpe => substitute(tpe, vsubst, csubst) }, answer map { tpe => substitute(tpe, vsubst, csubst) })
   }
 
   def substitute(tpe: ValueType, vsubst: DB[ValueType], csubst: DB[Captures]): ValueType = tpe match {
@@ -452,21 +449,21 @@ object Type {
       // TODO we should check that cparams do not occur in result!
       Typing(result, bodyCapt, bodyCs)
 
-    // shift(p) { k: Resume[from…, to] => body }
-    case Stmt.Shift(BlockVar(id, ptpe@TPrompt(delimiter), annotatedCapt), BlockParam(k, TResume(from, to), capt), body) =>
+    // shift(p) { k: (from) ~> to => body }
+    case Stmt.Shift(BlockVar(id, BlockType.Prompt(delimiter), annotatedCapt), BlockParam(k, BlockType.Resume(from, to), capt), body) =>
       val Typing(bodyTpe, bodyCapt, bodyCs) = body.typing
-      valuesShouldEqual(List(to), bodyTpe)
-      valueShouldEqual(to, delimiter)
+      valuesShouldEqual(to, bodyTpe)
+      valuesShouldEqual(to, delimiter)
       Typing(from, bodyCapt ++ Set(id), bodyCs)
 
     case Stmt.Shift(prompt, BlockParam(k, tpe, capt), body) =>
       typeError(s"Block parameter of shift have wrong type: ${k}: ${tpe}")
 
     // resume(k) { stmt }
-    case Stmt.Resume(BlockVar(id, TResume(result, answer), annotatedCapt), body) =>
+    case Stmt.Resume(BlockVar(id, BlockType.Resume(result, answer), annotatedCapt), body) =>
       val Typing(bodyTpe, bodyCapt, bodyCs) = body.typing
       valuesShouldEqual(result, bodyTpe)
-      Typing(List(answer), annotatedCapt ++ bodyCapt, bodyCs)
+      Typing(answer, annotatedCapt ++ bodyCapt, bodyCs)
 
     case Stmt.Resume(k, body) => typeError(s"Continuation has wrong type: ${k}")
 
@@ -551,13 +548,13 @@ object Type {
     case Stmt.Reset(body) => body.returnType
     case Stmt.Shift(prompt, k, body) =>
       k.tpe match {
-        case TResume(from, _) => from
-        case _ => typeError(s"Shift continuation must have Resume[from…, to] type, got: ${util.show(k.tpe)}")
+        case BlockType.Resume(from, _) => from
+        case _ => typeError(s"Shift continuation must have a resumption type (from) ~> to, got: ${util.show(k.tpe)}")
       }
     case Stmt.Resume(k, body) =>
       k.annotatedTpe match {
-        case TResume(_, answer) => List(answer)
-        case _ => typeError(s"Resume continuation must have Resume[result…, answer] type, got: ${util.show(k.annotatedTpe)}")
+        case BlockType.Resume(_, answer) => answer
+        case _ => typeError(s"Resume continuation must have a resumption type (result) ~> answer, got: ${util.show(k.annotatedTpe)}")
       }
     case Stmt.Hole(annotatedTpe, span) => annotatedTpe
   }

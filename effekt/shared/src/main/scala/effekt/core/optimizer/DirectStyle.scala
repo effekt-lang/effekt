@@ -60,7 +60,7 @@ object DirectStyle extends Tree.Rewrite {
   private def returnType(label: Block.BlockVar): List[ValueType] =
     label.tpe match {
       case BlockType.Function(_, _, _, _, result) => result
-      case BlockType.Interface(_, _) => sys error "Join points need to have a function type"
+      case _ => sys error "Join points need to have a function type"
     }
 
   private def toDirectStyle(stmt: Stmt, label: Block.BlockVar): Stmt = stmt match {

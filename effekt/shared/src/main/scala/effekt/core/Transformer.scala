@@ -399,8 +399,8 @@ object Transformer extends Phase[Typechecked, CoreTransformed] {
       // create a fresh prompt, a variable referring to it, and a parameter binding it
       val promptId   = Id("p")
       val promptCapt = Id("pCapt")
-      val promptTpe = Type.TPrompt(answerType)
-      val promptVar: core.BlockVar = core.BlockVar(promptId, Type.TPrompt(answerType), Set(promptCapt))
+      val promptTpe = core.BlockType.Prompt(List(answerType))
+      val promptVar: core.BlockVar = core.BlockVar(promptId, promptTpe, Set(promptCapt))
       val promptParam: core.BlockParam = core.BlockParam(promptId, promptTpe, Set(promptCapt))
 
       Reset(BlockLit(Nil, List(promptCapt), Nil, List(promptParam),
@@ -555,7 +555,7 @@ object Transformer extends Phase[Typechecked, CoreTransformed] {
                 // This suggests we need to change the representation of Shift and its typing...
                 val resumeCapture = transform(Context.captureOf(resumeSymbol))
                 val resumeId = Id("k")
-                val resumeTpe = core.Type.TResume(List(resultTpe), answerTpe)
+                val resumeTpe = core.BlockType.Resume(List(resultTpe), List(answerTpe))
                 val resumeParam = core.BlockParam(resumeId, resumeTpe, resumeCapture)
                 val resumeVar: core.BlockVar = core.BlockVar(resumeId, resumeTpe, resumeCapture)
 
@@ -598,7 +598,7 @@ object Transformer extends Phase[Typechecked, CoreTransformed] {
                 // (1) bind the continuation (k) itself
                 val resumeCapture = transform(Context.captureOf(resumeSymbol))
                 val resumeId = Id("k")
-                val resumeTpe = core.Type.TResume(List(resultTpe), answerTpe)
+                val resumeTpe = core.BlockType.Resume(List(resultTpe), List(answerTpe))
                 val resumeParam: core.BlockParam = core.BlockParam(resumeId, resumeTpe, resumeCapture)
                 val resumeVar: core.BlockVar = core.BlockVar(resumeId, resumeTpe, resumeCapture)
 

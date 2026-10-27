@@ -306,7 +306,7 @@ enum Stmt extends Tree {
   case Shift(prompt: BlockVar, k: BlockParam, body: Stmt)
 
   // bidirectional resume: runs the given statement in the original context
-  //  Resume(k: Resume[result, answer], stmt: result): answer
+  //  Resume(k: (result) ~> answer, stmt: result): answer
   case Resume(k: BlockVar, body: Stmt)
 
   // Others
@@ -608,6 +608,8 @@ object Tree {
         BlockType.Function(tparams map rewrite, cparams map rewrite, vparams map rewrite, bparams map rewrite, result map rewrite)
       case BlockType.Interface(name, targs) =>
         BlockType.Interface(rewrite(name), targs map rewrite)
+      case BlockType.Prompt(answer) => BlockType.Prompt(answer map rewrite)
+      case BlockType.Resume(result, answer) => BlockType.Resume(result map rewrite, answer map rewrite)
     }
     def rewrite(t: BlockType.Interface): BlockType.Interface = t match {
       case BlockType.Interface(name, targs) => BlockType.Interface(rewrite(name), targs map rewrite)
@@ -866,6 +868,8 @@ object Tree {
       case BlockType.Function(tparams, cparams, vparams, bparams, result) =>
         BlockType.Function(tparams.map(rewrite), cparams.map(rewrite), vparams.map(rewrite), bparams.map(rewrite), result.map(rewrite))
       case interface: BlockType.Interface => rewrite(interface)
+      case BlockType.Prompt(answer) => BlockType.Prompt(answer.map(rewrite))
+      case BlockType.Resume(result, answer) => BlockType.Resume(result.map(rewrite), answer.map(rewrite))
     }
     def rewrite(tpe: BlockType.Interface): BlockType.Interface = tpe match {
       case BlockType.Interface(name, targs) => BlockType.Interface(rewrite(name), targs.map(rewrite))
@@ -1010,6 +1014,8 @@ object Tree {
         BlockType.Function(tparams map rewrite, cparams map rewrite, vparams map rewrite, bparams map rewrite, result map rewrite)
       case BlockType.Interface(name, targs) =>
         BlockType.Interface(rewrite(name), targs map rewrite)
+      case BlockType.Prompt(answer) => BlockType.Prompt(answer map rewrite)
+      case BlockType.Resume(result, answer) => BlockType.Resume(result map rewrite, answer map rewrite)
     }
     def rewrite(t: BlockType.Interface)(using Ctx): BlockType.Interface = t match {
       case BlockType.Interface(name, targs) => BlockType.Interface(rewrite(name), targs map rewrite)

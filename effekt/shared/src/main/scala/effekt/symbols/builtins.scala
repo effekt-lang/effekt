@@ -3,7 +3,6 @@ package symbols
 
 import effekt.source.{Many, ModuleDecl, NoSource, Span}
 import effekt.context.Context
-import effekt.core.Type.{PromptSymbol, ResumeSymbol}
 import effekt.symbols.ErrorMessageInterpolator
 import effekt.util.messages.ErrorMessageReifier
 import kiama.util.StringSource
@@ -105,8 +104,6 @@ object builtins {
   lazy val coreBuiltins: Map[String, symbols.Symbol] = {
     symbols.builtins.rootTypes
       ++ symbols.builtins.rootCaptures
-      + ("Resume" -> ResumeSymbol)
-      + ("Prompt" -> PromptSymbol)
       + ("Ref" -> effekt.symbols.builtins.TState.interface)
   }
 

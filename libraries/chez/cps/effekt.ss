@@ -107,11 +107,19 @@
 (define (top-level-k x _) x)
 (define top-level-ks (make-meta-cont top-level-k (gensym "toplevel") (create-store) '()))
 
-; a, MetaCont -> #
-(define (return x ks)
-    (let* ([new-ks (meta-cont-rest ks)]
-           [k (meta-cont-cont new-ks)])
-    (k x new-ks)))
+; a ..., MetaCont -> #
+; The single-value case is kept separate, since it does not allocate.
+(define return
+  (case-lambda
+    [(x ks)
+      (let* ([new-ks (meta-cont-rest ks)]
+             [k (meta-cont-cont new-ks)])
+        (k x new-ks))]
+    [xs+ks
+      (let* ([n (- (length xs+ks) 1)]
+             [new-ks (meta-cont-rest (list-ref xs+ks n))]
+             [k (meta-cont-cont new-ks)])
+        (apply k (append (list-head xs+ks n) (list new-ks))))]))
 
 ; Program a b = a, Cont b, MetaCont -> #
 

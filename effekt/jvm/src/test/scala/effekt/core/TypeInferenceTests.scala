@@ -38,10 +38,10 @@ class TypeInferenceTests extends CoreTests {
   test("shift and resume with multiple values") {
     val p = Id("p")
     val k = Id("k")
-    val prompt: Block.BlockVar = Block.BlockVar(p, TPrompt(TInt), Set(p))
-    val resumption = TResume(List(TInt, TBoolean), TInt)
+    val prompt: Block.BlockVar = Block.BlockVar(p, BlockType.Prompt(List(TInt)), Set(p))
+    val resumption = BlockType.Resume(List(TInt, TBoolean), List(TInt))
 
-    // shift(p) { {k: Resume[Int, Bool, Int]} => resume(k) { return 1, true } }
+    // shift(p) { {k: (Int, Bool) ~> Int} => resume(k) { return 1, true } }
     val resumed = Stmt.Return(List(Literal(1, TInt), Literal(true, TBoolean)))
     val resume = Stmt.Resume(Block.BlockVar(k, resumption, Set(k)), resumed)
     val shift = Stmt.Shift(prompt, BlockParam(k, resumption, Set(k)), resume)
@@ -53,6 +53,32 @@ class TypeInferenceTests extends CoreTests {
     // resuming with the wrong number of values
     intercept[TypeError] {
       typecheck(Stmt.Resume(Block.BlockVar(k, resumption, Set(k)), Stmt.Return(List(Literal(1, TInt)))))
+    }
+  }
+
+  test("reset and shift with multiple answers") {
+    val p = Id("p")
+    val k = Id("k")
+    val answer = List(TInt, TBoolean)
+    val promptParam = BlockParam(p, BlockType.Prompt(answer), Set(p))
+    val prompt: Block.BlockVar = Block.BlockVar(p, BlockType.Prompt(answer), Set(p))
+    val resumption = BlockType.Resume(List(TInt), answer)
+
+    // reset { {p: Prompt[(Int, Bool)]} => val x = shift(p) { {k} => resume(k) { return 1 } }; return x, true }
+    val shift = Stmt.Shift(prompt, BlockParam(k, resumption, Set(k)),
+      Stmt.Resume(Block.BlockVar(k, resumption, Set(k)), Stmt.Return(List(Literal(1, TInt)))))
+    val body = Stmt.Val(List(x), shift, Stmt.Return(List(ValueVar(x, TInt), Literal(true, TBoolean))))
+    val reset = Stmt.Reset(Block.BlockLit(Nil, List(p), Nil, List(promptParam), body))
+
+    assertEquals(shift.tpe, List(TInt))
+    assertEquals(reset.tpe, answer)
+    assertEquals(typecheck(reset).tpe, answer)
+
+    // the shift body must compute the answer of the prompt
+    intercept[TypeError] {
+      val wrong = BlockType.Resume(List(TInt), List(TInt))
+      typecheck(Stmt.Shift(prompt, BlockParam(k, wrong, Set(k)),
+        Stmt.Resume(Block.BlockVar(k, wrong, Set(k)), Stmt.Return(List(Literal(1, TInt))))))
     }
   }
 
