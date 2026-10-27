@@ -349,12 +349,16 @@ object ArityRaising extends Phase[CoreTransformed, CoreTransformed] {
       case Stmt.If(cond, thn, els) => expr(cond).run { cs => Stmt.If(single(cs), stmt(thn), stmt(els)) }
 
       // the scrutinee is already open: bind its components to the clause parameters
-      case Stmt.Match(scrutinee, _, clauses, default) if isFlat(scrutinee.tpe) => expr(scrutinee).run { cs =>
+      case Stmt.Match(scrutinee, tpes, clauses, default) if isFlat(scrutinee.tpe) => expr(scrutinee).run { cs =>
         clauses match {
           case List((_, BlockLit(_, _, vparams, _, body))) =>
             val params = vparams.map(p => binders(p.id, p.tpe))
             lets(params.flatten, cs, stmt(body)(using env.bind(vparams.map(_.id), params)))
-          case _ => stmt(default.getOrElse { INTERNAL_ERROR("Match on a record without clauses") })
+          case _ => default match {
+            case Some(d) => stmt(d)
+            // an absurd match (no clauses, no default) keeps its scrutinee
+            case None => Stmt.Match(pack(scrutinee.tpe, cs), tpes.flatMap(repr), Nil, None)
+          }
         }
       }
 
