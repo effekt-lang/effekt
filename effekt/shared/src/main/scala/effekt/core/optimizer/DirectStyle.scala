@@ -13,22 +13,22 @@ object DirectStyle extends Tree.Rewrite {
     // def l(x) = stmt2;
     // ...
     // l(42)
-    case Val(id, binding, body) =>
+    case Val(ids, binding, body) =>
       val rewrittenBinding = rewrite(binding)
       val rewrittenBody = rewrite(body)
 
       if canBeDirect(rewrittenBinding) then
         val l = Id("l")
-        val joinpoint = BlockLit(Nil, Nil, ValueParam(id, rewrittenBinding.tpe) :: Nil, Nil, rewrittenBody)
+        val joinpoint = BlockLit(Nil, Nil, (ids zip rewrittenBinding.tpe).map(ValueParam.apply), Nil, rewrittenBody)
         Def(l, joinpoint, toDirectStyle(rewrittenBinding, BlockVar(l, joinpoint.tpe, joinpoint.capt)))
       else
-        Val(id, rewrittenBinding, rewrittenBody)
+        Val(ids, rewrittenBinding, rewrittenBody)
 
     case other => super.rewrite(other)
   }
 
   private def canBeDirect(s: Stmt): Boolean = s match {
-    case Return(expr) => true
+    case Return(exprs) => true
     case Hole(_, _) => true
 
     // non-tail calls
@@ -45,7 +45,7 @@ object DirectStyle extends Tree.Rewrite {
     case Def(id, block, body) => canBeDirect(body)
     case Let(id, binding, body) => canBeDirect(body)
     case ImpureApp(id, callee, targs, vargs, bargs, body) => canBeDirect(body)
-    case Val(id, binding, body) => canBeDirect(body)
+    case Val(ids, binding, body) => canBeDirect(body)
     case If(cond, thn, els) => canBeDirect(thn) && canBeDirect(els)
     case Match(scrutinee, tpe, clauses, default) =>
       clauses.forall { case (id, bl) => canBeDirect(bl.body) } && default.forall(canBeDirect)
@@ -57,14 +57,14 @@ object DirectStyle extends Tree.Rewrite {
   }
 
   // Some rewrites change the answer type (match & hole) to the result of the join point, which is called in return position.
-  private def returnType(label: Block.BlockVar): ValueType =
+  private def returnType(label: Block.BlockVar): List[ValueType] =
     label.tpe match {
       case BlockType.Function(_, _, _, _, result) => result
-      case BlockType.Interface(_, _) => sys error "Join points need to have a function type"
+      case _ => sys error "Join points need to have a function type"
     }
 
   private def toDirectStyle(stmt: Stmt, label: Block.BlockVar): Stmt = stmt match {
-    case Return(expr) => App(label, Nil, List(expr), Nil)
+    case Return(exprs) => App(label, Nil, exprs, Nil)
 
     // non-tail calls
     case App(_, _, _, _) => stmt
@@ -86,8 +86,8 @@ object DirectStyle extends Tree.Rewrite {
     case ImpureApp(id, callee, targs, vargs, bargs, body) =>
       ImpureApp(id, callee, targs, vargs, bargs, toDirectStyle(body, label))
 
-    case Val(id, binding, body) =>
-      Val(id, binding, toDirectStyle(body, label))
+    case Val(ids, binding, body) =>
+      Val(ids, binding, toDirectStyle(body, label))
 
     case If(cond, thn, els) =>
       If(cond, toDirectStyle(thn, label), toDirectStyle(els, label))

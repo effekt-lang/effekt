@@ -143,7 +143,7 @@ object PrettyPrinter extends ParenPrettyPrinter {
       toDoc(ref) <+> ":=" <+> toDoc(value) <> ";" <> line <>
         toDoc(body)
 
-    case Stmt.Reset(prog, ks, k) =>
+    case Stmt.Reset(prog, arity, ks, k) =>
       "reset" <+> toDoc(prog) <+> "@" <+> toDoc(ks) <> "," <+> toDoc(k)
 
     case Stmt.Shift(prompt, body, ks, k) =>

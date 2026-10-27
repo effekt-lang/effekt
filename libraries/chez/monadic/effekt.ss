@@ -1,13 +1,15 @@
 (define-syntax delayed
   (syntax-rules ()
     [(_ e)
-      (lambda (mk) (underflow e mk))]))
+      (lambda (mk) (underflow mk e))]))
 
 ; Control = MetaCont -> Step
 
-; a -> Control a
-(define (pure v)
-  (lambda (mk) (underflow v mk)))
+; a ... -> Control a ...
+(define pure
+  (case-lambda
+    [(v) (lambda (mk) (underflow mk v))]
+    [vs (lambda (mk) (apply underflow mk vs))]))
 
 ; Step a =  (a | Control x), MetaCont x a
 
@@ -18,16 +20,27 @@
         (lambda () (c mk))
         trampoline)))
 
-; a, MetaCont -> Step
-(define (underflow v mk)
-  (if (null? mk) (values v mk)
+; MetaCont -> (Frame | #f), MetaCont
+; Pops the topmost frame, or returns #f if the meta continuation is exhausted.
+(define (pop-frame mk)
+  (if (null? mk) (values #f mk)
     (let* ([stack (car mk)]
            [rest  (cdr mk)]
-           [frames (Stack-frames stack)]
-           [arena (Stack-arena stack)]
-           [prompt (Stack-prompt stack)])
-      (if (null? frames) (underflow v rest)
-          (values ((car frames) v) (cons (make-Stack (cdr frames) arena prompt) rest))))))
+           [frames (Stack-frames stack)])
+      (if (null? frames) (pop-frame rest)
+          (values (car frames) (cons (make-Stack (cdr frames) (Stack-arena stack) (Stack-prompt stack)) rest))))))
+
+; MetaCont, a ... -> Step
+; The single-value case is kept separate, since it does not allocate.
+(define underflow
+  (case-lambda
+    [(mk v)
+      (let-values ([(frame rest) (pop-frame mk)])
+        (if frame (values (frame v) rest) (values v rest)))]
+    [(mk . vs)
+      (let-values ([(frame rest) (pop-frame mk)])
+        (if frame (values (apply frame vs) rest)
+            (error 'underflow "cannot return ~s values to the toplevel" (length vs))))]))
 
 ; Control -> Control
 (define (reset c)
@@ -39,7 +52,9 @@
 (define (shift p f)
   (lambda (mk)
     (let-values ([(k mkrest) (splitSeq p mk)])
-      (let ([cont (lambda (a) (lambda (mk) (underflow a (appendSeq k mk))))])
+      (let ([cont (case-lambda
+                    [(a) (lambda (mk) (underflow (appendSeq k mk) a))]
+                    [as (lambda (mk) (apply underflow (appendSeq k mk) as))])])
       (values (f cont) mkrest)))))
 
 ; Frame, MetaCont -> MetaCont

@@ -20,11 +20,11 @@ object TransformerMonadic extends Transformer {
   def run(expr: chez.Expr): chez.Expr =
     Builtin("run", expr)
 
-  def pure(expr: chez.Expr): chez.Expr =
-    Builtin("pure", expr)
+  def pure(exprs: List[chez.Expr]): chez.Expr =
+    Builtin("pure", exprs*)
 
-  def bind(binding: chez.Expr, param: ChezName, body: chez.Block): chez.Expr =
-    Builtin("then", binding, chez.Lambda(List(param), body))
+  def bind(binding: chez.Expr, params: List[ChezName], body: chez.Block): chez.Expr =
+    Builtin("then", binding, chez.Lambda(params, body))
 
   def runMain(main: ChezName): chez.Expr =
     chez.Builtin("run", chez.Call(main))
@@ -34,10 +34,15 @@ object TransformerCallCC extends Transformer {
 
   def run(expr: chez.Expr): chez.Expr = expr
 
-  def pure(expr: chez.Expr): chez.Expr = expr
+  def pure(exprs: List[chez.Expr]): chez.Expr = exprs match {
+    case List(expr) => expr
+    case exprs => Builtin("values", exprs*)
+  }
 
-  def bind(binding: chez.Expr, param: ChezName, body: chez.Block): chez.Expr =
-    chez.Let(List(Binding(param, binding)), body)
+  def bind(binding: chez.Expr, params: List[ChezName], body: chez.Block): chez.Expr = params match {
+    case List(param) => chez.Let(List(Binding(param, binding)), body)
+    case params => Builtin("call-with-values", chez.Lambda(Nil, binding), chez.Lambda(params, body))
+  }
 
   def runMain(main: ChezName): chez.Expr =
     chez.Builtin("run", chez.Variable(main))
@@ -48,8 +53,8 @@ trait Transformer {
   val escapeSeqs: Map[Char, String] = Map('\'' -> raw"'", '\"' -> raw"\"", '\\' -> raw"\\", '\n' -> raw"\n", '\t' -> raw"\t", '\r' -> raw"\r")
 
   def run(expr: chez.Expr): chez.Expr
-  def pure(expr: chez.Expr): chez.Expr
-  def bind(binding: chez.Expr, param: ChezName, body: chez.Block): chez.Expr
+  def pure(exprs: List[chez.Expr]): chez.Expr
+  def bind(binding: chez.Expr, params: List[ChezName], body: chez.Block): chez.Expr
 
   def runMain(main: ChezName): chez.Expr
 
@@ -58,7 +63,7 @@ trait Transformer {
 
   def compilationUnit(mainSymbol: Symbol, mod: Module, core: ModuleDecl)(using ErrorReporter): chez.Block = {
     val definitions = toChez(core)
-    chez.Block(generateStateAccessors(pure) ++ definitions, Nil, runMain(nameRef(mainSymbol)))
+    chez.Block(generateStateAccessors ++ definitions, Nil, runMain(nameRef(mainSymbol)))
   }
 
   def toChez(p: ValueParam): ChezName = nameDef(p.id)
@@ -73,12 +78,12 @@ trait Transformer {
   }
 
   def toChezExpr(stmt: Stmt): chez.Expr = stmt match {
-    case Return(e) => pure(toChez(e))
+    case Return(exprs) => pure(exprs.map(toChez))
     case App(b, targs, vargs, bargs) => chez.Call(toChez(b), vargs.map(toChez) ++ bargs.map(toChez))
     case Invoke(b, method, methodTpe, targs, vargs, bargs) =>
       chez.Call(chez.Call(chez.Variable(nameRef(method)), List(toChez(b))), vargs.map(toChez) ++ bargs.map(toChez))
     case If(cond, thn, els) => chez.If(toChez(cond), toChezExpr(thn), toChezExpr(els))
-    case Val(id, binding, body) => bind(toChezExpr(binding), nameDef(id), toChez(body))
+    case Val(ids, binding, body) => bind(toChezExpr(binding), ids.map(nameDef), toChez(body))
     // empty matches are translated to a hole in chez scheme
     case Match(scrutinee, tpe, Nil, None) => chez.Builtin("unreachable")
     case Match(scrutinee, tpe, clauses, default) =>
@@ -104,7 +109,7 @@ trait Transformer {
     case Shift(p, k, body) => chez.Shift(nameRef(p.id), chez.Lambda(toChez(k) :: Nil, toChez(body)))
 
     // currently bidirectional handlers are not supported
-    case Resume(k, Return(expr)) => chez.Call(toChez(k), List(toChez(expr)))
+    case Resume(k, Return(exprs)) => chez.Call(toChez(k), exprs.map(toChez))
 
     case Resume(k, other) => sys error s"Not supported yet: ${util.show(stmt)}"
 
@@ -244,7 +249,7 @@ trait Transformer {
   //
   // (define (setter ref)
   //  (lambda (v) (pure (set-box! ref v))))
-  def generateStateAccessors(pure: chez.Expr => chez.Expr): List[chez.Function] = {
+  def generateStateAccessors: List[chez.Function] = {
     val ref = ChezName("ref")
     val value = ChezName("value")
 

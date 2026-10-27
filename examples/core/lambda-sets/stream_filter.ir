@@ -22,8 +22,8 @@ def unstream(){producer: (){emit: Emit} => Unit} = {
   reset { (){prompt: Prompt[ListInt]} =>
     def emit = new Emit {
       def emit(x: Int) = {
-        shift (prompt: Prompt[ListInt] @ {prompt}) {{continuation: Resume[Unit, ListInt]} =>
-          val tail = resume (continuation: Resume[Unit, ListInt] @ {continuation}) { return () };
+        shift (prompt: Prompt[ListInt] @ {prompt}) {{continuation: (Unit) ~> ListInt} =>
+          val tail = resume (continuation: (Unit) ~> ListInt @ {continuation}) { return () };
           return make ListInt Cons(x: Int, tail: ListInt)
         }
       }
@@ -112,8 +112,8 @@ def unstream_39(){producer_40 @ producer_40: (){emit_33: Emit_32} => Unit} = {
   reset { (){prompt_41 @ prompt_41: Prompt[ListInt_27]} =>
     def emit_33 = new Emit_32 {
       def emit_33(x_36: Int) = {
-        shift (prompt_41: Prompt[ListInt_27] @ {prompt_41}) {{continuation_42: Resume[Unit, ListInt_27]} =>
-          val tail_31 = resume (continuation_42: Resume[Unit, ListInt_27] @ {continuation_42}) {
+        shift (prompt_41: Prompt[ListInt_27] @ {prompt_41}) {{continuation_42: (Unit) ~> ListInt_27} =>
+          val tail_31 = resume (continuation_42: (Unit) ~> ListInt_27 @ {continuation_42}) {
             return ()
           };
           return make ListInt_27 Cons_29(x_36: Int, tail_31: ListInt_27)
@@ -183,8 +183,8 @@ def unstream_lambda1_even_68(producer_environment0_76: ListInt_27) = {
   reset { (){prompt_78 @ prompt_78: Prompt[ListInt_27]} =>
     def emit_79 = new Emit_32 {
       def emit_33(x_80: Int) = {
-        shift (prompt_78: Prompt[ListInt_27] @ {prompt_78}) {{continuation_81: Resume[Unit, ListInt_27]} =>
-          val tail_82 = resume (continuation_81: Resume[Unit, ListInt_27] @ {continuation_81}) {
+        shift (prompt_78: Prompt[ListInt_27] @ {prompt_78}) {{continuation_81: (Unit) ~> ListInt_27} =>
+          val tail_82 = resume (continuation_81: (Unit) ~> ListInt_27 @ {continuation_81}) {
             return ()
           };
           return make ListInt_27 Cons_29(x_80: Int, tail_82: ListInt_27)

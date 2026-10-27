@@ -60,9 +60,9 @@ class Renamer(names: Names = Names(Map.empty), prefix: String = "") extends core
       val resolvedBargs = bargs map rewrite
       withBinding(id) { core.ImpureApp(rewrite(id), resolvedCallee, resolvedTargs, resolvedVargs, resolvedBargs, rewrite(body)) }
 
-    case core.Val(id, binding, body) =>
+    case core.Val(ids, binding, body) =>
       val resolvedBinding = rewrite(binding)
-      withBinding(id) { core.Val(rewrite(id), resolvedBinding, rewrite(body)) }
+      withBindings(ids) { core.Val(ids map rewrite, resolvedBinding, rewrite(body)) }
 
     case core.Alloc(id, init, reg, body) =>
       val resolvedInit = rewrite(init)

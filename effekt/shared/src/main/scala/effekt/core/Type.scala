@@ -27,6 +27,8 @@ type Captures = Set[Capture]
  *     │─ [[ BlockType ]]
  *     │  │─ [[ Function ]]
  *     │  │─ [[ Interface ]]
+ *     │  │─ [[ Prompt ]]
+ *     │  │─ [[ Resume ]]
  *     │
  *
  * -------------------------------------------
@@ -43,11 +45,17 @@ enum ValueType extends Type {
 
 enum BlockType extends Type {
 
-  // [A, B, C] (X, Y, Z)   {  f  :   S }    =>    T
-  //  ^^^^^^^   ^^^^^^^     ^^^^^^^^^^^          ^^^
-  //  tparams   vparams   cparams zip bparams   result
-  case Function(tparams: List[Id], cparams: List[Id], vparams: List[ValueType], bparams: List[BlockType], result: ValueType)
+  // [A, B, C] (X, Y, Z)   {  f  :   S }    =>   (T, U)
+  //  ^^^^^^^   ^^^^^^^     ^^^^^^^^^^^          ^^^^^^
+  //  tparams   vparams   cparams zip bparams    result
+  case Function(tparams: List[Id], cparams: List[Id], vparams: List[ValueType], bparams: List[BlockType], result: List[ValueType])
   case Interface(name: Id, targs: List[ValueType])
+
+  // Prompt[(A₁, …, Aₙ)]: delimits computations with answer A₁ … Aₙ
+  case Prompt(answer: List[ValueType])
+
+  // (R₁, …, Rₙ) ~> (A₁, …, Aₘ): resuming with values of types R₁ … Rₙ computes the answer A₁ … Aₘ
+  case Resume(result: List[ValueType], answer: List[ValueType])
 }
 
 
@@ -77,9 +85,6 @@ object Type {
 
   val TRegion = BlockType.Interface(symbols.builtins.RegionSymbol, Nil)
 
-  val PromptSymbol = Id("Prompt")
-  val ResumeSymbol = Id("Resume")
-
   def equals(tpe1: ValueType, tpe2: ValueType): Boolean = (tpe1, tpe2) match {
     case (ValueType.Var(name1), ValueType.Var(name2)) => name1 == name2
     case (ValueType.Data(name1, args1), ValueType.Data(name2, args2)) => name1 == name2 && all(args1, args2, equals)
@@ -102,32 +107,21 @@ object Type {
       def typeParamArity = tparams1.size == tparams2.size
       def equalVparams = all(vparams1, vparams2.map(t => substitute(t, tparamSubst, cparamSubst)), equals)
       def equalBparams = all(bparams1, bparams2.map(t => substitute(t, tparamSubst, cparamSubst)), equals)
-      def equalResult = equals(result1, substitute(result2, tparamSubst, cparamSubst))
+      def equalResult = all(result1, result2.map(t => substitute(t, tparamSubst, cparamSubst)), equals)
       typeParamArity && equalVparams && equalBparams && equalResult
 
     case (BlockType.Interface(name1, args1), BlockType.Interface(name2, args2)) =>
       name1 == name2 && all(args1, args2, equals)
+    case (BlockType.Prompt(answer1), BlockType.Prompt(answer2)) =>
+      equals(answer1, answer2)
+    case (BlockType.Resume(result1, answer1), BlockType.Resume(result2, answer2)) =>
+      equals(result1, result2) && equals(answer1, answer2)
     case _ => false
   }
 
+  def equals(tpes1: List[ValueType], tpes2: List[ValueType]): Boolean = all(tpes1, tpes2, equals)
+
   def equals(capt1: Captures, capt2: Captures): Boolean = capt1 == capt2
-
-  object TResume {
-    def apply(result: ValueType, answer: ValueType) = BlockType.Interface(ResumeSymbol, List(result, answer))
-    def unapply(tpe: BlockType): Option[(ValueType, ValueType)] = tpe match {
-      case BlockType.Interface(ResumeSymbol, List(result, answer)) => Some((result, answer))
-      case _ => None
-    }
-  }
-
-  object TPrompt {
-    def apply(answer: ValueType): BlockType.Interface = BlockType.Interface(PromptSymbol, List(answer))
-    def unapply(tpe: BlockType): Option[ValueType] =
-      tpe match {
-        case BlockType.Interface(PromptSymbol, List(answer)) => Some(answer)
-        case _ => None
-      }
-  }
 
   object TState {
     def apply(tpe: ValueType) = BlockType.Interface(symbols.builtins.TState.interface, List(tpe))
@@ -148,7 +142,7 @@ object Type {
       BlockType.Function(Nil, Nil,
         vparams.map { tpe => substitute(tpe, tsubst, DB.empty) },
         bparams.map { tpe => substitute(tpe, tsubst, DB.empty) },
-        substitute(result, tsubst, csubst))
+        result.map { tpe => substitute(tpe, tsubst, csubst) })
   }
 
   def substitute(capt: Captures, csubst: DB[Captures]): Captures =
@@ -167,10 +161,16 @@ object Type {
       BlockType.Function(tparams, cparams,
         vparams.map { tpe => substitute(tpe, vsubstLocal, csubst) }, // technically in source, cparams are not bound in value arguments
         bparams.map { tpe => substitute(tpe, vsubstLocal, csubstLocal) },
-        substitute(result, vsubstLocal, csubstLocal))
+        result.map { tpe => substitute(tpe, vsubstLocal, csubstLocal) })
 
     case BlockType.Interface(sym, targs) =>
       BlockType.Interface(sym, targs map { tpe => substitute(tpe, vsubst, csubst) })
+
+    case BlockType.Prompt(answer) =>
+      BlockType.Prompt(answer map { tpe => substitute(tpe, vsubst, csubst) })
+
+    case BlockType.Resume(result, answer) =>
+      BlockType.Resume(result map { tpe => substitute(tpe, vsubst, csubst) }, answer map { tpe => substitute(tpe, vsubst, csubst) })
   }
 
   def substitute(tpe: ValueType, vsubst: DB[ValueType], csubst: DB[Captures]): ValueType = tpe match {
@@ -183,27 +183,27 @@ object Type {
       ValueType.Boxed(substitute(tpe, vsubst, csubst), substitute(capt, csubst))
   }
 
+  /**
+   * Expressions (and thus FFI calls) always produce exactly one value.
+   */
+  def single(tpes: List[ValueType]): ValueType = tpes match {
+    case List(tpe) => tpe
+    case other => typeError(s"Expected exactly one value, but got: ${other.map(util.show).mkString(", ")}")
+  }
+
   def bindingType(stmt: Stmt.ImpureApp): ValueType = stmt match {
     case Stmt.ImpureApp(id, callee, targs, vargs, bargs, body) =>
-      Type.instantiate(callee.tpe.asInstanceOf[core.BlockType.Function], targs, bargs.map(_.capt)).result
+      single(Type.instantiate(callee.tpe.asInstanceOf[core.BlockType.Function], targs, bargs.map(_.capt)).result)
   }
 
   def bindingType(bind: Binding.ImpureApp): ValueType = bind match {
     case Binding.ImpureApp(id, callee, targs, vargs, bargs) =>
-      Type.instantiate(callee.tpe.asInstanceOf[core.BlockType.Function], targs, bargs.map(_.capt)).result
+      single(Type.instantiate(callee.tpe.asInstanceOf[core.BlockType.Function], targs, bargs.map(_.capt)).result)
   }
 
   extension (block: Block) {
-    def returnType: ValueType = block.functionType.result
+    def returnType: List[ValueType] = block.functionType.result
     def functionType: BlockType.Function = block.tpe.asInstanceOf
-    def answerType: ValueType = block.tpe match {
-      case BlockType.Interface(name, List(result, answer)) => answer
-      case _ => ???
-    }
-    def resultType: ValueType = block.tpe match {
-      case BlockType.Interface(name, List(result, answer)) => result
-      case _ => ???
-    }
   }
 
 
@@ -271,10 +271,10 @@ object Type {
       val existentialParams = ctor.tparams
       // [T, S](S, S => S at {}, S => T at {}) => Coalg[T]
       val sig: BlockType.Function = BlockType.Function(universalParams ++ existentialParams, Nil, ctor.fields.map(_.tpe), Nil,
-        ValueType.Data(result.name, universalParams.map(ValueType.Var.apply)))
+        List(ValueType.Data(result.name, universalParams.map(ValueType.Var.apply))))
       // (Int, Int => Int at {}, Int => Bool at {}) => Coalg[Bool]
       val BlockType.Function(_, _, paramTypes, _, retType) = instantiate(sig, result.targs ++ existentialTypeArgs, Nil)
-      valueShouldEqual(result, retType)
+      valuesShouldEqual(List(result), retType)
       valuesShouldEqual(paramTypes, arguments)
   }
 
@@ -311,7 +311,7 @@ object Type {
             val BlockType.Function(_, _, vparams, bparams, result) = instantiate(sig, universalArgs ++ implTparams.map(ValueType.Var.apply),
               implCparams.map(id => Set(id)))
 
-            valueShouldEqual(result, implRet)
+            valuesShouldEqual(result, implRet)
             valuesShouldEqual(vparams, implVparams)
             blocksShouldEqual(bparams, implBparams)
 
@@ -329,7 +329,7 @@ object Type {
        val Typing(argTypes, _, cs) = all(vargs, e => e.typing)
        if bparams.nonEmpty then typeError("Pure apps cannot have block params")
        valuesShouldEqual(vparams, argTypes)
-       Typing(result, Set.empty, cs)
+       Typing(single(result), Set.empty, cs)
 
     case make @ Expr.Make(data, tag, targs, vargs) =>
       val Typing(argTypes, argCapt, argsCs) = all(vargs, arg => arg.typing)
@@ -378,7 +378,7 @@ object Type {
         bodyCs)
   }
 
-  inline def typecheck(stmt: Stmt): Typing[ValueType] = checking(stmt) {
+  inline def typecheck(stmt: Stmt): Typing[List[ValueType]] = checking(stmt) {
     case Stmt.Def(id, block, body) =>
       val Typing(bodyTpe, bodyCapt, bodyCs) = body.typing
       val Typing(blockTpe, blockCapt, blockCs) = block.typing
@@ -389,11 +389,12 @@ object Type {
       val Typing(bindTpe, bindCapt, bindCs) = binding.typing
       Typing(bodyTpe, bodyCapt ++ bindCapt, bodyCs ++ bindCs)
 
-    case Stmt.Return(expr) => expr.typing
+    case Stmt.Return(exprs) => all(exprs, expr => expr.typing)
 
-    case Stmt.Val(id, binding, body) =>
+    case Stmt.Val(ids, binding, body) =>
       val Typing(bodyTpe, bodyCapt, bodyCs) = body.typing
       val Typing(bindTpe, bindCapt, bindCs) = binding.typing
+      if ids.size != bindTpe.size then typeError(s"Binding ${ids.size} values, but statement returns ${bindTpe.size}")
       Typing(bodyTpe, bodyCapt ++ bindCapt, bodyCs ++ bindCs)
 
     case Stmt.If(cond, thn, els) =>
@@ -401,7 +402,7 @@ object Type {
       val Typing(thnTpe, thnCapt, thnCs) = thn.typing
       val Typing(elsTpe, elsCapt, elsCs) = els.typing
       valueShouldEqual(condTpe, TBoolean)
-      valueShouldEqual(thnTpe, elsTpe)
+      valuesShouldEqual(thnTpe, elsTpe)
       Typing(thnTpe, condCapt ++ thnCapt ++ elsCapt, condCs ++ thnCs ++ elsCs)
 
     case Stmt.Match(sc, annotatedTpe, clauses, default) =>
@@ -412,8 +413,8 @@ object Type {
         Typing(result, armCapt, armCs :+ MatchClause(id, sc.tpe.asInstanceOf[ValueType.Data], tparams.map(id => ValueType.Var(id)), vparams))
       }
 
-      def join(typings: List[Typing[ValueType]], annotated: ValueType): Typing[ValueType] =
-        fold(typings, annotated) { (tpe1, tpe2) => valueShouldEqual(tpe1, tpe2); tpe1 }
+      def join(typings: List[Typing[List[ValueType]]], annotated: List[ValueType]): Typing[List[ValueType]] =
+        fold(typings, annotated) { (tpe1, tpe2) => valuesShouldEqual(tpe1, tpe2); tpe1 }
 
       val Typing(tpe, capt, cs) = join(clauseTypings ++ default.toList.map { stmt => stmt.typing }, annotatedTpe)
       Typing(tpe, scCapt ++ capt, scCs ++ cs)
@@ -448,20 +449,20 @@ object Type {
       // TODO we should check that cparams do not occur in result!
       Typing(result, bodyCapt, bodyCs)
 
-    // shift(p) { k: Resume[from, to] => body }
-    case Stmt.Shift(BlockVar(id, ptpe@TPrompt(delimiter), annotatedCapt), BlockParam(k, tpe@BlockType.Interface(ResumeSymbol, List(from, to)), capt), body) =>
+    // shift(p) { k: (from) ~> to => body }
+    case Stmt.Shift(BlockVar(id, BlockType.Prompt(delimiter), annotatedCapt), BlockParam(k, BlockType.Resume(from, to), capt), body) =>
       val Typing(bodyTpe, bodyCapt, bodyCs) = body.typing
-      valueShouldEqual(to, bodyTpe)
-      valueShouldEqual(to, delimiter)
+      valuesShouldEqual(to, bodyTpe)
+      valuesShouldEqual(to, delimiter)
       Typing(from, bodyCapt ++ Set(id), bodyCs)
 
     case Stmt.Shift(prompt, BlockParam(k, tpe, capt), body) =>
       typeError(s"Block parameter of shift have wrong type: ${k}: ${tpe}")
 
     // resume(k) { stmt }
-    case Stmt.Resume(BlockVar(id, tpe@BlockType.Interface(ResumeSymbol, List(result, answer)), annotatedCapt), body) =>
+    case Stmt.Resume(BlockVar(id, BlockType.Resume(result, answer), annotatedCapt), body) =>
       val Typing(bodyTpe, bodyCapt, bodyCs) = body.typing
-      valueShouldEqual(result, bodyTpe)
+      valuesShouldEqual(result, bodyTpe)
       Typing(answer, annotatedCapt ++ bodyCapt, bodyCs)
 
     case Stmt.Resume(k, body) => typeError(s"Continuation has wrong type: ${k}")
@@ -484,7 +485,7 @@ object Type {
     case Stmt.Hole(annotatedTpe, span) => Typing(annotatedTpe, Set.empty, Constraints.empty)
   }
 
-  private def typecheckFunctionLike(calleeTyping: Typing[BlockType.Function], targs: List[ValueType], vargs: List[Expr], bargs: List[Block]): Typing[ValueType] = {
+  private def typecheckFunctionLike(calleeTyping: Typing[BlockType.Function], targs: List[ValueType], vargs: List[Expr], bargs: List[Block]): Typing[List[ValueType]] = {
     val Typing(calleeTpe, calleeCapt, calleeCs) = calleeTyping
     val Typing(vargTypes, vargCapt, vargCs) = all(vargs, arg => arg.typing)
     val Typing(bargTypes, bargCapt, bargCs) = all(bargs, arg => arg.typing)
@@ -527,12 +528,12 @@ object Type {
 
 
   // Inference
-  inline def inferType(stmt: Stmt): ValueType = stmt match {
+  inline def inferType(stmt: Stmt): List[ValueType] = stmt match {
     case Stmt.Def(id, block, body) => body.tpe
     case Stmt.Let(id, binding, body) => body.tpe
     case Stmt.ImpureApp(id, callee, targs, vargs, bargs, body) => body.tpe
-    case Stmt.Return(expr) => expr.tpe
-    case Stmt.Val(id, binding, body) => body.tpe
+    case Stmt.Return(exprs) => exprs.map(_.tpe)
+    case Stmt.Val(ids, binding, body) => body.tpe
     case Stmt.App(callee, targs, vargs, bargs) =>
       Type.instantiate(callee.tpe.asInstanceOf[BlockType.Function], targs, bargs.map(_.capt)).result
     case Stmt.Invoke(callee, method, methodTpe, targs, vargs, bargs) =>
@@ -547,13 +548,13 @@ object Type {
     case Stmt.Reset(body) => body.returnType
     case Stmt.Shift(prompt, k, body) =>
       k.tpe match {
-        case BlockType.Interface(_, List(from, _)) => from
-        case _ => typeError(s"Shift continuation must have Resume[from, to] type, got: ${util.show(k.tpe)}")
+        case BlockType.Resume(from, _) => from
+        case _ => typeError(s"Shift continuation must have a resumption type (from) ~> to, got: ${util.show(k.tpe)}")
       }
     case Stmt.Resume(k, body) =>
       k.annotatedTpe match {
-        case BlockType.Interface(_, List(_, answer)) => answer
-        case _ => typeError(s"Resume continuation must have Resume[result, answer] type, got: ${util.show(k.annotatedTpe)}")
+        case BlockType.Resume(_, answer) => answer
+        case _ => typeError(s"Resume continuation must have a resumption type (result) ~> answer, got: ${util.show(k.annotatedTpe)}")
       }
     case Stmt.Hole(annotatedTpe, span) => annotatedTpe
   }
@@ -562,7 +563,7 @@ object Type {
     case Expr.ValueVar(id, annotatedType) => annotatedType
     case Expr.Literal(value, annotatedType) => annotatedType
     case Expr.PureApp(b, targs, vargs) =>
-      Type.instantiate(b.functionType, targs, Nil).result
+      single(Type.instantiate(b.functionType, targs, Nil).result)
     case Expr.Make(data, tag, targs, vargs) => data
     case Expr.Box(b, annotatedCapture) =>
       ValueType.Boxed(b.tpe, annotatedCapture)
@@ -588,8 +589,8 @@ object Type {
     case Stmt.Let(id, binding, body) => body.capt
     case Stmt.ImpureApp(id, callee, targs, vargs, bargs, body) =>
       callee.capt ++ bargs.flatMap(_.capt) ++ body.capt
-    case Stmt.Return(expr) => Set.empty
-    case Stmt.Val(id, binding, body) => body.capt ++ binding.capt
+    case Stmt.Return(exprs) => Set.empty
+    case Stmt.Val(ids, binding, body) => body.capt ++ binding.capt
     case Stmt.App(callee, targs, vargs, bargs) =>
       callee.capt ++ bargs.flatMap(_.capt)
     case Stmt.Invoke(callee, method, methodTpe, targs, vargs, bargs) =>

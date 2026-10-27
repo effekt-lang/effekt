@@ -103,9 +103,9 @@ class TestRenamer(names: Names = Names(Map.empty), prefix: String = "$", preserv
       val resolvedBargs = bargs map rewrite
       withBinding(id) { core.ImpureApp(rewrite(id), resolvedCallee, resolvedTargs, resolvedVargs, resolvedBargs, rewrite(body)) }
 
-    case core.Val(id, binding, body) =>
+    case core.Val(ids, binding, body) =>
       val resolvedBinding = rewrite(binding)
-      withBinding(id) { core.Val(rewrite(id), resolvedBinding, rewrite(body)) }
+      withBindings(ids) { core.Val(ids map rewrite, resolvedBinding, rewrite(body)) }
 
     case core.Alloc(id, init, reg, body) =>
       val resolvedInit = rewrite(init)
@@ -235,10 +235,12 @@ class TestRenamer(names: Names = Names(Map.empty), prefix: String = "$", preserv
   override def rewrite(b: BlockType): BlockType = b match {
     case BlockType.Function(tparams, cparams, vparams, bparams, result) =>
       withBindings(tparams ++ cparams) {
-        BlockType.Function(tparams map rewrite, cparams map rewrite, vparams map rewrite, bparams map rewrite, rewrite(result))
+        BlockType.Function(tparams map rewrite, cparams map rewrite, vparams map rewrite, bparams map rewrite, result map rewrite)
       }
     case BlockType.Interface(name, targs) =>
       BlockType.Interface(rewrite(name), targs map rewrite)
+    case BlockType.Prompt(answer) => BlockType.Prompt(answer map rewrite)
+    case BlockType.Resume(result, answer) => BlockType.Resume(result map rewrite, answer map rewrite)
   }
 
   override def rewrite(b: BlockType.Interface): BlockType.Interface = b match {

@@ -49,8 +49,8 @@ class Recursive(
       vargs.foreach(process)
       bargs.foreach(process)
       process(body)
-    case Stmt.Return(expr) => process(expr)
-    case Stmt.Val(id, binding, body) => process(binding); process(body)
+    case Stmt.Return(exprs) => exprs.foreach(process)
+    case Stmt.Val(ids, binding, body) => process(binding); process(body)
     case a @ Stmt.App(callee, targs, vargs, bargs) =>
       process(callee)
       vargs.foreach(process)

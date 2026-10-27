@@ -1,7 +1,7 @@
 package effekt
 package core
 
-import effekt.core.Type.{PromptSymbol, ResumeSymbol, TChar}
+import effekt.core.Type.TChar
 import effekt.source.FeatureFlag
 import kiama.output.ParenPrettyPrinter
 import kiama.output.PrettyPrinterTypes.Document
@@ -244,17 +244,20 @@ class PrettyPrinter(printDetails: Boolean, printInternalIds: Boolean = true) ext
       "let" <+> "!" <+> toDoc(id) <+> "=" <+> toDoc(callee) <> argsToDoc(targs, vargs, bargs) <> line <>
         toDocStmts(rest)
 
-    case Return(e) =>
-      "return" <+> toDoc(e)
+    case Return(Nil) =>
+      "return"
+
+    case Return(es) =>
+      "return" <+> hsep(es.map(toDoc), comma)
 
     // the most common case, binding the result of a single statement
-    case Val(id, binding: (App | Hole | Resume | Shift | Reset | Region | Match | If | Invoke | Return), body) =>
-      "val" <+> toDoc(id) <+> "=" <+> toDoc(binding) <> ";" <> line <>
+    case Val(ids, binding: (App | Hole | Resume | Shift | Reset | Region | Match | If | Invoke | Return), body) =>
+      "val" <+> hsep(ids.map(toDoc), comma) <+> "=" <+> toDoc(binding) <> ";" <> line <>
         toDocStmts(body)
 
     // the remaining cases are "intrinsic lists", so we need to wrap them
-    case Val(id, binding, body) =>
-      "val" <+> toDoc(id) <+> "=" <+> block(toDocStmts(binding)) <> ";" <> line <>
+    case Val(ids, binding, body) =>
+      "val" <+> hsep(ids.map(toDoc), comma) <+> "=" <+> block(toDocStmts(binding)) <> ";" <> line <>
         toDocStmts(body)
 
     case App(b, targs, vargs, bargs) =>
@@ -307,7 +310,7 @@ class PrettyPrinter(printDetails: Boolean, printInternalIds: Boolean = true) ext
     case Match(sc, tpe, clauses, default) =>
       val cs = if clauses.isEmpty then string("{}") else braces(nest(line <> vsep(clauses map { case (p, b) => toDoc(p) <+> ":" <+> toDoc(b) })) <> line)
       val d = default.map { body => space <> "else" <+> braces(nest(line <> toDocStmts(body))) }.getOrElse { emptyDoc }
-      toDoc(sc) <+> "match" <> brackets(toDoc(tpe)) <+> cs <> d
+      toDoc(sc) <+> "match" <> brackets(hsep(tpe.map(toDoc), comma)) <+> cs <> d
 
     case Hole(tpe, span) =>
       val from = span.from
@@ -318,7 +321,7 @@ class PrettyPrinter(printDetails: Boolean, printInternalIds: Boolean = true) ext
         case _: kiama.util.StringSource => "string"
         case _                          => "source"
       }
-      "<>" <> ":" <+> toDoc(tpe) <+> s"@ \"$scheme://$name\":$from:$to"
+      "<>" <> ":" <+> resultToDoc(tpe) <+> s"@ \"$scheme://$name\":$from:$to"
   }
 
   def toDoc(tpe: core.BlockType): Doc = tpe match {
@@ -326,16 +329,19 @@ class PrettyPrinter(printDetails: Boolean, printInternalIds: Boolean = true) ext
       val tps = typeParamsDoc(tparams)
       val vps = parens(vparams.map(toDoc))
       val bps = hsep((cparams zip bparams).map { case (id, tpe) => braces(toDoc(id) <> ":" <+> toDoc(tpe)) })
-      // After `=>` the grammar expects a primValueType. If the result is a boxed value type
-      // (i.e., contains `at { ... }`), we must parenthesize it so it parses via `( valueType )`.
-      val res =
-        result match {
-          case core.ValueType.Boxed(_, _) => parens(toDoc(result))
-          case _                          => toDoc(result)
-        }
-      tps <> vps <> bps <+> "=>" <+> res
+      tps <> vps <> bps <+> "=>" <+> resultToDoc(result)
     case core.BlockType.Interface(symbol, Nil) => toDoc(symbol)
     case core.BlockType.Interface(symbol, targs) => toDoc(symbol) <> brackets(targs.map(toDoc))
+    case core.BlockType.Prompt(answer) => "Prompt" <> brackets(resultToDoc(answer))
+    case core.BlockType.Resume(result, answer) => parens(result.map(toDoc)) <+> "~>" <+> resultToDoc(answer)
+  }
+
+  // After `=>` and `~>` the grammar expects a primValueType. If the result is a boxed value type
+  // (i.e., contains `at { ... }`), we must parenthesize it so it parses via `( valueType )`.
+  def resultToDoc(result: List[core.ValueType]): Doc = result match {
+    case List(tpe @ core.ValueType.Data(_, _)) => toDoc(tpe)
+    case List(tpe @ core.ValueType.Var(_)) => toDoc(tpe)
+    case tpes => parens(hsep(tpes.map(toDoc), comma))
   }
 
   def toDoc(tpe: core.ValueType): Doc = tpe match {

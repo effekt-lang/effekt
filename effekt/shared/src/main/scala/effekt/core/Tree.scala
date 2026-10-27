@@ -273,15 +273,15 @@ enum Stmt extends Tree {
   case Let(id: Id, binding: Expr, body: Stmt)
   case ImpureApp(id: Id, callee: Block.BlockVar, targs: List[ValueType], vargs: List[Expr], bargs: List[Block], body: Stmt)
 
-  // Fine-grain CBV
-  case Return(expr: Expr)
-  case Val(id: Id, binding: Stmt, body: Stmt)
+  // Fine-grain CBV, statements return a (possibly empty) sequence of values
+  case Return(exprs: List[Expr])
+  case Val(ids: List[Id], binding: Stmt, body: Stmt)
   case App(callee: Block, targs: List[ValueType], vargs: List[Expr], bargs: List[Block])
   case Invoke(callee: Block, method: Id, methodTpe: BlockType, targs: List[ValueType], vargs: List[Expr], bargs: List[Block])
 
   // Local Control Flow
   case If(cond: Expr, thn: Stmt, els: Stmt)
-  case Match(scrutinee: Expr, annotatedTpe: ValueType, clauses: List[(Id, BlockLit)], default: Option[Stmt])
+  case Match(scrutinee: Expr, annotatedTpe: List[ValueType], clauses: List[(Id, BlockLit)], default: Option[Stmt])
 
   // (Type-monomorphic?) Regions
   case Region(body: BlockLit)
@@ -306,14 +306,14 @@ enum Stmt extends Tree {
   case Shift(prompt: BlockVar, k: BlockParam, body: Stmt)
 
   // bidirectional resume: runs the given statement in the original context
-  //  Resume(k: Resume[result, answer], stmt: result): answer
+  //  Resume(k: (result) ~> answer, stmt: result): answer
   case Resume(k: BlockVar, body: Stmt)
 
   // Others
-  case Hole(annotatedTpe: ValueType, span: effekt.source.Span)
+  case Hole(annotatedTpe: List[ValueType], span: effekt.source.Span)
 
-  lazy val typing: Typing[ValueType] = Type.typecheck(this)
-  lazy val tpe: ValueType = Type.inferType(this)
+  lazy val typing: Typing[List[ValueType]] = Type.typecheck(this)
+  lazy val tpe: List[ValueType] = Type.inferType(this)
   lazy val capt: Captures = Type.inferCapt(this)
   lazy val free: Free = freeVariables.free(this)
   lazy val size: Int = sizes.size(this)
@@ -354,7 +354,7 @@ case class Operation(name: Id, tparams: List[Id], cparams: List[Id], vparams: Li
  *   the body / rest is implicit.
  */
 private[core] enum Binding {
-  case Val(id: Id, binding: Stmt)
+  case Val(ids: List[Id], binding: Stmt)
   case Let(id: Id, binding: Expr)
   case ImpureApp(id: Id, callee: Block.BlockVar, targs: List[ValueType], vargs: List[Expr], bargs: List[Block])
   case Def(id: Id, binding: Block)
@@ -364,7 +364,7 @@ private[core] enum Binding {
   case Put(ref: Id, annotatedCapt: Captures, value: Expr)
 
   def toStmt(rest: Stmt): Stmt = this match {
-    case Binding.Val(id, binding) => Stmt.Val(id, binding, rest)
+    case Binding.Val(ids, binding) => Stmt.Val(ids, binding, rest)
     case Binding.Let(id, binding) => Stmt.Let(id, binding, rest)
     case Binding.ImpureApp(id, callee, targs, vargs, bargs) => Stmt.ImpureApp(id, callee, targs, vargs, bargs, rest)
     case Binding.Def(id, binding) => Stmt.Def(id, binding, rest)
@@ -381,7 +381,8 @@ private[core] object Binding {
   }
 
   def toToplevel(b: Binding): Toplevel = b match {
-    case Binding.Val(name, binding) => Toplevel.Val(name, binding)
+    case Binding.Val(List(name), binding) => Toplevel.Val(name, binding)
+    case Binding.Val(names, binding) => ???
     case Binding.Let(name, binding) => ??? //Toplevel.Val(name, tpe, Stmt.Return(binding))
     case Binding.ImpureApp(name, callee, targs, vargs, bargs) => ??? //Toplevel.Val(name, tpe, ???)
     case Binding.Def(name, binding) => Toplevel.Def(name, binding)
@@ -505,10 +506,10 @@ object Tree {
         Stmt.Let(rewrite(id), rewrite(binding), rewrite(body))
       case Stmt.ImpureApp(id, callee, targs, vargs, bargs, body) =>
         Stmt.ImpureApp(rewrite(id), rewrite(callee), targs map rewrite, vargs map rewrite, bargs map rewrite, rewrite(body))
-      case Stmt.Return(expr) =>
-        Stmt.Return(rewrite(expr))
-      case Stmt.Val(id, binding, body) =>
-        Stmt.Val(rewrite(id), rewrite(binding), rewrite(body))
+      case Stmt.Return(exprs) =>
+        Stmt.Return(exprs map rewrite)
+      case Stmt.Val(ids, binding, body) =>
+        Stmt.Val(ids map rewrite, rewrite(binding), rewrite(body))
       case Stmt.App(callee, targs, vargs, bargs) =>
         Stmt.App(rewrite(callee), targs map rewrite, vargs map rewrite, bargs map rewrite)
       case Stmt.Invoke(callee, method, methodTpe, targs, vargs, bargs) =>
@@ -516,7 +517,7 @@ object Tree {
       case Stmt.If(cond, thn, els) =>
         Stmt.If(rewrite(cond), rewrite(thn), rewrite(els))
       case Stmt.Match(scrutinee, annotatedTpe, clauses, default) =>
-        Stmt.Match(rewrite(scrutinee), rewrite(annotatedTpe), clauses map rewrite, default map rewrite)
+        Stmt.Match(rewrite(scrutinee), annotatedTpe map rewrite, clauses map rewrite, default map rewrite)
       case Stmt.Region(body) =>
         Stmt.Region(rewrite(body))
       case Stmt.Alloc(id, init, region, body) =>
@@ -534,7 +535,7 @@ object Tree {
       case Stmt.Resume(k, body) =>
         Stmt.Resume(rewrite(k), rewrite(body))
       case Stmt.Hole(annotatedTpe, span) =>
-        Stmt.Hole(rewrite(annotatedTpe), span)
+        Stmt.Hole(annotatedTpe map rewrite, span)
     }
     def rewrite(b: Block): Block = b match {
       case b @ Block.BlockVar(_, _, _) => rewrite(b)
@@ -604,9 +605,11 @@ object Tree {
 
     def rewrite(t: BlockType): BlockType = t match {
       case BlockType.Function(tparams, cparams, vparams, bparams, result) =>
-        BlockType.Function(tparams map rewrite, cparams map rewrite, vparams map rewrite, bparams map rewrite, rewrite(result))
+        BlockType.Function(tparams map rewrite, cparams map rewrite, vparams map rewrite, bparams map rewrite, result map rewrite)
       case BlockType.Interface(name, targs) =>
         BlockType.Interface(rewrite(name), targs map rewrite)
+      case BlockType.Prompt(answer) => BlockType.Prompt(answer map rewrite)
+      case BlockType.Resume(result, answer) => BlockType.Resume(result map rewrite, answer map rewrite)
     }
     def rewrite(t: BlockType.Interface): BlockType.Interface = t match {
       case BlockType.Interface(name, targs) => BlockType.Interface(rewrite(name), targs map rewrite)
@@ -685,15 +688,15 @@ object Tree {
         body2   <- rewrite(body)
       } yield Stmt.ImpureApp(id2, callee2, targs2, vargs2, bargs2, body2)
 
-      case Stmt.Return(expr) => for {
-        expr2 <- rewrite(expr)
-      } yield Stmt.Return(expr2)
+      case Stmt.Return(exprs) => for {
+        exprs2 <- all(exprs, rewrite)
+      } yield Stmt.Return(exprs2)
 
-      case Stmt.Val(id, binding, body) => for {
-        id2      <- done(rewrite(id))
+      case Stmt.Val(ids, binding, body) => for {
+        ids2     <- done(ids.map(rewrite))
         binding2 <- rewrite(binding)
         body2    <- rewrite(body)
-      } yield Stmt.Val(id2, binding2, body2)
+      } yield Stmt.Val(ids2, binding2, body2)
 
       case Stmt.App(callee, targs, vargs, bargs) => for {
         callee2 <- rewrite(callee)
@@ -719,7 +722,7 @@ object Tree {
 
       case Stmt.Match(scrutinee, tpe, clauses, default) => for {
         scrutinee2 <- rewrite(scrutinee)
-        tpe2       <- done(rewrite(tpe))
+        tpe2       <- done(tpe.map(rewrite))
         clauses2   <- all(clauses, rewrite)
         default2   <- opt(default, rewrite)
       } yield Stmt.Match(scrutinee2, tpe2, clauses2, default2)
@@ -771,7 +774,7 @@ object Tree {
       } yield Stmt.Resume(k2, body2)
 
       case Stmt.Hole(tpe, span) =>
-        done(Stmt.Hole(rewrite(tpe), span))
+        done(Stmt.Hole(tpe.map(rewrite), span))
     }
 
     def rewrite(b: Block): Trampoline[Block] = b match {
@@ -863,8 +866,10 @@ object Tree {
 
     def rewrite(tpe: BlockType): BlockType = tpe match {
       case BlockType.Function(tparams, cparams, vparams, bparams, result) =>
-        BlockType.Function(tparams.map(rewrite), cparams.map(rewrite), vparams.map(rewrite), bparams.map(rewrite), rewrite(result))
+        BlockType.Function(tparams.map(rewrite), cparams.map(rewrite), vparams.map(rewrite), bparams.map(rewrite), result.map(rewrite))
       case interface: BlockType.Interface => rewrite(interface)
+      case BlockType.Prompt(answer) => BlockType.Prompt(answer.map(rewrite))
+      case BlockType.Resume(result, answer) => BlockType.Resume(result.map(rewrite), answer.map(rewrite))
     }
     def rewrite(tpe: BlockType.Interface): BlockType.Interface = tpe match {
       case BlockType.Interface(name, targs) => BlockType.Interface(rewrite(name), targs.map(rewrite))
@@ -907,10 +912,10 @@ object Tree {
         Stmt.Let(rewrite(id), rewrite(binding), rewrite(body))
       case Stmt.ImpureApp(id, callee, targs, vargs, bargs, body) =>
         Stmt.ImpureApp(rewrite(id), rewrite(callee), targs map rewrite, vargs map rewrite, bargs map rewrite, rewrite(body))
-      case Stmt.Return(expr) =>
-        Stmt.Return(rewrite(expr))
-      case Stmt.Val(id, binding, body) =>
-        Stmt.Val(rewrite(id), rewrite(binding), rewrite(body))
+      case Stmt.Return(exprs) =>
+        Stmt.Return(exprs map rewrite)
+      case Stmt.Val(ids, binding, body) =>
+        Stmt.Val(ids map rewrite, rewrite(binding), rewrite(body))
       case Stmt.App(callee, targs, vargs, bargs) =>
         Stmt.App(rewrite(callee), targs map rewrite, vargs map rewrite, bargs map rewrite)
       case Stmt.Invoke(callee, method, methodTpe, targs, vargs, bargs) =>
@@ -918,7 +923,7 @@ object Tree {
       case Stmt.If(cond, thn, els) =>
         Stmt.If(rewrite(cond), rewrite(thn), rewrite(els))
       case Stmt.Match(scrutinee, annotatedTpe, clauses, default) =>
-        Stmt.Match(rewrite(scrutinee), rewrite(annotatedTpe), clauses map rewrite, default map rewrite)
+        Stmt.Match(rewrite(scrutinee), annotatedTpe map rewrite, clauses map rewrite, default map rewrite)
       case Stmt.Region(body) =>
         Stmt.Region(rewrite(body))
       case Stmt.Alloc(id, init, region, body) =>
@@ -936,7 +941,7 @@ object Tree {
       case Stmt.Resume(k, body) =>
         Stmt.Resume(rewrite(k), rewrite(body))
       case Stmt.Hole(annotatedTpe, span) =>
-        Stmt.Hole(rewrite(annotatedTpe), span)
+        Stmt.Hole(annotatedTpe map rewrite, span)
     }
     def rewrite(b: Block)(using Ctx): Block = b match {
       case b @ Block.BlockVar(_, _, _) => rewrite(b)
@@ -1006,9 +1011,11 @@ object Tree {
 
     def rewrite(t: BlockType)(using Ctx): BlockType = t match {
       case BlockType.Function(tparams, cparams, vparams, bparams, result) =>
-        BlockType.Function(tparams map rewrite, cparams map rewrite, vparams map rewrite, bparams map rewrite, rewrite(result))
+        BlockType.Function(tparams map rewrite, cparams map rewrite, vparams map rewrite, bparams map rewrite, result map rewrite)
       case BlockType.Interface(name, targs) =>
         BlockType.Interface(rewrite(name), targs map rewrite)
+      case BlockType.Prompt(answer) => BlockType.Prompt(answer map rewrite)
+      case BlockType.Resume(result, answer) => BlockType.Resume(result map rewrite, answer map rewrite)
     }
     def rewrite(t: BlockType.Interface)(using Ctx): BlockType.Interface = t match {
       case BlockType.Interface(name, targs) => BlockType.Interface(rewrite(name), targs map rewrite)
@@ -1084,12 +1091,12 @@ object substitutions {
         }
 
 
-      case Return(expr) =>
-        Return(substitute(expr))
+      case Return(exprs) =>
+        Return(exprs.map(substitute))
 
-      case Val(id, binding, body) =>
-        Val(id, substitute(binding),
-          substitute(body)(using subst `shadowValues` List(id)))
+      case Val(ids, binding, body) =>
+        Val(ids, substitute(binding),
+          substitute(body)(using subst `shadowValues` ids))
 
       case App(callee, targs, vargs, bargs) =>
         App(substitute(callee), targs.map(substitute), vargs.map(substitute), bargs.map(substitute))
@@ -1101,7 +1108,7 @@ object substitutions {
         If(substitute(cond), substitute(thn), substitute(els))
 
       case Match(scrutinee, tpe, clauses, default) =>
-        Match(substitute(scrutinee), substitute(tpe), clauses.map {
+        Match(substitute(scrutinee), tpe.map(substitute), clauses.map {
           case (id, b) => (id, substitute(b))
         }, default.map(substitute))
 
@@ -1132,7 +1139,7 @@ object substitutions {
       case Region(body) =>
         Region(substitute(body))
 
-      case Hole(tpe, span) => Hole(substitute(tpe), span)
+      case Hole(tpe, span) => Hole(tpe.map(substitute), span)
     }
 
   def substitute(b: BlockLit)(using subst: Substitution): BlockLit = b match {
@@ -1216,8 +1223,8 @@ object substitutions {
 
   def substitute(binding: Binding)(using subst: Substitution): Binding =
     binding match {
-      case Binding.Val(id, binding) =>
-        Binding.Val(id, substitute(binding))
+      case Binding.Val(ids, binding) =>
+        Binding.Val(ids, substitute(binding))
 
       case Binding.Let(id, binding) =>
         Binding.Let(id, substitute(binding))
@@ -1257,8 +1264,8 @@ object sizes {
     case Stmt.Def(id, block, body) => block.size + body.size + 1
     case Stmt.Let(id, binding, body) => binding.size + body.size + 1
     case Stmt.ImpureApp(id, callee, targs, vargs, bargs, body) => all(vargs, _.size) + all(bargs, _.size) + body.size + 1
-    case Stmt.Return(expr) => expr.size + 1
-    case Stmt.Val(id, binding, body) => binding.size + body.size + 1
+    case Stmt.Return(exprs) => all(exprs, _.size) + 1
+    case Stmt.Val(ids, binding, body) => binding.size + body.size + 1
     case Stmt.App(callee, targs, vargs, bargs) => callee.size + all(vargs, _.size) + all(bargs, _.size) + 1
     case Stmt.Invoke(callee, method, methodTpe, targs, vargs, bargs) => callee.size + all(vargs, _.size) + all(bargs, _.size) + 1
     case Stmt.If(cond, thn, els) => cond.size + thn.size + els.size + 1
@@ -1372,10 +1379,10 @@ object freeVariables {
         all(bargs, _.free) ++
         body.free.withoutValue(id, retType)
 
-    case Stmt.Return(expr) => expr.free
+    case Stmt.Return(exprs) => all(exprs, _.free)
 
-    case Stmt.Val(id, binding, body) =>
-      body.free.withoutValue(id, binding.tpe) ++ binding.free
+    case Stmt.Val(ids, binding, body) =>
+      body.free.without(ids.zip(binding.tpe).map(ValueParam.apply), Nil) ++ binding.free
 
     case Stmt.App(callee, targs, vargs, bargs) =>
       callee.free ++ all(vargs, _.free) ++ all(bargs, _.free)
@@ -1471,11 +1478,11 @@ object freeVariables {
         case Toplevel.Def(id, block) => BlockParam(id, block.tpe, block.capt)
       } ++ externs.collect {
         case Extern.Def(id, qualifiedSignature, tparams, cparams, vparams, bparams, ret, capt, _) =>
-          BlockParam(id, BlockType.Function(tparams, cparams, vparams.map(_.tpe), bparams.map(_.tpe), ret), capt)
+          BlockParam(id, BlockType.Function(tparams, cparams, vparams.map(_.tpe), bparams.map(_.tpe), List(ret)), capt)
       }
 
       val boundValues = definitions.collect {
-        case Toplevel.Val(id, expr) => ValueParam(id, expr.tpe)
+        case Toplevel.Val(id, expr) => ValueParam(id, Type.single(expr.tpe))
       }
 
       def assertClosed(free: Free): Unit =

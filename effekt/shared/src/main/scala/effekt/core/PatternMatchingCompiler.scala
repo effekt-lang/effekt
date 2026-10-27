@@ -83,7 +83,7 @@ object PatternMatchingCompiler {
    * - a sequence of clauses that represent alternatives (disjunction)
    * - each sequence contains a list of conditions that all have to match (conjunction).
    */
-  def compile(clauses: List[Clause], motif: ValueType): core.Stmt = {
+  def compile(clauses: List[Clause], motif: List[ValueType]): core.Stmt = {
     // This shouldn't be reachable anymore since we specialize matching on void before calling compile
     if (clauses.isEmpty) return core.Hole(motif, effekt.source.Span.missing)
 

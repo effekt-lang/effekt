@@ -35,7 +35,7 @@ object Show extends Phase[CoreTransformed, CoreTransformed] {
     private var bindings = emptyBindings
 
     def emit(id: Id, stmt: Stmt): Unit =
-      bindings.append(Binding.Val(id, stmt))
+      bindings.append(Binding.Val(List(id), stmt))
 
     private def scoped[A](block: => A): (List[Binding], A) =
       val pending = bindings.toList
@@ -64,7 +64,7 @@ object Show extends Phase[CoreTransformed, CoreTransformed] {
         case Some(value) => value.id
       }
     })
-    Block.BlockVar(showId, BlockType.Function(List.empty, List.empty, List(vt), List.empty, TString), Set.empty)
+    Block.BlockVar(showId, BlockType.Function(List.empty, List.empty, List(vt), List.empty, List(TString)), Set.empty)
 
 
   override def run(input: CoreTransformed)(using Context): Option[CoreTransformed] = input match {
@@ -130,17 +130,17 @@ object Show extends Phase[CoreTransformed, CoreTransformed] {
         // this might happen everywhere we directly transform an expression
         val vargs_ = vargs map transform
         ctx.withBindings {
-          Stmt.Val(id, Stmt.App(getShowBlockVar(targ), List.empty, vargs_, List.empty), transform(body))
+          Stmt.Val(List(id), Stmt.App(getShowBlockVar(targ), List.empty, vargs_, List.empty), transform(body))
         }
       case Let(id, binding, body) =>
         val binding_ = transform(binding)
         ctx.withBindings {
           Let(id, binding_, transform(body))
         }
-      case Return(expr) =>
-        val expr_ = transform(expr)
+      case Return(exprs) =>
+        val exprs_ = exprs map transform
         ctx.withBindings {
-          Return(expr_)
+          Return(exprs_)
         }
       case ImpureApp(id, BlockVar(bid, annotatedTpe, annotatedCapt), targs, vargs, bargs, body) if bid.name.name == FUNCTION_NAME =>
         val targ = targs match {
@@ -150,7 +150,7 @@ object Show extends Phase[CoreTransformed, CoreTransformed] {
         val vargs_ = vargs map transform
         val bargs_ = bargs map transform
         ctx.withBindings {
-          Stmt.Val(id, Stmt.App(getShowBlockVar(targ), List.empty, vargs_, bargs_), transform(body))
+          Stmt.Val(List(id), Stmt.App(getShowBlockVar(targ), List.empty, vargs_, bargs_), transform(body))
         }
       case ImpureApp(id, callee, targs, vargs, bargs, body) =>
         val vargs_ = vargs map transform
@@ -159,7 +159,7 @@ object Show extends Phase[CoreTransformed, CoreTransformed] {
           ImpureApp(id, callee, targs, vargs_, bargs_, transform(body))
         }
       case Def(id, block, body) => Def(id, transform(block), transform(body))
-      case Val(id, binding, body) => Val(id, transform(binding), transform(body))
+      case Val(ids, binding, body) => Val(ids, transform(binding), transform(body))
       case App(callee, targs, vargs, bargs) =>
         val vargs_ = vargs map transform
         val bargs_ = bargs map transform
@@ -239,7 +239,7 @@ object Show extends Phase[CoreTransformed, CoreTransformed] {
     def generateValAppRet(valueType: ValueType): Stmt =
       val blockVar = findExternShowDef(valueType)
       val retId = Id("ret")
-      Stmt.ImpureApp(retId, blockVar, List.empty, List(paramValueVar), List.empty, Stmt.Return(Expr.ValueVar(retId, TString)))
+      Stmt.ImpureApp(retId, blockVar, List.empty, List(paramValueVar), List.empty, Stmt.Return(List(Expr.ValueVar(retId, TString))))
     def generateDef(stmt: Stmt): Toplevel.Def =
       val block = generateBlockLit(stmt)
       val defn: Toplevel.Def = Toplevel.Def(showId, block)
@@ -250,10 +250,10 @@ object Show extends Phase[CoreTransformed, CoreTransformed] {
 
     vt match {
       case Type.TString =>
-        val stmt = Stmt.Return(paramValueVar)
+        val stmt = Stmt.Return(List(paramValueVar))
         Some(generateDef(stmt))
       case Type.TUnit =>
-        val stmt = Stmt.Return(Expr.Literal("()", TString))
+        val stmt = Stmt.Return(List(Expr.Literal("()", TString)))
         Some(generateDef(stmt))
       case Type.TInt =>
         Some(generateShow(Type.TInt))
@@ -264,7 +264,7 @@ object Show extends Phase[CoreTransformed, CoreTransformed] {
       case Type.TDouble =>
         Some(generateShow(Type.TDouble))
       case Type.TBoolean =>
-        val stmt = Stmt.If(paramValueVar, Stmt.Return(Expr.Literal("true", TString)), Stmt.Return(Expr.Literal("false", TString)))
+        val stmt = Stmt.If(paramValueVar, Stmt.Return(List(Expr.Literal("true", TString))), Stmt.Return(List(Expr.Literal("false", TString))))
         Some(generateDef(stmt))
       case ValueType.Data(name, targs) =>
         val data = dctx.datas.getOrElse(name, {
@@ -289,7 +289,7 @@ object Show extends Phase[CoreTransformed, CoreTransformed] {
       case ValueType.Boxed(tpe, capt) =>
         // TODO: Handle this better, but honestly your fault for using this
         Context.warning("We not properly handling Boxed types when generating show instances")
-        val stmt = Stmt.Return(Expr.Literal("BOXED", TString))
+        val stmt = Stmt.Return(List(Expr.Literal("BOXED", TString)))
         Some(generateDef(stmt))
     }
 
@@ -300,7 +300,7 @@ object Show extends Phase[CoreTransformed, CoreTransformed] {
     dctx.findExternDef(name, vts) match
       case None => Context.abort(pretty"Could not find show definition for ${vts}")
       case Some(Extern.Def(id, qualifiedSignature, tparams, cparams, vparams, bparams, ret, annotatedCapture, body)) =>
-        Block.BlockVar(id, BlockType.Function(tparams, cparams, vparams map (_.tpe), bparams map (_.tpe), ret), annotatedCapture)
+        Block.BlockVar(id, BlockType.Function(tparams, cparams, vparams map (_.tpe), bparams map (_.tpe), List(ret)), annotatedCapture)
 
   def generateShowInstance(decl: Declaration, targs: List[ValueType])(using ctx: ShowContext, dctx: DeclarationContext)(using Context): Option[Toplevel.Def] = decl match {
     case dataDecl: Declaration.Data if dataDecl.constructors.nonEmpty =>
@@ -327,7 +327,7 @@ object Show extends Phase[CoreTransformed, CoreTransformed] {
     val clauses = decl.constructors.zip(constructorVparams).map(constructorClauses)
     val matchStmt = Stmt.Match(
       ValueVar(valueId, valueTpe),
-      TString,
+      List(TString),
       clauses,
       None
     )
@@ -364,8 +364,8 @@ object Show extends Phase[CoreTransformed, CoreTransformed] {
 
       def fieldValStmts(idapps: List[(Id, Stmt.App)]): Stmt =
         idapps match {
-          case (id, app) :: next => Stmt.Val(id, app, fieldValStmts(next))
-          case Nil => Return(concatenated)
+          case (id, app) :: next => Stmt.Val(List(id), app, fieldValStmts(next))
+          case Nil => Return(List(concatenated))
         }
 
       fieldValStmts(pureFields)

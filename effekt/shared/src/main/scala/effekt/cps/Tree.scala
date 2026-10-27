@@ -119,8 +119,8 @@ enum Stmt extends Tree {
 
   case Put(ref: Id, value: Expr, body: Stmt)
 
-  // reset( { (p, ks, k) => STMT }, ks, k)
-  case Reset(prog: BlockLit, ks: MetaCont, k: Cont)
+  // reset( { (p, ks, k) => STMT }, ks, k), where STMT returns `arity` values
+  case Reset(prog: BlockLit, arity: Int, ks: MetaCont, k: Cont)
 
   // shift(p, { (resume, ks, k) => STMT }, ks, k)
   case Shift(prompt: Id, body: BlockLit, ks: MetaCont, k: Cont)
@@ -206,7 +206,7 @@ object Variables {
     case Stmt.Get(ref, id, body) => block(ref) ++ (free(body) -- value(id))
     case Stmt.Put(ref, value, body) => block(ref) ++ free(value) ++ free(body)
 
-    case Stmt.Reset(prog, ks, k) => free(prog) ++ free(ks) ++ free(k)
+    case Stmt.Reset(prog, arity, ks, k) => free(prog) ++ free(ks) ++ free(k)
     case Stmt.Shift(prompt, body, ks, k) => block(prompt) ++ free(body) ++ free(ks) ++ free(k)
     case Stmt.Resume(r, body, ks, k) => block(r) ++ free(body) ++ free(ks) ++ free(k)
     case Stmt.Hole(span) => empty
@@ -343,8 +343,8 @@ object substitutions {
     case Put(ref, value, body) =>
       Put(substituteAsBlockVar(ref), substitute(value), substitute(body))
 
-    case Reset(prog, ks, k) =>
-      Reset(substitute(prog), substitute(ks), substitute(k))
+    case Reset(prog, arity, ks, k) =>
+      Reset(substitute(prog), arity, substitute(ks), substitute(k))
 
     case Shift(prompt, body, ks, k) =>
       Shift(substituteAsBlockVar(prompt), substitute(body), substitute(ks), substitute(k))

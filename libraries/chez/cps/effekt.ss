@@ -107,19 +107,13 @@
 (define (top-level-k x _) x)
 (define top-level-ks (make-meta-cont top-level-k (gensym "toplevel") (create-store) '()))
 
-; a, MetaCont -> #
-(define (return x ks)
-    (let* ([new-ks (meta-cont-rest ks)]
-           [k (meta-cont-cont new-ks)])
-    (k x new-ks)))
-
 ; Program a b = a, Cont b, MetaCont -> #
 
-; Program Prompt b, MetaCont, Cont b -> #
-(define (reset prog ks k)
+; Program Prompt b, (b, MetaCont -> #), MetaCont, Cont b -> #
+(define (reset prog ret ks k)
     (let ([prompt (gensym)])
          (meta-cont-cont-set! ks k)
-         (prog prompt (make-meta-cont return prompt (create-store) ks) return)))
+         (prog prompt (make-meta-cont ret prompt (create-store) ks) ret)))
 
 ; MetaCont, Prompt -> MetaCont * MetaCont
 (define (split-stack ks p)

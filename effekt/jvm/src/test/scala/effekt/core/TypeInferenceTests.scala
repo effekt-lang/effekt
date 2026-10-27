@@ -35,6 +35,53 @@ class TypeInferenceTests extends CoreTests {
     assertEquals(option.tpe, expected)
   }
 
+  test("shift and resume with multiple values") {
+    val p = Id("p")
+    val k = Id("k")
+    val prompt: Block.BlockVar = Block.BlockVar(p, BlockType.Prompt(List(TInt)), Set(p))
+    val resumption = BlockType.Resume(List(TInt, TBoolean), List(TInt))
+
+    // shift(p) { {k: (Int, Bool) ~> Int} => resume(k) { return 1, true } }
+    val resumed = Stmt.Return(List(Literal(1, TInt), Literal(true, TBoolean)))
+    val resume = Stmt.Resume(Block.BlockVar(k, resumption, Set(k)), resumed)
+    val shift = Stmt.Shift(prompt, BlockParam(k, resumption, Set(k)), resume)
+
+    assertEquals(resume.tpe, List(TInt))
+    assertEquals(shift.tpe, List(TInt, TBoolean))
+    assertEquals(typecheck(shift).tpe, List(TInt, TBoolean))
+
+    // resuming with the wrong number of values
+    intercept[TypeError] {
+      typecheck(Stmt.Resume(Block.BlockVar(k, resumption, Set(k)), Stmt.Return(List(Literal(1, TInt)))))
+    }
+  }
+
+  test("reset and shift with multiple answers") {
+    val p = Id("p")
+    val k = Id("k")
+    val answer = List(TInt, TBoolean)
+    val promptParam = BlockParam(p, BlockType.Prompt(answer), Set(p))
+    val prompt: Block.BlockVar = Block.BlockVar(p, BlockType.Prompt(answer), Set(p))
+    val resumption = BlockType.Resume(List(TInt), answer)
+
+    // reset { {p: Prompt[(Int, Bool)]} => val x = shift(p) { {k} => resume(k) { return 1 } }; return x, true }
+    val shift = Stmt.Shift(prompt, BlockParam(k, resumption, Set(k)),
+      Stmt.Resume(Block.BlockVar(k, resumption, Set(k)), Stmt.Return(List(Literal(1, TInt)))))
+    val body = Stmt.Val(List(x), shift, Stmt.Return(List(ValueVar(x, TInt), Literal(true, TBoolean))))
+    val reset = Stmt.Reset(Block.BlockLit(Nil, List(p), Nil, List(promptParam), body))
+
+    assertEquals(shift.tpe, List(TInt))
+    assertEquals(reset.tpe, answer)
+    assertEquals(typecheck(reset).tpe, answer)
+
+    // the shift body must compute the answer of the prompt
+    intercept[TypeError] {
+      val wrong = BlockType.Resume(List(TInt), List(TInt))
+      typecheck(Stmt.Shift(prompt, BlockParam(k, wrong, Set(k)),
+        Stmt.Resume(Block.BlockVar(k, wrong, Set(k)), Stmt.Return(List(Literal(1, TInt))))))
+    }
+  }
+
   test("type equality") {
     assertEquals(Type.equals(TInt, TInt), true)
     assertEquals(Type.equals(TInt, TBoolean), false)
@@ -48,23 +95,23 @@ class TypeInferenceTests extends CoreTests {
     assertEquals(Type.equals(Set(f, g), Set(g, f)), true)
 
     // () => A
-    def thunk(id: Id) = BlockType.Function(Nil, Nil, Nil, Nil, ValueType.Var(id))
+    def thunk(id: Id) = BlockType.Function(Nil, Nil, Nil, Nil, List(ValueType.Var(id)))
 
     // [A](A) {f: () => A } => () => A at {f}
     val polyA = BlockType.Function(A :: Nil, f :: Nil,
       ValueType.Var(A) :: Nil,
       thunk(A) :: Nil,
-      ValueType.Boxed(thunk(A), Set(f)))
+      List(ValueType.Boxed(thunk(A), Set(f))))
 
     val polyB1 = BlockType.Function(B :: Nil, f :: Nil,
       ValueType.Var(B) :: Nil,
       thunk(B) :: Nil,
-      ValueType.Boxed(thunk(B), Set(f)))
+      List(ValueType.Boxed(thunk(B), Set(f))))
 
     val polyB2 = BlockType.Function(B :: Nil, g :: Nil,
       ValueType.Var(B) :: Nil,
       thunk(B) :: Nil,
-      ValueType.Boxed(thunk(B), Set(g)))
+      List(ValueType.Boxed(thunk(B), Set(g))))
 
     assertEquals(Type.equals(polyA, polyB1), true)
     assertEquals(Type.equals(polyB1, polyB2), true)
@@ -73,12 +120,12 @@ class TypeInferenceTests extends CoreTests {
     val polyB3 = BlockType.Function(B :: Nil, f :: g :: Nil,
       ValueType.Var(B) :: Nil,
       thunk(B) :: thunk(B) :: Nil,
-      ValueType.Boxed(thunk(B), Set(g)))
+      List(ValueType.Boxed(thunk(B), Set(g))))
 
     val polyB4 = BlockType.Function(B :: Nil, f :: g :: Nil,
       ValueType.Var(B) :: Nil,
       thunk(B) :: thunk(B) :: Nil,
-      ValueType.Boxed(thunk(B), Set(f, g)))
+      List(ValueType.Boxed(thunk(B), Set(f, g))))
 
     assertEquals(Type.equals(polyA, polyB3), false)
 
@@ -105,34 +152,34 @@ class TypeInferenceTests extends CoreTests {
         Constructor(NoneC, Nil, Nil) :: Nil)
     ), Nil)
 
-    val ex1 = Stmt.Val(x,
-      Stmt.Return(Expr.Literal(42, TInt)),
-      Stmt.Return(Expr.ValueVar(x, TInt)))
+    val ex1 = Stmt.Val(List(x),
+      Stmt.Return(List(Expr.Literal(42, TInt))),
+      Stmt.Return(List(Expr.ValueVar(x, TInt))))
 
-    assertEquals(ex1.tpe, TInt)
+    assertEquals(ex1.tpe, List(TInt))
     assertEquals(ex1.capt, Set.empty)
     assertEquals(ex1.free, Free.value(x, TInt).withoutValue(x, TInt))
 
     // we can even type check open terms:
-    val ex2 = Stmt.Return(Expr.ValueVar(x, TInt))
+    val ex2 = Stmt.Return(List(Expr.ValueVar(x, TInt)))
     assertEquals(typecheck(ex2),
-      Typing(TInt, Set.empty, Constraints.empty))
+      Typing(List(TInt), Set.empty, Constraints.empty))
 
     assertEquals(ex2.free, Free.value(x, TInt))
 
-    val add: Block.BlockVar = Block.BlockVar(infixPlus, BlockType.Function(Nil, Nil, List(TInt, TInt), Nil, TInt), Set.empty)
+    val add: Block.BlockVar = Block.BlockVar(infixPlus, BlockType.Function(Nil, Nil, List(TInt, TInt), Nil, List(TInt)), Set.empty)
 
-    val ex3 = Stmt.Val(x,
-      Stmt.Return(Expr.Literal(42, TInt)),
-      Stmt.Return(Expr.PureApp(add, Nil, Expr.ValueVar(x, TInt) :: Expr.ValueVar(x, TInt) :: Nil)))
+    val ex3 = Stmt.Val(List(x),
+      Stmt.Return(List(Expr.Literal(42, TInt))),
+      Stmt.Return(List(Expr.PureApp(add, Nil, Expr.ValueVar(x, TInt) :: Expr.ValueVar(x, TInt) :: Nil))))
 
     val result3 = typecheck(ex3)
-    assertEquals(result3.tpe, TInt)
+    assertEquals(result3.tpe, List(TInt))
     assertEquals(result3.capt, Set.empty)
     assert(ex3.free.freeIds == Set(add.id))
 
     // [A](Option[A], A): A
-    val orElse: Block.BlockVar = Block.BlockVar(f, BlockType.Function(A :: Nil, Nil, List(OptionT(ValueType.Var(A)), ValueType.Var(A)), Nil, ValueType.Var(A)), Set.empty)
+    val orElse: Block.BlockVar = Block.BlockVar(f, BlockType.Function(A :: Nil, Nil, List(OptionT(ValueType.Var(A)), ValueType.Var(A)), Nil, List(ValueType.Var(A))), Set.empty)
 
     shouldTypeCheckAs(TInt, Expr.PureApp(orElse, TInt :: Nil, Expr.ValueVar(x, OptionT(TInt)) :: Expr.ValueVar(y, TInt) :: Nil))
 
@@ -159,7 +206,7 @@ class TypeInferenceTests extends CoreTests {
   val ex6 = Stmt.Region(Block.BlockLit(Nil, r :: Nil, Nil, BlockParam(r, TRegion, Set(r)) :: Nil,
     Stmt.Alloc(x, Expr.Literal(42, TInt), r,
       Stmt.Get(y, TInt, x, Set(r),
-        Stmt.Return(Expr.ValueVar(y, TInt))))))
+        Stmt.Return(List(Expr.ValueVar(y, TInt)))))))
 
   println(ex6.tpe)
 

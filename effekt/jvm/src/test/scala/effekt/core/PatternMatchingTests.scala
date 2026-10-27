@@ -13,10 +13,10 @@ class PatternMatchingTests extends CoreTests {
   def OptionT(tpe: core.ValueType): core.ValueType =
     core.ValueType.Data(OptionId, List(tpe))
 
-  val trivalPredicate = core.Return(core.Literal(true, TBoolean))
+  val trivalPredicate = core.Return(List(core.Literal(true, TBoolean)))
 
   def block(name: String, args: ValueType*): core.BlockVar =
-    core.BlockVar(Id(name), core.BlockType.Function(Nil, Nil, args.toList, Nil, TUnit), Set.empty)
+    core.BlockVar(Id(name), core.BlockType.Function(Nil, Nil, args.toList, Nil, List(TUnit)), Set.empty)
 
   def jump(label: BlockVar, args: Expr*) =
     App(label, Nil, args.toList, Nil)
@@ -46,7 +46,7 @@ class PatternMatchingTests extends CoreTests {
   }
 
   test("Sanity check: compiling empty list of clauses") {
-    assertEquals(compile(Nil, TUnit), core.Hole(TUnit, effekt.source.Span.missing))
+    assertEquals(compile(Nil, List(TUnit)), core.Hole(List(TUnit), effekt.source.Span.missing))
   }
 
   test("Simple guard") {
@@ -70,16 +70,16 @@ class PatternMatchingTests extends CoreTests {
       Clause(
         List(
           Condition.Patterns(Map(sc -> Pattern.Any(x.id))),
-          Condition.Run(Binding.Val(p.id, trivalPredicate)),
+          Condition.Run(Binding.Val(List(p.id), trivalPredicate)),
           Condition.Predicate(p)),
         b1, Nil, List(x)),
       Clause(
         List(
           Condition.Patterns(Map(sc -> Pattern.Ignore()))),
-        b2, Nil, List())), TString)
+        b2, Nil, List())), List(TString))
 
     val expected =
-      Val(p.id, trivalPredicate,
+      Val(List(p.id), trivalPredicate,
       If(p,
         jump(b1, sc),
         jump(b2)))
@@ -124,21 +124,21 @@ class PatternMatchingTests extends CoreTests {
       Clause(
         List(
           Condition.Patterns(Map(opt -> Pattern.Tag(SomeC, List(), List(SomeC, NoneC), List(Pattern.Any(v.id) -> TInt)))),
-          Condition.Run(Binding.Val(p.id, trivalPredicate)),
+          Condition.Run(Binding.Val(List(p.id), trivalPredicate)),
           Condition.Predicate(p)),
         b1, Nil, List(v)),
       Clause(
         List(
           Condition.Patterns(Map(opt -> Pattern.Ignore()))),
-        b2, Nil, List())), TUnit)
+        b2, Nil, List())), List(TUnit))
 
     // opt match {
     //   case Some(tmp) => val p = return v > 0; if (p) { b1(tmp) } else { b2() }
     //   case _ => b2()
     // }
-    val expected = Match(opt, TUnit,
+    val expected = Match(opt, List(TUnit),
       List((SomeC, BlockLit(Nil, Nil, List(ValueParam(tmp.id, tmp.tpe)), Nil,
-        Val(p.id, trivalPredicate, If(p,
+        Val(List(p.id), trivalPredicate, If(p,
           App(b1, Nil, List(tmp), Nil),
           App(b2, Nil, Nil, Nil)))))),
       Some(App(b2, Nil, Nil, Nil)))

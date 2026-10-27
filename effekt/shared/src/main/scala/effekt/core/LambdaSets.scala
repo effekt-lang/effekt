@@ -1229,7 +1229,7 @@ object LambdaSets extends Phase[CoreTransformed, CoreTransformed] {
             (vparams ++ capturedValues ++ lowered)
               .map(Type.substitute(_, noTypes, captureSubstitution)),
             (choices zip rewrittenBlocks).collect { case (None, block) => block }.toList,
-            Type.substitute(result, noTypes, captureSubstitution))
+            result.map(Type.substitute(_, noTypes, captureSubstitution)))
       }
 
     private def functionRef(owner: Callable, shape: Shape, target: Id): BlockVar =
@@ -1377,7 +1377,7 @@ object LambdaSets extends Phase[CoreTransformed, CoreTransformed] {
           rep.dispatcher,
           BlockType.Function(Nil, cparams, rep.tpe :: vparams, bparams, result),
           selectedCapture(rep.set))
-      case _: BlockType.Interface =>
+      case _ =>
         Context.abort(pretty"An implementation is dispatched through one of its operations")
     }
 
@@ -1469,6 +1469,8 @@ object LambdaSets extends Phase[CoreTransformed, CoreTransformed] {
             literal.vparams, literal.bparams, literal.body)
         }
         New(Implementation(interface, operations))
+      case other =>
+        Context.abort(pretty"Prompts and resumptions cannot be boxed")
     }
 
     private case class CaseLayout(
@@ -1618,7 +1620,7 @@ object LambdaSets extends Phase[CoreTransformed, CoreTransformed] {
                     targs.map(rewrite),
                     closureExpression(receiver, set, receiver.tpe) :: vargs.map(rewrite),
                     bargs.map(rewrite))
-                case _: BlockType.Interface =>
+                case _ =>
                   Context.abort(pretty"An operation must have a function type")
               }
               case None => super.rewrite(stmt)
@@ -1801,7 +1803,7 @@ object LambdaSets extends Phase[CoreTransformed, CoreTransformed] {
                 case BlockCase.Function(id) => Callable.Function(id)
                 case _ => Context.abort(pretty"A function lambda set contains a non-function case")
               }
-            case _: BlockType.Interface => ()
+            case _ => ()
           }
         }
         while pendingOperationDispatchers.nonEmpty do {
@@ -1987,98 +1989,101 @@ object LambdaSets extends Phase[CoreTransformed, CoreTransformed] {
         Entry.Open
     }
 
-    /** Analyze a statement and, when present, connect its result to a local
-      * boxed-value binder. Threading this destination through the fine-grained
-      * CBV spine avoids a second traversal and makes the value-flow boundary
-      * explicit.
+    /** Analyze a statement and, when present, connect each of its results to a
+      * local boxed-value binder. Threading these destinations through the
+      * fine-grained CBV spine avoids a second traversal and makes the
+      * value-flow boundary explicit.
       */
     private def statement(
       stmt: Stmt,
       env: Map[Id, Entry],
-      boxedDestination: Option[Id] = None
+      boxedDestinations: List[Option[Id]] = Nil
     ): Unit = stmt match {
       case Stmt.Def(id, binding, body) =>
         val entry = define(id, binding, env)
-        statement(body, env + (id -> entry), boxedDestination)
+        statement(body, env + (id -> entry), boxedDestinations)
 
       case Stmt.Let(id, binding, body) =>
         binding.tpe match {
           case _: ValueType.Boxed => boxFlows += BoxFlow(boxSource(binding, env), id)
           case _ => expression(binding, env)
         }
-        statement(body, env, boxedDestination)
+        statement(body, env, boxedDestinations)
 
       case Stmt.ImpureApp(_, callee, _, vargs, bargs, body) =>
         vargs.foreach(expression(_, env))
         calls += Call.Apply(value(callee, env), bargs.map(value(_, env)).toVector)
-        statement(body, env, boxedDestination)
+        statement(body, env, boxedDestinations)
 
-      case Stmt.Return(expr) => boxedDestination match {
-        case Some(destination) =>
-          val source = boxSource(expr, env)
-          boxFlows += BoxFlow(source, destination)
-          if source == BoxSource.Open then expression(expr, env)
-        case None => expression(expr, env)
+      case Stmt.Return(exprs) => exprs.zipWithIndex.foreach { (expr, index) =>
+        boxedDestinations.lift(index).flatten match {
+          case Some(destination) =>
+            val source = boxSource(expr, env)
+            boxFlows += BoxFlow(source, destination)
+            if source == BoxSource.Open then expression(expr, env)
+          case None => expression(expr, env)
+        }
       }
 
-      case Stmt.Val(id, binding, body) =>
-        binding.tpe match {
-          case _: ValueType.Boxed => statement(binding, env, Some(id))
-          case _ => statement(binding, env)
+      case Stmt.Val(ids, binding, body) =>
+        val destinations = (ids zip binding.tpe).map {
+          case (id, _: ValueType.Boxed) => Some(id)
+          case _ => None
         }
-        statement(body, env, boxedDestination)
+        statement(binding, env, destinations)
+        statement(body, env, boxedDestinations)
 
       case Stmt.App(callee, _, vargs, bargs) =>
         vargs.foreach(expression(_, env))
         calls += Call.Apply(value(callee, env), bargs.map(value(_, env)).toVector)
-        boxedDestination.foreach(destination => boxFlows += BoxFlow(BoxSource.Open, destination))
+        boxedDestinations.flatten.foreach(destination => boxFlows += BoxFlow(BoxSource.Open, destination))
 
       case Stmt.Invoke(receiver, method, _, _, vargs, bargs) =>
         vargs.foreach(expression(_, env))
         calls += Call.Invoke(value(receiver, env), method, bargs.map(value(_, env)).toVector)
-        boxedDestination.foreach(destination => boxFlows += BoxFlow(BoxSource.Open, destination))
+        boxedDestinations.flatten.foreach(destination => boxFlows += BoxFlow(BoxSource.Open, destination))
 
       case Stmt.If(cond, thn, els) =>
         expression(cond, env)
-        statement(thn, env, boxedDestination)
-        statement(els, env, boxedDestination)
+        statement(thn, env, boxedDestinations)
+        statement(els, env, boxedDestinations)
 
       case Stmt.Match(scrutinee, _, clauses, default) =>
         expression(scrutinee, env)
-        clauses.foreach { case (_, clause) => scope(clause, env, boxedDestination) }
-        default.foreach(statement(_, env, boxedDestination))
+        clauses.foreach { case (_, clause) => scope(clause, env, boxedDestinations) }
+        default.foreach(statement(_, env, boxedDestinations))
 
-      case Stmt.Region(body) => scope(body, env, boxedDestination)
+      case Stmt.Region(body) => scope(body, env, boxedDestinations)
 
       case Stmt.Alloc(id, init, _, body) =>
         expression(init, env)
-        statement(body, env + (id -> Entry.Open), boxedDestination)
+        statement(body, env + (id -> Entry.Open), boxedDestinations)
 
       case Stmt.Var(ref, init, _, body) =>
         expression(init, env)
-        statement(body, env + (ref -> Entry.Open), boxedDestination)
+        statement(body, env + (ref -> Entry.Open), boxedDestinations)
 
-      case Stmt.Get(_, _, _, _, body) => statement(body, env, boxedDestination)
+      case Stmt.Get(_, _, _, _, body) => statement(body, env, boxedDestinations)
 
       case Stmt.Put(_, _, value, body) =>
         expression(value, env)
-        statement(body, env, boxedDestination)
+        statement(body, env, boxedDestinations)
 
       // A shift can return from the reset without following an ordinary
       // `return` in its body. Without an effect-sensitive control-flow proof,
       // the result of a reset is therefore an open boxed value.
       case Stmt.Reset(body) =>
-        scope(body, env, boxedDestination)
-        boxedDestination.foreach(destination =>
+        scope(body, env, boxedDestinations)
+        boxedDestinations.flatten.foreach(destination =>
           boxFlows += BoxFlow(BoxSource.Open, destination))
 
       case Stmt.Shift(_, continuation, body) =>
         statement(body, env + (continuation.id -> Entry.Open))
-        boxedDestination.foreach(destination => boxFlows += BoxFlow(BoxSource.Open, destination))
+        boxedDestinations.flatten.foreach(destination => boxFlows += BoxFlow(BoxSource.Open, destination))
 
-      case Stmt.Resume(_, body) => statement(body, env, boxedDestination)
+      case Stmt.Resume(_, body) => statement(body, env, boxedDestinations)
       case Stmt.Hole(_, _) =>
-        boxedDestination.foreach(destination => boxFlows += BoxFlow(BoxSource.Open, destination))
+        boxedDestinations.flatten.foreach(destination => boxFlows += BoxFlow(BoxSource.Open, destination))
     }
 
     /** Analyze an immediately entered structural block without giving it a
@@ -2087,10 +2092,10 @@ object LambdaSets extends Phase[CoreTransformed, CoreTransformed] {
     private def scope(
       literal: BlockLit,
       env: Map[Id, Entry],
-      boxedDestination: Option[Id] = None
+      boxedDestinations: List[Option[Id]] = Nil
     ): Unit = {
       val parameters = literal.bparams.map(_.id -> Entry.Open).toMap
-      statement(literal.body, env ++ parameters, boxedDestination)
+      statement(literal.body, env ++ parameters, boxedDestinations)
     }
 
     private def expression(expr: Expr, env: Map[Id, Entry]): Unit = expr match {

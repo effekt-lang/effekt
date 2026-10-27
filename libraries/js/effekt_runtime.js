@@ -130,13 +130,11 @@ function CAPTURE(body) {
   }
 }
 
-const RETURN = (x, ks) => ks.rest.stack(x, ks.rest)
-
 // HANDLE(ks, ks, (p, ks, k) => { STMT })
-function RESET(prog, ks, k) {
+function RESET(prog, ret, ks, k) {
   const prompt = Symbol(); // gensym
   const rest = { stack: k, prompt: ks.prompt, arena: ks.arena, rest: ks.rest }
-  return prog(prompt, { stack: null, prompt, arena: null, rest }, RETURN)
+  return prog(prompt, { stack: null, prompt, arena: null, rest }, ret)
 }
 
 function SHIFT(p, body, ks, k) {

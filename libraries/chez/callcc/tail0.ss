@@ -58,25 +58,39 @@
 (define (run th)
   (define global (make-Stack '() (make-arena) (newPrompt)))
   (set! mk (list global))
-  (underflow
-   (call/cc
-    (lambda (k_1)
-      (set! base-k k_1)
-      ((call/cc (lambda (k_2)
-         (set! abort k_2)
-         (abort th))))))))
+  (call-with-values
+   (lambda ()
+     (call/cc
+      (lambda (k_1)
+        (set! base-k k_1)
+        ((call/cc (lambda (k_2)
+           (set! abort k_2)
+           (abort th)))))))
+   underflow))
 
-(define (underflow v)
-  (if (null? mk) v
-    (let* ([stack (car mk)]
-           [frames (Stack-frames stack)]
-           [arena (Stack-arena stack)]
-           [prompt (Stack-prompt stack)]
-           [rest  (cdr mk)])
-      (if (null? frames) (begin (set! mk rest) (underflow v))
-          (begin
-            (set! mk (cons (make-Stack (cdr frames) arena prompt) rest))
-            ((car frames) v))))))
+; The single-value case is kept separate, since it does not allocate.
+(define underflow
+  (case-lambda
+    [(v)
+      (if (null? mk) v
+        (let* ([stack (car mk)]
+               [frames (Stack-frames stack)]
+               [arena (Stack-arena stack)]
+               [prompt (Stack-prompt stack)]
+               [rest  (cdr mk)])
+          (if (null? frames) (begin (set! mk rest) (underflow v))
+              (begin
+                (set! mk (cons (make-Stack (cdr frames) arena prompt) rest))
+                ((car frames) v)))))]
+    [vs
+      (if (null? mk) (apply values vs)
+        (let* ([stack (car mk)]
+               [frames (Stack-frames stack)]
+               [rest  (cdr mk)])
+          (if (null? frames) (begin (set! mk rest) (apply underflow vs))
+              (begin
+                (set! mk (cons (make-Stack (cdr frames) (Stack-arena stack) (Stack-prompt stack)) rest))
+                (apply (car frames) vs)))))]))
 
 
 (define-syntax shift0-at
@@ -85,5 +99,7 @@
      (withSubCont
       P
       (lambda (s)
-         (let ([id (lambda (v) (pushSubCont s v))])
+         (let ([id (case-lambda
+                     [(v) (pushSubCont s v)]
+                     [vs (pushSubCont s (apply values vs))])])
            exp ...)))]))

@@ -35,13 +35,13 @@ class MonoTests extends CoreTests {
       val outer = Id("A")
       val inner = Id("A")
       val parameter = Id("f")
-      val thunk = BlockType.Function(Nil, Nil, Nil, Nil, ValueType.Var(inner))
+      val thunk = BlockType.Function(Nil, Nil, Nil, Nil, List(ValueType.Var(inner)))
       val schema = BlockType.Function(
         List(inner),
         Nil,
         List(ValueType.Boxed(thunk, Set.empty)),
         Nil,
-        ValueType.Var(inner)
+        List(ValueType.Var(inner))
       )
 
       Toplevel.Def(
@@ -51,7 +51,7 @@ class MonoTests extends CoreTests {
           Nil,
           Nil,
           List(BlockParam(parameter, schema, Set(parameter))),
-          Return(Literal((), Type.TUnit))
+          Return(List(Literal((), Type.TUnit)))
         )
       )
     }
@@ -232,7 +232,7 @@ class MonoTests extends CoreTests {
 
   test("solve: detects growth inside boxed types") {
     val recursiveBox: FlowType = Boxed(
-      MonoBlockType.Function(0, 0, Nil, Nil, variable("a", 0)),
+      MonoBlockType.Function(0, 0, Nil, Nil, List(variable("a", 0))),
       Set.empty)
     val constraints = List(
       Flow(Vector(recursiveBox), id("a")),
@@ -293,10 +293,10 @@ class MonoTests extends CoreTests {
 
   test("solve: free variables inside boxed types are solved") {
     val openBox: FlowType = Boxed(
-      MonoBlockType.Function(0, 0, Nil, Nil, variable("a", 0)),
+      MonoBlockType.Function(0, 0, Nil, Nil, List(variable("a", 0))),
       Set.empty)
     val closedBox: GroundType = Boxed(
-      MonoBlockType.Function(0, 0, Nil, Nil, TInt),
+      MonoBlockType.Function(0, 0, Nil, Nil, List(TInt)),
       Set.empty)
     val constraints = List(
       Flow(Vector(openBox), id("b")),
@@ -309,7 +309,7 @@ class MonoTests extends CoreTests {
 
   test("solve: unresolved variables inside boxed types are not ground") {
     val openBox: FlowType = Boxed(
-      MonoBlockType.Function(0, 0, Nil, Nil, variable("a", 0)),
+      MonoBlockType.Function(0, 0, Nil, Nil, List(variable("a", 0))),
       Set.empty)
 
     assertEquals(Mono.solve(List(Flow(Vector(openBox), id("b")))), Map(
@@ -323,7 +323,7 @@ class MonoTests extends CoreTests {
         1,
         List(Bound(0, 0), Boxed(MonoBlockType.Interface(id("Thunk"), Nil), Set(MonoCapture.Bound(0, 0)))),
         Nil,
-        Bound(0, 0)),
+        List(Bound(0, 0))),
       Set.empty)
 
     assertEquals(Mono.solve(List(Flow(Vector(polymorphicBox), id("a")))), Map(
@@ -332,7 +332,7 @@ class MonoTests extends CoreTests {
 
   test("solve: ill-scoped bound variables inside boxed types are not ground") {
     val illScoped: FlowType = Boxed(
-      MonoBlockType.Function(0, 0, Nil, Nil, Bound(0, 0)),
+      MonoBlockType.Function(0, 0, Nil, Nil, List(Bound(0, 0))),
       Set.empty)
 
     assertEquals(Mono.solve(List(Flow(Vector(illScoped), id("a")))), Map(
@@ -355,9 +355,12 @@ class MonoTests extends CoreTests {
       val tparams = if tarity == 0 then "" else List.tabulate(tarity)(i => s"'$i").mkString("[", ", ", "]")
       val values = vparams.map(showFlowType).mkString("(", ", ", ")")
       val blocks = if bparams.isEmpty then "" else bparams.map(showBlockType).mkString("{", ", ", "}")
-      s"$tparams$values$blocks => ${showFlowType(result)}"
+      s"$tparams$values$blocks => ${result.map(showFlowType).mkString(", ")}"
     case MonoBlockType.Interface(name, Nil) => name.name.name
     case MonoBlockType.Interface(name, targs) => s"${name.name.name}[${targs.map(showFlowType).mkString(", ")}]"
+    case MonoBlockType.Prompt(answer) => s"Prompt[${answer.map(showFlowType).mkString(", ")}]"
+    case MonoBlockType.Resume(result, answer) =>
+      s"(${result.map(showFlowType).mkString(", ")}) ~> (${answer.map(showFlowType).mkString(", ")})"
   }
 
   private def showCaptures(captures: Set[MonoCapture]): String =

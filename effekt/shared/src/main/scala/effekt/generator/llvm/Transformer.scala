@@ -223,18 +223,18 @@ object Transformer {
         emit(callLabel(LocalReference(methodType, functionName), LocalReference(objectType, objectName) +: arguments))
         RetVoid()
 
-      case machine.Var(ref @ machine.Variable(name, machine.Type.Reference(tpe)), init, returnType, rest) =>
+      case machine.Var(ref @ machine.Variable(name, machine.Type.Reference(tpe)), init, returnTypes, rest) =>
         val environment = List(init)
         val returnAddressName = freshName("returnAddress")
-        val returnValue = freshName("returnValue")
-        val parameters = List(Parameter(transform(returnType), returnValue))
+        val returnValues = returnTypes.map { returnType => LocalReference(transform(returnType), freshName("returnValue")) }
+        val parameters = returnValues.map { case LocalReference(typ, name) => Parameter(typ, name) }
         defineLabel(returnAddressName, parameters) {
           emit(Comment(s"var $name / return address"))
           popEnvironmentFrom(getStack(), environment)
           eraseValue(init)
           val nextReturn = LocalReference(returnAddressType, freshName("returnAddress"))
           popReturnAddressFrom(getStack(), nextReturn.name)
-          emit(callLabel(nextReturn, List(LocalReference(transform(returnType), returnValue))))
+          emit(callLabel(nextReturn, returnValues))
           RetVoid()
         }
 
