@@ -1,3 +1,5 @@
+// Recursive records stay as they are.
+
 type Node {
   MkNode(value: Int, next: OptNode)
 }

@@ -110,7 +110,8 @@ trait CoreTests extends munit.FunSuite {
           assert(headers.nonEmpty, "fixture has no /// steps")
           assertEquals(sections.size, headers.size + 1)
 
-          val defaultModule = s"core/tests/${file.getName.stripSuffix(".ir")}"
+          // fixtures may be numbered (e.g. `01_simple.ir`) to suggest a reading order
+          val defaultModule = s"core/tests/${file.getName.stripSuffix(".ir").replaceFirst("^[0-9]+_", "")}"
           def asModule(source: String, path: String): String =
             if source.trim.startsWith("module ") then source else s"module $path\n\n$source"
 

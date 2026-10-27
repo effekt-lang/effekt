@@ -1,3 +1,5 @@
+// A local variable of record type becomes one local variable per field.
+
 type Pt {
   MkPt(x: Int, y: Int)
 }

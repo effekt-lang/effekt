@@ -1,3 +1,5 @@
+// The basic idea: a record parameter becomes one parameter per field, and a returned record becomes multiple return values.
+
 type Pt {
   MkPt(x: Int, y: Int)
 }

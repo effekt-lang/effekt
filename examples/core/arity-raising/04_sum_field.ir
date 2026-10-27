@@ -1,3 +1,5 @@
+// Fields of other data types are flattened too.
+
 type Pt {
   MkPt(x: Int, y: Int)
 }

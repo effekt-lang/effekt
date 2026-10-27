@@ -1,3 +1,5 @@
+// Edge case: a match with no clauses.
+
 type Pt {
   MkPt(x: Int, y: Int)
 }
