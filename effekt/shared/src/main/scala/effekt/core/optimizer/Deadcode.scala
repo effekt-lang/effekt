@@ -25,7 +25,7 @@ class Deadcode(reachable: Map[Id, Usage])
     case Stmt.Let(id, binding, body) if unused(id) => rewrite(body)
 
     // Remove local unused 'val's as long as they are pure calls.
-    case Stmt.Val(id, binding, body) if unused(id) && isPureCall(binding) => rewrite(body)
+    case Stmt.Val(ids, binding, body) if ids.forall(unused) && isPureCall(binding) => rewrite(body)
 
     case Stmt.Reset(body) =>
       rewrite(body).map {

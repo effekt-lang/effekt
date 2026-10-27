@@ -229,20 +229,20 @@ object Transformer {
         transform(rest).flatMap { rest =>
           transform(vargs, bargs).run { (values, blocks) =>
             coerce(values, vparamTypes map transformExtern).run { coerced =>
-              Trampoline.Done(foreignCall(variable, transform(blockName), coerced ++ blocks, transformExtern(resultType), rest))
+              Trampoline.Done(foreignCall(variable, transform(blockName), coerced ++ blocks, transformExtern(core.Type.single(resultType)), rest))
             }
           }
         }
 
-      case core.Return(expr) =>
-        transform(expr).run { value => Trampoline.Done(Return(List(value))) }
+      case core.Return(exprs) =>
+        transform(exprs).run { values => Trampoline.Done(Return(values)) }
 
-      case core.Val(id, binding, rest) =>
+      case core.Val(ids, binding, rest) =>
         val tpe = binding.tpe
         transform(rest).flatMap { rest =>
           transform(binding).map { binding =>
             PushFrame(
-              Clause(List(Variable(transform(id), transform(tpe))), rest), binding)
+              Clause((ids zip tpe).map { (id, tpe) => Variable(transform(id), transform(tpe)) }, rest), binding)
            }
         }
 
@@ -264,8 +264,8 @@ object Transformer {
                   // TODO better way to deal with extern async functions
                   annotatedTpe match {
                     case core.BlockType.Function(_, _, vparamTypes, _, resultType) =>
-                      val returnType = transformExtern(resultType)
-                      val expectedType = transform(stmt.tpe)
+                      val returnType = transformExtern(core.Type.single(resultType))
+                      val expectedType = transform(core.Type.single(stmt.tpe))
                       coerce(values, vparamTypes map transformExtern).run { coerced =>
                         val jump = Jump(Label(transform(id), blockParams ++ freeParams), coerced ++ blocks ++ freeParams)
                         if returnType == expectedType then Trampoline.Done(jump)
@@ -348,7 +348,7 @@ object Transformer {
       case core.Reset(core.BlockLit(Nil, cparams, Nil, List(prompt), body)) =>
         noteParameters(List(prompt))
 
-        val answerType = stmt.tpe
+        val answerType = core.Type.single(stmt.tpe)
         val variable = Variable(freshName("returned"), transform(answerType))
         val returnClause = Clause(List(variable), Return(List(variable)))
 
@@ -358,7 +358,7 @@ object Transformer {
 
       case core.Shift(prompt, k, body) =>
 
-        noteParameter(k.id, core.Type.TResume(core.Type.TUnit, core.Type.TUnit))
+        noteParameter(k.id, core.Type.TResume(List(core.Type.TUnit), core.Type.TUnit))
 
         transform(body).map { body =>
           Shift(Variable(transform(k.id), Type.Stack()), Variable(transform(prompt.id), Type.Prompt()), body)
@@ -374,7 +374,7 @@ object Transformer {
         noteParameters(List(region))
 
         // Variables allocated in the region live in frames below the reset, so we box the result of the region
-        transform(body.tpe) match {
+        transform(core.Type.single(body.tpe)) match {
           case Positive() =>
             val returned = Variable(freshName("returned"), Positive())
             transform(body).map { body =>
@@ -410,7 +410,7 @@ object Transformer {
         // TODO ref should be BlockParam
         noteParameter(ref, core.Type.TState(init.tpe))
 
-        val returnType = transform(body.tpe)
+        val returnType = transform(core.Type.single(body.tpe))
         transform(body).flatMap { body =>
           transform(init).map { value =>
             Var(Variable(transform(ref), Type.Reference(value.tpe)), value, returnType, body)
@@ -543,7 +543,7 @@ object Transformer {
     case core.PureApp(core.BlockVar(blockName, core.BlockType.Function(_, _, vparamTypes, _, resultType), _), _, vargs) =>
       transform(vargs).flatMap { values =>
         coerce(values, vparamTypes map transformExtern).flatMap { coerced =>
-          shift { k => foreignCall(variable, transform(blockName), coerced, transformExtern(resultType), k(variable)) }
+          shift { k => foreignCall(variable, transform(blockName), coerced, transformExtern(core.Type.single(resultType)), k(variable)) }
         }
       }
 

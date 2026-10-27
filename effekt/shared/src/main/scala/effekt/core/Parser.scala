@@ -387,7 +387,7 @@ class CoreParsers(names: Names) extends EffektLexers {
   // ----------
   lazy val stmt: P[Stmt] =
     ( `{` ~/> stmts <~ `}`
-    | `return` ~> expr ^^ Stmt.Return.apply
+    | `return` ~> manySep(expr, `,`) ^^ Stmt.Return.apply
     | `reset` ~> blockLit ^^ Stmt.Reset.apply
     | `shift` ~> maybeParens(blockVar) ~ (`{` ~> blockParam) ~ (`=>` ~/> stmts <~ `}`) ^^ {
         case p ~ k ~ body => Stmt.Shift(p, k, body)
@@ -399,7 +399,7 @@ class CoreParsers(names: Names) extends EffektLexers {
     }
     | (`if` ~> `(` ~/> expr <~ `)`) ~ stmt ~ (`else` ~> stmt) ^^ Stmt.If.apply
     | `region` ~> blockLit ^^ Stmt.Region.apply
-    | `<>` ~> (`:` ~> valueType) ~ (`@` ~> (stringLiteral <~ `:`) ~ (integerLiteral <~ `:`) ~ integerLiteral) ^^ {
+    | `<>` ~> (`:` ~> resultTypes) ~ (`@` ~> (stringLiteral <~ `:`) ~ (integerLiteral <~ `:`) ~ integerLiteral) ^^ {
       case (tpe ~ (name ~ from ~ to)) =>
         val source = if (name.startsWith("file://")) {
           kiama.util.FileSource(name.stripPrefix("file://"))
@@ -410,8 +410,8 @@ class CoreParsers(names: Names) extends EffektLexers {
         }
         Hole(tpe, effekt.source.Span(source, from.toInt, to.toInt))
       }
-    | `<>` ~> (`:` ~> valueType) ^^ { tpe => Hole(tpe, effekt.source.Span.missing) }
-    | (expr <~ `match`) ~/ (`[` ~> valueType <~ `]`) ~ (`{` ~> many(clause) <~ `}`) ~ (`else` ~> stmt).? ^^ Stmt.Match.apply
+    | `<>` ~> (`:` ~> resultTypes) ^^ { tpe => Hole(tpe, effekt.source.Span.missing) }
+    | (expr <~ `match`) ~/ (`[` ~> manySep(valueType, `,`) <~ `]`) ~ (`{` ~> many(clause) <~ `}`) ~ (`else` ~> stmt).? ^^ Stmt.Match.apply
     )
 
   lazy val stmts: P[Stmt] =
@@ -434,8 +434,8 @@ class CoreParsers(names: Names) extends EffektLexers {
       case name ~ (tparams, cparams, vparams, bparams) ~ body ~ rest =>
         Stmt.Def(name, BlockLit(tparams, cparams, vparams, bparams, body), rest)
     }
-      | `val` ~> id ~ maybeTypeAnnotation ~ (`=` ~> stmt) ~ (`;` ~> stmts) ^^ {
-      case id ~ tpe ~ binding ~ body => Val(id, binding, body)
+      | `val` ~> manySep(id <~ maybeTypeAnnotation, `,`) ~ (`=` ~> stmt) ~ (`;` ~> stmts) ^^ {
+      case ids ~ binding ~ body => Val(ids, binding, body)
     }
       | `var` ~> id ~ (`in` ~> id) ~ (`=` ~> expr) ~ (`;` ~> stmts) ^^ { case id ~ region ~ init ~ body => Alloc(id, init, region, body) }
       | `var` ~> id ~ (`@` ~> id) ~ (`=` ~> expr) ~ (`;` ~> stmts) ^^ { case id ~ cap ~ init ~ body => Var(id, init, cap, body) }
@@ -568,7 +568,7 @@ class CoreParsers(names: Names) extends EffektLexers {
     id ~ maybeTypeArgs ^^ { case id ~ targs => ValueType.Data(id, targs) : ValueType.Data }
 
   lazy val blockType: P[BlockType] =
-    ( maybeTypeParams ~ maybeValueTypes ~ many(blockTypeParam) ~ (`=>` ~/> primValueType) ^^ {
+    ( maybeTypeParams ~ maybeValueTypes ~ many(blockTypeParam) ~ (`=>` ~/> (`(` ~> manySep(valueType, `,`) <~ `)` | primValueType ^^ { tpe => List(tpe) })) ^^ {
       case tparams ~ vparams ~ bcparams ~ result =>
         val (cparams, bparams) = bcparams.unzip
         BlockType.Function(tparams, cparams, vparams, bparams, result)
@@ -580,6 +580,12 @@ class CoreParsers(names: Names) extends EffektLexers {
   lazy val maybeValueTypes: P[List[ValueType]] =
     ( `(` ~> manySep(valueType, `,`) <~ `)`
     | success(Nil)
+    )
+
+  // a statement returns either a single value, or a parenthesized list of values
+  lazy val resultTypes: P[List[ValueType]] =
+    ( valueType ^^ { tpe => List(tpe) }
+    | `(` ~> manySep(valueType, `,`) <~ `)`
     )
 
   lazy val maybeTypeAnnotation: P[Option[ValueType]] =

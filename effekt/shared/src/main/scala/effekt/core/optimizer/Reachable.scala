@@ -106,7 +106,7 @@ class Reachable(
       case BlockType.Function(tparams, cparams, vparams, bparams, result) =>
         vparams.foreach(process)
         bparams.foreach(process)
-        process(result)
+        result.foreach(process)
       case BlockType.Interface(name, targs) => process(name); targs.foreach(process)
     }
 
@@ -126,8 +126,8 @@ class Reachable(
       // TODO what to do here?
       // process(body)(using defs + (id -> binding))
       process(body)
-    case Stmt.Return(expr) => process(expr)
-    case Stmt.Val(id, binding, body) => process(binding); process(body)
+    case Stmt.Return(exprs) => exprs.foreach(process)
+    case Stmt.Val(ids, binding, body) => process(binding); process(body)
     case Stmt.App(callee, targs, vargs, bargs) =>
       process(callee)
       targs.foreach(process)
@@ -144,7 +144,7 @@ class Reachable(
     case Stmt.If(cond, thn, els) => process(cond); process(thn); process(els)
     case Stmt.Match(scrutinee, tpe, clauses, default) =>
       process(scrutinee)
-      process(tpe)
+      tpe.foreach(process)
       clauses.foreach { case (id, clause) => process(clause) }
       default.foreach(process)
     case Stmt.Alloc(id, init, region, body) =>
@@ -161,7 +161,7 @@ class Reachable(
     case Stmt.Shift(prompt, k, body) => process(prompt); process(k); process(body)
     case Stmt.Resume(k, body) => process(k); process(body)
     case Stmt.Region(body) => process(body)
-    case Stmt.Hole(tpe, span) => process(tpe)
+    case Stmt.Hole(tpe, span) => tpe.foreach(process)
   }
 
   def process(e: Expr)(using defs: Definitions): Unit = e match {

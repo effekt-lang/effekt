@@ -39,7 +39,7 @@ class RenamerTests extends CoreTests {
           case m: ModuleDecl =>
             m.definitions.foreach { d => isFresh(d.id) }
           case d: Def => isFresh(d.id)
-          case v: Val => isFresh(v.id)
+          case v: Val => v.ids.foreach(isFresh)
           case l: Let => isFresh(l.id)
           case d: Declaration => isFresh(d.id)
           case e: Extern.Def =>

@@ -181,6 +181,44 @@ class OptimizerTests extends CoreTests {
     normalize(input, expected)
   }
 
+  test("multiple return values are bound positionally"){
+    val input =
+      """ def main = { () =>
+        |   val a, b = return 1, 2;
+        |   return b:Int, a:Int
+        | }
+        |""".stripMargin
+
+    val expected =
+      """ def main = { () =>
+        |   let a = 1
+        |   let b = 2
+        |   return b:Int, a:Int
+        | }
+        |""".stripMargin
+
+    normalize(input, expected)
+  }
+
+  test("inline function with multiple return values"){
+    val input =
+      """ def swap = { (x: Int, y: Int) => return y:Int, x:Int }
+        | def main = { () =>
+        |   val a, b = (swap : (Int, Int) => (Int, Int) @ {})(1, 2);
+        |   return a:Int
+        | }
+        |""".stripMargin
+
+    val expected =
+      """ def main = { () =>
+        |   let a = 2
+        |   return a:Int
+        | }
+        |""".stripMargin
+
+    normalize(input, expected)
+  }
+
   test("inline higher order function"){
     val input =
       """ def foo = { (n: Int) => return n:Int }

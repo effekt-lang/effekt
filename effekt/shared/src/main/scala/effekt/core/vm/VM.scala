@@ -136,7 +136,7 @@ def show(stack: Stack): String = stack match {
 
 def show(frame: Frame): String = frame match {
   case Frame.Var(x, value) => s"${util.show(x)}=${show(value)}"
-  case Frame.Val(x, body, env) => s"val ${util.show(x)}"
+  case Frame.Val(xs, body, env) => s"val ${xs.map(util.show).mkString(", ")}"
   case Frame.Region(r, values) => s"region ${r} {${values.map {
     case (id, value) => s"${util.show(id)}=${show(value)}}"
   }.mkString(", ")}}"
@@ -148,7 +148,7 @@ enum Frame {
   // mutable state
   case Var(x: Address, value: Value)
   // sequencing
-  case Val(x: Id, body: Stmt, env: Env)
+  case Val(xs: List[Id], body: Stmt, env: Env)
   // local regions
   case Region(r: Address, values: Heap)
 }
@@ -156,7 +156,7 @@ enum Frame {
 type Heap = Map[Address, Value]
 
 enum State {
-  case Done(result: Value)
+  case Done(results: List[Value])
   case Step(stmt: Stmt, env: Env, stack: Stack, heap: Heap)
 }
 
@@ -164,25 +164,25 @@ class Interpreter(instrumentation: Instrumentation, runtime: Runtime) {
 
   // TODO maybe replace region values by integers instead of Id
 
-  private def returnWith(value: Value, env: Env, stack: Stack, heap: Heap): State =
+  private def returnWith(values: List[Value], env: Env, stack: Stack, heap: Heap): State =
     @tailrec
     def go(frames: List[Frame], prompt: Address, stack: Stack): State =
       frames match {
-        case Frame.Val(x, body, frameEnv) :: rest =>
+        case Frame.Val(xs, body, frameEnv) :: rest =>
           instrumentation.popFrame()
-          State.Step(body, frameEnv.bind(x, value), Stack.Segment(rest, prompt, stack), heap)
+          State.Step(body, frameEnv.bindValues(xs zip values), Stack.Segment(rest, prompt, stack), heap)
         // free the mutable state
         case Frame.Var(x, value) :: rest => go(rest, prompt, stack)
         // free the region
         case Frame.Region(x, values) :: rest => go(rest, prompt, stack)
         // this segment is exhausted, continue with the next one
         case Nil => stack match {
-          case Stack.Empty => State.Done(value)
+          case Stack.Empty => State.Done(values)
           case Stack.Segment(frames, prompt, rest) => go(frames, prompt, rest)
         }
       }
     stack match {
-      case Stack.Empty => State.Done(value)
+      case Stack.Empty => State.Done(values)
       case Stack.Segment(frames, prompt, rest) =>
         go(frames, prompt, rest)
     }
@@ -261,13 +261,12 @@ class Interpreter(instrumentation: Instrumentation, runtime: Runtime) {
             }
           State.Step(body, env.bind(id, result), stack, heap)
 
-        case Stmt.Return(expr) =>
-          val v = eval(expr, env)
-          returnWith(v, env, stack, heap)
+        case Stmt.Return(exprs) =>
+          returnWith(exprs.map(eval(_, env)), env, stack, heap)
 
-        case Stmt.Val(id, binding, body) =>
+        case Stmt.Val(ids, binding, body) =>
           instrumentation.pushFrame()
-          State.Step(binding, env, push(Frame.Val(id, body, env), stack), heap)
+          State.Step(binding, env, push(Frame.Val(ids, body, env), stack), heap)
 
         case Stmt.App(Block.BlockVar(id, _, _), targs, vargs, bargs) =>
           @tailrec
@@ -460,7 +459,7 @@ class Interpreter(instrumentation: Instrumentation, runtime: Runtime) {
     }
 
   @tailrec
-  private def run(s: State): Value = s match {
+  private def run(s: State): List[Value] = s match {
     case State.Done(result) => result
     case other =>
       val next = try {
@@ -539,7 +538,8 @@ class Interpreter(instrumentation: Instrumentation, runtime: Runtime) {
     // First, we run all the toplevel vals:
     m.definitions.collect {
       case effekt.core.Toplevel.Val(id, binding) =>
-        toplevels = toplevels.updated(id, run(State.Step(binding, env, Stack.Toplevel, Map.empty)))
+        val List(value) = run(State.Step(binding, env, Stack.Toplevel, Map.empty)): @unchecked
+        toplevels = toplevels.updated(id, value)
     }
 
     val initial = State.Step(mainFun.body, env, Stack.Toplevel, Map.empty)

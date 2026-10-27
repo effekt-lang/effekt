@@ -57,8 +57,8 @@ object StaticResumptions {
     }
   }
 
-  /** A `Stmt.Shift` + what we need here: the resumption `k` it binds, the `result` that `k` resumes with, and the body that uses it. */
-  case class Shift(stmt: Stmt.Shift, k: Id, result: ValueType) {
+  /** A `Stmt.Shift` + what we need here: the resumption `k` it binds, the `result` values that `k` resumes with, and the body that uses it. */
+  case class Shift(stmt: Stmt.Shift, k: Id, result: List[ValueType]) {
     def body: Stmt = stmt.body
     def withBody(body: Stmt): Shift = copy(stmt = stmt.copy(body = body))
 
@@ -156,11 +156,11 @@ object StaticResumptions {
    * The part of a continuation a join point re-creates.
    * Has a [[prompt]] and the `val` [[frame]] `val y = []; rest` if there is one.
    */
-  case class Continuation(prompt: Prompt, binder: Option[(Id, Stmt)]) {
+  case class Continuation(prompt: Prompt, binder: Option[(List[Id], Stmt)]) {
     /** [[ reset { p => val y = hole; rest } ]] */
     def fill(filling: Stmt): Stmt =
       Stmt.Reset(BlockLit(Nil, List(prompt.capture), Nil, List(prompt.param), binder match {
-        case Some((y, rest)) => Stmt.Val(y, filling, rest)
+        case Some((ys, rest)) => Stmt.Val(ys, filling, rest)
         case None => filling
       }))
   }
@@ -185,10 +185,10 @@ object StaticResumptions {
     //    [[ val y = E[ shift(p) { {k} => b } ]; rest ]]
     //      ~> def j(y) = reset { p' => rest }; [[ E[ b[ resume(k){return e} := j(e) ] ] ]]
     //    where every other leaf `l` of `E` becomes `val y = l; j(y)`
-    case Stmt.Val(y, binding @ prompt.ShiftsWithin(shifts), rest) if joinable =>
-      joinpoint(Continuation(prompt, Some(y -> rest)), binding.tpe, shifts) { jump =>
+    case Stmt.Val(ys, binding @ prompt.ShiftsWithin(shifts), rest) if joinable =>
+      joinpoint(Continuation(prompt, Some(ys -> rest)), binding.tpe, shifts) { jump =>
         reduceShifts(prompt, jumpsToJoin(prompt, binding, jump), joinable = true)
-      }.getOrElse(Stmt.Val(y, binding, reduceShifts(prompt, rest, joinable)))
+      }.getOrElse(Stmt.Val(ys, binding, reduceShifts(prompt, rest, joinable)))
 
     // 3) a `var` or `region` is popped by the answer, so the shifts below it still stand at the prompt;
     //    but it cannot be copied, so from here only 1a) applies
@@ -223,23 +223,23 @@ object StaticResumptions {
   private def jumpsToJoin(prompt: Prompt, stmt: Stmt, jump: Stmt => Stmt, transparent: Set[Id] = Set.empty): Stmt =
     tailPositions(stmt) match {
       case Some(positions) =>
-        retypeAnswer(positions.rewrite(jumpsToJoin(prompt, _, jump, transparent ++ positions.transparent)), prompt.answer)
+        retypeAnswer(positions.rewrite(jumpsToJoin(prompt, _, jump, transparent ++ positions.transparent)), List(prompt.answer))
       case None => stmt match {
         case prompt.Shift(shift) if shift.resumesOnly => shift.replaceResumptions(jump)
 
         // [[ f(…) ]] = f(…)   a tail call to a block only ever tail-called
         case Stmt.App(Block.BlockVar(f, BlockType.Function(tps, cps, vps, bps, _), capt), targs, vargs, bargs) if transparent.contains(f) =>
-          Stmt.App(Block.BlockVar(f, BlockType.Function(tps, cps, vps, bps, prompt.answer), capt), targs, vargs, bargs)
+          Stmt.App(Block.BlockVar(f, BlockType.Function(tps, cps, vps, bps, List(prompt.answer)), capt), targs, vargs, bargs)
 
         // an exit that never returns is no exit
-        case leaf if leaf.tpe == Type.TBottom => retypeAnswer(leaf, prompt.answer)
+        case leaf if leaf.tpe == List(Type.TBottom) => retypeAnswer(leaf, List(prompt.answer))
 
         // a leaf produces the frame's value where it stands, so it jumps with that value: the frames
         // moved into the join point, the leaf did not
         case leaf: Stmt.Return => jump(leaf)
         case leaf =>
-          val y = Id("y")
-          Stmt.Val(y, leaf, jump(Stmt.Return(Expr.ValueVar(y, leaf.tpe))))
+          val ys = leaf.tpe.map { _ => Id("y") }
+          Stmt.Val(ys, leaf, jump(Stmt.Return((ys zip leaf.tpe).map(Expr.ValueVar.apply))))
       }
     }
 
@@ -263,7 +263,7 @@ object StaticResumptions {
    *
    * @param shifts the shifts whose shifts jump here, which decide the form it takes
    */
-  private def joinpoint(continuation: Continuation, result: ValueType, shifts: List[Shift])
+  private def joinpoint(continuation: Continuation, result: List[ValueType], shifts: List[Shift])
                        (scope: (Stmt => Stmt) => Stmt): Option[Stmt] = boundary {
     val fresh: Map[Id, Id] = continuation.prompt.names.map { id => id -> Id(id) }.toMap
     object renaming extends Tree.Rewrite {
@@ -274,7 +274,7 @@ object StaticResumptions {
       free.blocks.toMap.exists { case (id, (tpe, capt)) => !fresh.contains(id) && (capt ++ captures(tpe)).exists(fresh.contains) } ||
         free.values.toMap.exists { case (id, tpe) => !fresh.contains(id) && captures(tpe).exists(fresh.contains) }
     }
-    if (captures(result).exists(fresh.contains)) break(None)
+    if (result.flatMap(captures).exists(fresh.contains)) break(None)
 
     val j = Id("j")
 
@@ -291,13 +291,13 @@ object StaticResumptions {
       stmt
     }
 
-    /** `def j(y) = reset { p => E[return y] }` */
+    /** `def j(y…) = reset { p => E[return y…] }` */
     def takingAValue: Stmt = {
-      val y = ValueParam(Id("y"), result)
-      val jDef = BlockLit(Nil, Nil, List(y), Nil, frames(Stmt.Return(Expr.ValueVar(y.id, y.tpe))))
+      val ys = result.map { tpe => ValueParam(Id("y"), tpe) }
+      val jDef = BlockLit(Nil, Nil, ys, Nil, frames(Stmt.Return(ys.map { y => Expr.ValueVar(y.id, y.tpe) })))
       val jVar = Block.BlockVar(j, jDef.tpe, jDef.capt)
       Stmt.Def(j, jDef, scope { stmt => entering(stmt) match {
-        case Stmt.Return(e) => Stmt.App(jVar, Nil, List(e), Nil)
+        case Stmt.Return(es) => Stmt.App(jVar, Nil, es, Nil)
         case _ => break(None)
       }})
     }
@@ -327,7 +327,7 @@ object StaticResumptions {
 
   private def captures(tpe: BlockType): Captures = tpe match {
     case BlockType.Function(_, cparams, vparams, bparams, result) =>
-      (vparams.flatMap(captures) ++ bparams.flatMap(captures) ++ captures(result)).toSet -- cparams
+      (vparams.flatMap(captures) ++ bparams.flatMap(captures) ++ result.flatMap(captures)).toSet -- cparams
     case BlockType.Interface(_, targs) => targs.flatMap(captures).toSet
   }
 
@@ -366,14 +366,14 @@ object StaticResumptions {
 
         // an exit that never returns is no exit
         case h: Stmt.Hole => retypeAnswer(h, result)
-        case exit if atPrompt || exit.tpe == Type.TBottom => retypeAnswer(exit, result)
+        case exit if atPrompt || exit.tpe == List(Type.TBottom) => retypeAnswer(exit, result)
         case _ => break(None)
       }
     }
     Some(go(shift.body, Set.empty))
   }
 
-  private def retypeAnswer(stmt: Stmt, tpe: ValueType): Stmt = stmt match {
+  private def retypeAnswer(stmt: Stmt, tpe: List[ValueType]): Stmt = stmt match {
     case Stmt.Match(scrutinee, _, clauses, default) => Stmt.Match(scrutinee, tpe, clauses, default)
     case Stmt.Hole(_, span) => Stmt.Hole(tpe, span)
     case other => other
@@ -407,8 +407,8 @@ object StaticResumptions {
       if tailCalledOnly(id, body) && tailCalledOnly(id, inner) =>
         Some(TailPositions(f => Stmt.Def(id, BlockLit(tps, cps, vps, bps, f(inner)), f(body)), Free.empty, Set(id)))
 
-    case Stmt.Val(id, binding, body) =>
-      Some(TailPositions(f => Stmt.Val(id, binding, f(body)), binding.free))
+    case Stmt.Val(ids, binding, body) =>
+      Some(TailPositions(f => Stmt.Val(ids, binding, f(body)), binding.free))
     case Stmt.Let(id, binding, body) =>
       Some(TailPositions(f => Stmt.Let(id, binding, f(body)), binding.free))
     case Stmt.ImpureApp(id, callee, targs, vargs, bargs, body) =>

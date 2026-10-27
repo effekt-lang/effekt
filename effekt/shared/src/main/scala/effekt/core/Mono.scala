@@ -42,7 +42,7 @@ object Mono extends Phase[CoreTransformed, CoreTransformed] {
       carity: Int,
       vparams: List[MonoValueType[V]],
       bparams: List[MonoBlockType[V]],
-      result: MonoValueType[V]
+      result: List[MonoValueType[V]]
     )
     case Interface(name: Id, targs: List[MonoValueType[V]])
   }
@@ -95,7 +95,7 @@ object Mono extends Phase[CoreTransformed, CoreTransformed] {
             cparams.size,
             vparams.map(valueType),
             bparams.map(blockType),
-            valueType(result)
+            result.map(valueType)
           )
 
         case core.BlockType.Interface(name, targs) =>
@@ -125,7 +125,7 @@ object Mono extends Phase[CoreTransformed, CoreTransformed] {
           val locallyBound = bound ++ tparams
           vparams.flatMap(freeTypeVariables(_, locallyBound)) ++
             bparams.flatMap(freeTypeVariables(_, locallyBound)) ++
-            freeTypeVariables(result, locallyBound)
+            result.flatMap(freeTypeVariables(_, locallyBound))
 
         case core.BlockType.Interface(_, targs) =>
           targs.flatMap(freeTypeVariables(_, bound))
@@ -143,7 +143,7 @@ object Mono extends Phase[CoreTransformed, CoreTransformed] {
           val locallyBound = bound ++ cparams
           vparams.flatMap(freeCaptureVariables(_, locallyBound)).toSet ++
             bparams.flatMap(freeCaptureVariables(_, locallyBound)) ++
-            freeCaptureVariables(result, locallyBound)
+            result.flatMap(freeCaptureVariables(_, locallyBound))
 
         case core.BlockType.Interface(_, targs) =>
           targs.flatMap(freeCaptureVariables(_, bound)).toSet
@@ -315,7 +315,7 @@ object Mono extends Phase[CoreTransformed, CoreTransformed] {
               case other =>
                 rewrite(other)(using local)
             },
-            rewrite(result)(using local)
+            result.map(rewrite(_)(using local))
           )
 
         case BlockType.Interface(name, targs) =>
@@ -584,7 +584,7 @@ object Mono extends Phase[CoreTransformed, CoreTransformed] {
         val local = env.bind(owner, tparams, offset)
         valueTypes(vparams, local)._2 ++
           bparams.flatMap(blockType(_, local)._2) ++
-          valueType(result, local)._2
+          valueTypes(result, local)._2
     }
 
     private def parameters(vparams: List[ValueParam], bparams: List[BlockParam], env: Environment)(using Context): Flows =
@@ -621,7 +621,7 @@ object Mono extends Phase[CoreTransformed, CoreTransformed] {
       case Let(_, binding, body) => expression(binding, env) ++ statement(body, env)
       case ImpureApp(_, callee, targs, vargs, bargs, body) =>
         application(callee, targs, vargs, bargs, env) ++ statement(body, env)
-      case Return(expr) => expression(expr, env)
+      case Return(exprs) => exprs.flatMap(expression(_, env))
       case Val(_, binding, body) => statement(binding, env) ++ statement(body, env)
       case App(callee, targs, vargs, bargs) => application(callee, targs, vargs, bargs, env)
       case Invoke(callee, method, methodTpe: BlockType.Function, targs, vargs, bargs) =>
@@ -645,7 +645,7 @@ object Mono extends Phase[CoreTransformed, CoreTransformed] {
           case ValueType.Data(_, targs) => targs.size
           case _ => 0
         }
-        expression(scrutinee, env) ++ valueType(resultType, env)._2 ++
+        expression(scrutinee, env) ++ valueTypes(resultType, env)._2 ++
           clauses.flatMap(clause(_, outerArity, env)) ++
           default.toList.flatMap(statement(_, env))
       case Region(body) => block(body, env)
@@ -657,7 +657,7 @@ object Mono extends Phase[CoreTransformed, CoreTransformed] {
       case Shift(prompt, continuation, body) =>
         block(prompt, env) ++ blockType(continuation.tpe, env)._2 ++ statement(body, env)
       case Resume(continuation, body) => block(continuation, env) ++ statement(body, env)
-      case Hole(tpe, _) => valueType(tpe, env)._2
+      case Hole(tpe, _) => valueTypes(tpe, env)._2
     }
 
     private def clause(clause: (Id, BlockLit), offset: Int, env: Environment)(using Context): Flows = clause match {
@@ -730,7 +730,7 @@ object Mono extends Phase[CoreTransformed, CoreTransformed] {
         val local = env.enter(tparams, cparams)
         val valueResults = vparams.map(valueType(_, local))
         val blockResults = bparams.map(blockType(_, local))
-        val resultType = valueType(result, local)
+        val resultType = valueTypes(result, local)
         (
           MonoBlockType.Function(
             tparams.size,
@@ -777,8 +777,8 @@ object Mono extends Phase[CoreTransformed, CoreTransformed] {
         for {
           groundVparams <- sequence(vparams.map(groundValueType(_, localTypes, localCaptures)))
           groundBparams <- sequence(bparams.map(groundBlockType(_, localTypes, localCaptures)))
-          groundResult <- groundValueType(result, localTypes, localCaptures)
-        } yield MonoBlockType.Function(tarity, carity, groundVparams.toList, groundBparams.toList, groundResult)
+          groundResult <- sequence(result.map(groundValueType(_, localTypes, localCaptures)))
+        } yield MonoBlockType.Function(tarity, carity, groundVparams.toList, groundBparams.toList, groundResult.toList)
       case MonoBlockType.Interface(name, targs) =>
         sequence(targs.map(groundValueType(_, typeBinders, captureBinders))).map(targs => MonoBlockType.Interface(name, targs.toList))
     }
@@ -846,7 +846,7 @@ object Mono extends Phase[CoreTransformed, CoreTransformed] {
           carity,
           vparams.map(substitute(_, substitution)),
           bparams.map(substitute(_, substitution)),
-          substitute(result, substitution)
+          result.map(substitute(_, substitution))
         )
       case MonoBlockType.Interface(name, targs) =>
         MonoBlockType.Interface(name, targs.map(substitute(_, substitution)))
@@ -864,7 +864,7 @@ object Mono extends Phase[CoreTransformed, CoreTransformed] {
 
     private def dependencies(tpe: MonoBlockType[Projection]): List[FlowVar] = tpe match {
       case MonoBlockType.Function(_, _, vparams, bparams, result) =>
-        vparams.flatMap(dependencies) ++ bparams.flatMap(dependencies) ++ dependencies(result)
+        vparams.flatMap(dependencies) ++ bparams.flatMap(dependencies) ++ result.flatMap(dependencies)
       case MonoBlockType.Interface(_, targs) => targs.flatMap(dependencies)
     }
 
@@ -883,7 +883,7 @@ object Mono extends Phase[CoreTransformed, CoreTransformed] {
       case MonoBlockType.Function(_, _, vparams, bparams, result) =>
         vparams.exists(grows(owner, _, guarded = true)) ||
           bparams.exists(grows(owner, _)) ||
-          grows(owner, result, guarded = true)
+          result.exists(grows(owner, _, guarded = true))
       case MonoBlockType.Interface(_, targs) => targs.exists(grows(owner, _, guarded = true))
     }
 
@@ -915,7 +915,7 @@ object Mono extends Phase[CoreTransformed, CoreTransformed] {
     private def blockTypeKey(tpe: MonoBlockType[Nothing]): String = tpe match
       case MonoBlockType.Function(tarity, carity, vparams, bparams, result) =>
         s"[$tarity,$carity](${vparams.map(typeKey).mkString(",")})" +
-          s"{${bparams.map(blockTypeKey).mkString(",")}}:${typeKey(result)}"
+          s"{${bparams.map(blockTypeKey).mkString(",")}}:${result.map(typeKey).mkString(",")}"
       case MonoBlockType.Interface(name, targs) =>
         s"${name.name.name}[${targs.map(typeKey).mkString(",")}]"
 
@@ -1092,10 +1092,10 @@ object Mono extends Phase[CoreTransformed, CoreTransformed] {
         BlockVar(replacement, monomorphize(function)(using local), callee.annotatedCapt) -> Nil
 
     def monomorphize(stmt: Stmt)(using ctx: State)(using Context, DeclarationContext): Stmt = stmt match
-      case Return(expr) =>
-        Return(monomorphize(expr))
-      case Val(id, binding, body) =>
-        Val(id, monomorphize(binding), monomorphize(body))
+      case Return(exprs) =>
+        Return(exprs map monomorphize)
+      case Val(ids, binding, body) =>
+        Val(ids, monomorphize(binding), monomorphize(body))
       case Var(ref, init, capture, body) =>
         Var(ref, monomorphize(init), capture, monomorphize(body))
       case ImpureApp(id, callee, targs, vargs, bargs, body) =>
@@ -1168,7 +1168,7 @@ object Mono extends Phase[CoreTransformed, CoreTransformed] {
           case _ => Vector.empty
         }
 
-        Match(monoScrut, monomorphize(matchTpe), clauses.flatMap(clause => monomorphize(clause, variant)), monomorphize(default))
+        Match(monoScrut, matchTpe map monomorphize, clauses.flatMap(clause => monomorphize(clause, variant)), monomorphize(default))
       case Get(id, annotatedTpe, ref, annotatedCapt, body) =>
         Get(id, monomorphize(annotatedTpe), ref, annotatedCapt, monomorphize(body))
       case Put(ref, annotatedCapt, value, body) =>
@@ -1178,7 +1178,7 @@ object Mono extends Phase[CoreTransformed, CoreTransformed] {
       case Region(body) =>
         Region(monomorphize(body))
       case Hole(tpe, span) =>
-        Hole(monomorphize(tpe), span)
+        Hole(tpe map monomorphize, span)
 
     def monomorphize(clause: (Id, BlockLit), variant: Vector[GroundType])(using ctx: State)(using Context, DeclarationContext): List[(Id, BlockLit)] = clause match
       case (id, BlockLit(tparams, cparams, vparams, bparams, body)) =>
@@ -1221,7 +1221,7 @@ object Mono extends Phase[CoreTransformed, CoreTransformed] {
 
     def monomorphize(blockType: BlockType)(using ctx: State)(using DeclarationContext): BlockType = blockType match {
       case BlockType.Function(tparams, cparams, vparams, bparams, result) =>
-        BlockType.Function(List.empty, cparams, vparams map monomorphize, bparams map monomorphize, monomorphize(result))
+        BlockType.Function(List.empty, cparams, vparams map monomorphize, bparams map monomorphize, result map monomorphize)
       case BlockType.Interface(name, targs) =>
         val funName = ctx.funNames.getOrElse((name, (targs map toGroundType).toVector), name)
         // Special case here if we have 'Resume' or 'Prompt' we didn't change the name which we can detect here
@@ -1283,7 +1283,7 @@ object Mono extends Phase[CoreTransformed, CoreTransformed] {
           cparams,
           vparams.map(monomorphize(_, local)),
           bparams.map(monomorphize(_, local)),
-          monomorphize(result, local)
+          result.map(monomorphize(_, local))
         )
       case MonoBlockType.Interface(name, targs) if targs.exists(containsBound) =>
         BlockType.Interface(name, targs.map(monomorphize(_, binders)))
@@ -1302,7 +1302,7 @@ object Mono extends Phase[CoreTransformed, CoreTransformed] {
 
     private def containsBound(tpe: MonoBlockType[Nothing]): Boolean = tpe match {
       case MonoBlockType.Function(_, _, vparams, bparams, result) =>
-        vparams.exists(containsBound) || bparams.exists(containsBound) || containsBound(result)
+        vparams.exists(containsBound) || bparams.exists(containsBound) || result.exists(containsBound)
       case MonoBlockType.Interface(_, targs) => targs.exists(containsBound)
     }
 
@@ -1331,7 +1331,7 @@ object Mono extends Phase[CoreTransformed, CoreTransformed] {
       case MonoValueType.Boxed(tpe, _) => s"Boxed${resultName(tpe)}"
 
     private def resultName(tpe: MonoBlockType[Nothing]): String = tpe match
-      case MonoBlockType.Function(_, _, _, _, result) => typeName(result)
+      case MonoBlockType.Function(_, _, _, _, result) => result.map(typeName).mkString("_")
       case MonoBlockType.Interface(name, targs) =>
         name.name.name + targs.map(typeName).mkString("_", "_", "")
 
@@ -1389,7 +1389,7 @@ object Mono extends Phase[CoreTransformed, CoreTransformed] {
           cparams.size,
           vparams.map(toGroundType(_, local)),
           bparams.map(toGroundType(_, local)),
-          toGroundType(result, local)
+          result.map(toGroundType(_, local))
         )
       case BlockType.Interface(name, targs) =>
         MonoBlockType.Interface(name, targs.map(toGroundType(_, binders)))

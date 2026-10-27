@@ -74,7 +74,7 @@ object BindSubexpressions {
       } yield Stmt.Invoke(c, method, transform(methodTpe), targs.map(transform), vs, bs)
     }
 
-    case Stmt.Return(expr) => transform(expr).run { res => Stmt.Return(res) }
+    case Stmt.Return(exprs) => transformExprs(exprs).run { res => Stmt.Return(res) }
     case Stmt.Alloc(id, init, region, body) => transform(init).run { v => Stmt.Alloc(id, v, transform(region), transform(body)) }
     case Stmt.Var(ref, init, capture, body) => transform(init).run { v => Stmt.Var(ref, v, transform(capture), transform(body)) }
     case Stmt.Get(id, tpe, ref, capt, body) => Stmt.Get(id, transform(tpe), ref, transform(capt), transform(body))
@@ -89,11 +89,11 @@ object BindSubexpressions {
 
     // Congruences
     case Stmt.Region(body) => Stmt.Region(transform(body))
-    case Stmt.Val(id, binding, body) => Stmt.Val(id, transform(binding), transform(body))
+    case Stmt.Val(ids, binding, body) => Stmt.Val(ids, transform(binding), transform(body))
     case Stmt.Reset(body) => Stmt.Reset(transform(body))
     case Stmt.Shift(prompt, k, body) => Stmt.Shift(transform(prompt), k, transform(body))
     case Stmt.Resume(k, body) => Stmt.Resume(transform(k), transform(body))
-    case Stmt.Hole(tpe, span) => Stmt.Hole(transform(tpe), span)
+    case Stmt.Hole(tpe, span) => Stmt.Hole(tpe.map(transform), span)
   }
 
   def transform(b: Block)(using Env): Bind[Block] = b match {
@@ -156,7 +156,7 @@ object BindSubexpressions {
   }
   def transform(tpe: BlockType)(using Env): BlockType = tpe match {
     case BlockType.Function(tparams, cparams, vparams, bparams, result) =>
-      BlockType.Function(tparams, cparams, vparams.map(transform), bparams.map(transform), transform(result))
+      BlockType.Function(tparams, cparams, vparams.map(transform), bparams.map(transform), result.map(transform))
     case BlockType.Interface(name, targs) =>
       BlockType.Interface(name, targs.map(transform))
   }

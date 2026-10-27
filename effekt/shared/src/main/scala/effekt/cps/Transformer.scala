@@ -17,6 +17,9 @@ def binding[R](id: Id, value: Expr)(body: TransformationContext ?=> R)(using C: 
 def binding[R](id: Id, block: Block)(body: TransformationContext ?=> R)(using C: TransformationContext): R =
   body(using C.bind(id, block))
 
+def bindings[R](ids: List[Id], values: List[Expr])(body: TransformationContext ?=> R)(using C: TransformationContext): R =
+  body(using (ids zip values).foldLeft(C) { case (c, (id, value)) => c.bind(id, value) })
+
 
 object Transformer {
 
@@ -84,12 +87,12 @@ object Transformer {
     case core.Stmt.Let(id, pure: core.Expr, body) =>
       LetExpr(id, transform(pure), transform(body, ks, k))
 
-    case core.Stmt.Return(value) =>
-      k(transform(value), ks)
+    case core.Stmt.Return(values) =>
+      k(values.map(transform), ks)
 
-    case core.Stmt.Val(id, rhs, body) =>
-      transform(rhs, ks, Continuation.Static(id) { (value, ks) =>
-        binding(id, value) { transform(body, ks, k) }
+    case core.Stmt.Val(ids, rhs, body) =>
+      transform(rhs, ks, Continuation.Static(ids) { (values, ks) =>
+        bindings(ids, values) { transform(body, ks, k) }
       })
 
     case core.Stmt.App(callee, targs, vargs, bargs) =>
@@ -146,8 +149,8 @@ object Transformer {
     case core.Stmt.Region(core.Block.BlockLit(_, _, _, List(region), body)) =>
       cps.Region(region.id, MetaCont(ks),
         transform(body, ks,
-          Continuation.Static(Id("tmp")) { (x, ks) =>
-            Dealloc(region.id, k(x, ks))
+          Continuation.Static(stmt.tpe.map { _ => Id("tmp") }) { (xs, ks) =>
+            Dealloc(region.id, k(xs, ks))
           }))
 
     case core.Stmt.Region(_) => sys error "Shouldn't happen"
@@ -158,8 +161,8 @@ object Transformer {
     case core.Stmt.Var(id, init, capture, body) =>
       cps.Var(id, transform(init), MetaCont(ks),
         transform(body, ks,
-          Continuation.Static(Id("tmp")) { (x, ks) =>
-            Dealloc(id, k(x, ks))
+          Continuation.Static(stmt.tpe.map { _ => Id("tmp") }) { (xs, ks) =>
+            Dealloc(id, k(xs, ks))
           }))
 
     case core.Stmt.Get(id, tpe, ref, capt, body) =>
@@ -228,24 +231,24 @@ def withJoinpoint(k: Continuation)(body: Continuation => Stmt): Stmt = k match {
 
 enum Continuation {
   case Dynamic(id: Id) // in ml this is an arbitrary term, why?
-  case Static(hint: Id, k: (Expr, Id) => Stmt)
+  case Static(hints: List[Id], k: (List[Expr], Id) => Stmt)
 
-  def apply(arg: Expr, ks: Id): Stmt = this match {
-    case Continuation.Dynamic(id) => Jump(id, arg :: Nil, MetaCont(ks))
-    case Continuation.Static(hint, k) => k(arg, ks)
+  def apply(args: List[Expr], ks: Id): Stmt = this match {
+    case Continuation.Dynamic(id) => Jump(id, args, MetaCont(ks))
+    case Continuation.Static(hints, k) => k(args, ks)
   }
   def reify: Cont =
     this match {
       case c : Continuation.Dynamic => cps.Cont.ContVar(c.id)
-      case Continuation.Static(hint, k) =>
-        val param = Id(hint)
+      case Continuation.Static(hints, k) =>
+        val params = hints.map(Id(_))
         val ks = Id("ks")
-        cps.Cont.ContLam(param :: Nil, ks, k(Expr.ValueVar(param), ks))
+        cps.Cont.ContLam(params, ks, k(params.map(Expr.ValueVar.apply), ks))
     }
 
-  def reifyAt(tpe: core.ValueType): Cont =
-    if (tpe == core.Type.TBottom) Cont.Abort else reify
+  def reifyAt(tpe: List[core.ValueType]): Cont =
+    if (tpe == List(core.Type.TBottom)) Cont.Abort else reify
 }
 object Continuation {
-  def Static(hint: Id)(k: (Expr, Id) => Stmt): Continuation.Static = Continuation.Static(hint, k)
+  def Static(hints: List[Id])(k: (List[Expr], Id) => Stmt): Continuation.Static = Continuation.Static(hints, k)
 }
