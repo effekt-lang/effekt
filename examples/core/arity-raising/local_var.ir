@@ -1,0 +1,39 @@
+type Pt {
+  MkPt(x: Int, y: Int)
+}
+
+def main() = {
+  let p = make Pt MkPt(0, 1)
+  var c @ r = p: Pt;
+  get v: Pt = ! c @ r;
+  v: Pt match [Int] {
+    MkPt: { (x: Int, y: Int) =>
+      let w = make Pt MkPt(y: Int, x: Int)
+      put c @ r = w: Pt;
+      return x: Int
+    }
+  }
+}
+
+// One variable per component; all components share the capture.
+/// ARITY_RAISE
+
+type Pt {
+  MkPt(x: Int, y: Int)
+}
+
+def main() = {
+  let p_0 = 0
+  let p_1 = 1
+  var c_0 @ r = p_0: Int;
+  var c_1 @ r = p_1: Int;
+  get v_0: Int = ! c_0 @ r;
+  get v_1: Int = ! c_1 @ r;
+  let x = v_0: Int
+  let y = v_1: Int
+  let w_0 = y: Int
+  let w_1 = x: Int
+  put c_0 @ r = w_0: Int;
+  put c_1 @ r = w_1: Int;
+  return x: Int
+}

@@ -37,7 +37,7 @@ class ChezSchemeCPS extends Compiler[String] {
     Frontend `andThen` Middleend
   }
 
-  lazy val Optimized = allToCore(Core) `andThen` Aggregate `andThen` Deadcode `andThen` core.Show `andThen` Optimizer `andThen` DropBindings map {
+  lazy val Optimized = allToCore(Core) `andThen` Aggregate `andThen` Deadcode `andThen` core.Show `andThen` core.Mono `andThen` core.ArityRaising `andThen` Optimizer `andThen` DropBindings map {
     case input @ CoreTransformed(source, tree, mod, core) =>
       val mainSymbol = Context.ensureMainExists(mod)
       val mainFile = path(mod)
