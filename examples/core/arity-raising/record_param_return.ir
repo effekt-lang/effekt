@@ -1,0 +1,42 @@
+type Pt {
+  MkPt(x: Int, y: Int)
+}
+
+def norm(p: Pt) = {
+  p: Pt match [Int] {
+    MkPt: { (x: Int, y: Int) => return x: Int }
+  }
+}
+
+def mk(n: Int) = {
+  let p = make Pt MkPt(n: Int, n: Int)
+  return p: Pt
+}
+
+def main() = {
+  val q: Pt = (mk: (Int) => Pt @ {})(1);
+  (norm: (Pt) => Int @ {})(q: Pt)
+}
+
+/// ARITY_RAISE
+
+type Pt {
+  MkPt(x: Int, y: Int)
+}
+
+def norm(p_0: Int, p_1: Int) = {
+  let x = p_0: Int
+  let y = p_1: Int
+  return x: Int
+}
+
+def mk(n: Int) = {
+  let p_0 = n: Int
+  let p_1 = n: Int
+  return p_0: Int, p_1: Int
+}
+
+def main() = {
+  val q_0, q_1 = (mk: (Int) => (Int, Int) @ {})(1);
+  (norm: (Int, Int) => Int @ {})(q_0: Int, q_1: Int)
+}

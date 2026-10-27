@@ -1,0 +1,35 @@
+type Pt {
+  MkPt(x: Int, y: Int)
+}
+type Line {
+  MkLine(from: Pt, to: Pt)
+}
+
+def startX(l: Line) = {
+  l: Line match [Int] {
+    MkLine: { (a: Pt, b: Pt) =>
+      a: Pt match [Int] {
+        MkPt: { (x: Int, y: Int) => return x: Int }
+      }
+    }
+  }
+}
+
+/// ARITY_RAISE
+
+type Pt {
+  MkPt(x: Int, y: Int)
+}
+type Line {
+  MkLine(from_0: Int, from_1: Int, to_0: Int, to_1: Int)
+}
+
+def startX(l_0: Int, l_1: Int, l_2: Int, l_3: Int) = {
+  let a_0 = l_0: Int
+  let a_1 = l_1: Int
+  let b_0 = l_2: Int
+  let b_1 = l_3: Int
+  let x = a_0: Int
+  let y = a_1: Int
+  return x: Int
+}

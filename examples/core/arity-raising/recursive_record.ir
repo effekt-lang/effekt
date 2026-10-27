@@ -1,0 +1,29 @@
+type Node {
+  MkNode(value: Int, next: OptNode)
+}
+type OptNode {
+  NoNode()
+  SomeNode(node: Node)
+}
+
+def value(n: Node) = {
+  n: Node match [Int] {
+    MkNode: { (v: Int, rest: OptNode) => return v: Int }
+  }
+}
+
+/// ARITY_RAISE
+
+type Node {
+  MkNode(value: Int, next: OptNode)
+}
+type OptNode {
+  NoNode()
+  SomeNode(node: Node)
+}
+
+def value(n: Node) = {
+  n: Node match [Int] {
+    MkNode: { (v: Int, rest: OptNode) => return v: Int }
+  }
+}
