@@ -235,26 +235,7 @@ object TransformerCps extends Transformer {
     case cps.Stmt.LetDef(id, block, body) =>
       Binding { k =>
         val stmts = mutable.ListBuffer.empty[js.Stmt]
-        // (1) determine all bound function parameters that may be subsequently altered when preparing calls to a tail-recursive function
-        val bound = D.scope.foldLeft(Set.empty[Id]) {
-          case (acc, (id, Block.BlockLit(vparams, bparams, _, _, _))) => acc ++ vparams ++ bparams
-          case (acc, _) => acc
-        }
-        // (2) backup parameters as const variables bindings
-        val freeIds = Variables.free(block) intersect bound
-        val paramTmps = freeIds.map { param =>
-          val tmp = Id(s"tmp_${param}")
-          stmts.append(js.Const(nameDef(tmp), nameRef(param)))
-          param -> Expr.ValueVar(tmp)
-        }.toMap
-        // (3) Substitute block such that the backed up bindings are used instead
-        val subst = Substitution(
-          values = paramTmps,
-          blocks = Map.empty,
-          conts = Map.empty,
-          metaconts = Map.empty
-        )
-        val substBlock = substitutions.substitute(block)(using subst)
+        val substBlock = substitutions.substitute(block)(using backupParameters(Variables.free(block), stmts))
         val ctx = D.copy(scope = (id -> substBlock) :: D.scope)
         stmts.append(js.Const(nameDef(id), requiringThunk { toJS(id, substBlock)(using ctx) }))
         stmts.appendAll(toJS(body).run(k))
@@ -281,7 +262,9 @@ object TransformerCps extends Transformer {
 
     case cps.Stmt.LetCont(id, binding @ Cont.ContLam(result2, ks2, body2), body) =>
       Binding { k =>
-        js.Const(nameDef(id), toJS(binding)(using nonrecursive(ks2))) :: requiringThunk { toJS(body) }.run(k)
+        val stmts = mutable.ListBuffer.empty[js.Stmt]
+        val substBinding = substitutions.substitute(binding)(using backupParameters(Variables.free(binding), stmts))
+        stmts.toList ++ (js.Const(nameDef(id), toJS(substBinding)(using nonrecursive(ks2))) :: requiringThunk { toJS(body) }.run(k))
       }
 
     case cps.Stmt.ImpureApp(id, callee, vargs, Nil, body) =>
@@ -504,6 +487,29 @@ object TransformerCps extends Transformer {
 
         (tag, Binding { k => extractedFields ++ toJS(body).run(k) })
     }
+
+  /**
+   * Parameters of enclosing functions (including their continuation) are reassigned when
+   * preparing calls to a tail-recursive function. Local definitions and continuations that
+   * capture them must see the values at definition time: we back them up as const bindings
+   * and return the substitution that uses the backups instead.
+   */
+  def backupParameters(free: Set[Id], stmts: mutable.ListBuffer[js.Stmt])(using D: TransformerContext): Substitution = {
+    def backup(param: Id): Id = {
+      val tmp = Id(s"tmp_${param}")
+      stmts.append(js.Const(nameDef(tmp), nameRef(param)))
+      tmp
+    }
+    val (values, conts) = D.scope.foldLeft((Set.empty[Id], Set.empty[Id])) {
+      case ((values, conts), (_, Block.BlockLit(vparams, bparams, _, k, _))) => (values ++ vparams ++ bparams, conts + k)
+      case (acc, _) => acc
+    }
+    Substitution(
+      values = (free intersect values).map { p => p -> Expr.ValueVar(backup(p)) }.toMap,
+      blocks = Map.empty,
+      conts = (free intersect conts).map { k => k -> Cont.ContVar(backup(k)) }.toMap,
+      metaconts = Map.empty)
+  }
 
   def toJS(d: cps.Def)(using D: TransformerContext): js.Stmt = d match {
     case cps.Def(id, block) =>
