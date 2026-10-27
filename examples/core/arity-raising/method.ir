@@ -1,0 +1,64 @@
+type Pt {
+  MkPt(x: Int, y: Int)
+}
+
+interface Shape {
+  flip: (Pt) => Pt
+}
+
+def use(p: Pt){s: Shape} = {
+  val r: Pt = (s: Shape @ {s}).flip: (Pt) => Pt(p: Pt);
+  r: Pt match [Int] {
+    MkPt: { (x: Int, y: Int) => return x: Int }
+  }
+}
+
+def main() = {
+  let p = make Pt MkPt(1, 2)
+  (use: (Pt){s: Shape} => Int @ {})(p: Pt){
+    new Shape {
+      def flip(q: Pt) = {
+        q: Pt match [Pt] {
+          MkPt: { (x: Int, y: Int) =>
+            let f = make Pt MkPt(y: Int, x: Int)
+            return f: Pt
+          }
+        }
+      }
+    }
+  }
+}
+
+// Operations of interfaces take and return record components as well.
+/// ARITY_RAISE
+
+type Pt {
+  MkPt(x: Int, y: Int)
+}
+
+interface Shape {
+  flip: (Int, Int) => (Int, Int)
+}
+
+def use(p_0: Int, p_1: Int){s: Shape} = {
+  val r_0, r_1 = (s: Shape @ {s}).flip: (Int, Int) => (Int, Int)(p_0: Int, p_1: Int);
+  let x = r_0: Int
+  let y = r_1: Int
+  return x: Int
+}
+
+def main() = {
+  let p_0 = 1
+  let p_1 = 2
+  (use: (Int, Int){s: Shape} => Int @ {})(p_0: Int, p_1: Int){
+    new Shape {
+      def flip(q_0: Int, q_1: Int) = {
+        let x = q_0: Int
+        let y = q_1: Int
+        let f_0 = y: Int
+        let f_1 = x: Int
+        return f_0: Int, f_1: Int
+      }
+    }
+  }
+}
