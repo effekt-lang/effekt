@@ -147,8 +147,8 @@ object Contify {
     case Stmt.Put(ref, value, body) =>
       Stmt.Put(ref, rewrite(value), rewrite(body))
 
-    case Stmt.Reset(prog, ks, k) =>
-      Stmt.Reset(rewrite(prog), ks, rewrite(k))
+    case Stmt.Reset(prog, arity, ks, k) =>
+      Stmt.Reset(rewrite(prog), arity, ks, rewrite(k))
 
     case Stmt.Shift(prompt, body, ks, k) =>
       Stmt.Shift(prompt, rewrite(body), ks, rewrite(k))
@@ -238,7 +238,7 @@ object Contify {
     case Stmt.Dealloc(_, body) => occurrences(id, body)
     case Stmt.Get(_, _, body) => occurrences(id, body)
     case Stmt.Put(_, value, body) => occurrences(id, value) ++ occurrences(id, body)
-    case Stmt.Reset(prog, _, k) => occurrences(id, prog) ++ occurrences(id, k)
+    case Stmt.Reset(prog, _, _, k) => occurrences(id, prog) ++ occurrences(id, k)
     case Stmt.Shift(_, body, _, k) => occurrences(id, body) ++ occurrences(id, k)
     case Stmt.Resume(_, body, _, k) => occurrences(id, body) ++ occurrences(id, k)
     case Stmt.Jump(_, vargs, _) => all(vargs, occurrences(id, _))
@@ -317,8 +317,8 @@ object Contify {
     case Stmt.Put(ref, value, body) =>
       Stmt.Put(ref, contify(id, value), contify(id, body))
 
-    case Stmt.Reset(prog, ks, k) =>
-      Stmt.Reset(contify(id, prog), ks, contify(id, k))
+    case Stmt.Reset(prog, arity, ks, k) =>
+      Stmt.Reset(contify(id, prog), arity, ks, contify(id, k))
 
     case Stmt.Shift(prompt, body, ks, k) =>
       Stmt.Shift(prompt, contify(id, body), ks, contify(id, k))

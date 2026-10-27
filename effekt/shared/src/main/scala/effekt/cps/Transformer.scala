@@ -123,7 +123,7 @@ object Transformer {
       val ks2 = Id("ks")
       val k2 = Id("k")
       Reset(Block.BlockLit(Nil, List(prompt.id), ks2, k2, transform(body, ks2, Continuation.Dynamic(k2))),
-        MetaCont(ks), k.reify)
+        stmt.tpe.size, MetaCont(ks), k.reify)
 
     case core.Stmt.Reset(body) => sys error "Shouldn't happen"
 
@@ -247,7 +247,7 @@ enum Continuation {
     }
 
   def reifyAt(tpe: List[core.ValueType]): Cont =
-    if (tpe == List(core.Type.TBottom)) Cont.Abort else reify
+    if (tpe.contains(core.Type.TBottom)) Cont.Abort else reify
 }
 object Continuation {
   def Static(hints: List[Id])(k: (List[Expr], Id) => Stmt): Continuation.Static = Continuation.Static(hints, k)

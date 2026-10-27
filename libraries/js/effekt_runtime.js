@@ -130,18 +130,11 @@ function CAPTURE(body) {
   }
 }
 
-// Returns the answer of a reset to the stack below; the single-value case does not allocate.
-function RETURN(x, ks) {
-  if (arguments.length === 2) return ks.rest.stack(x, ks.rest)
-  const rest = arguments[arguments.length - 1].rest
-  return rest.stack(...Array.prototype.slice.call(arguments, 0, -1), rest)
-}
-
 // HANDLE(ks, ks, (p, ks, k) => { STMT })
-function RESET(prog, ks, k) {
+function RESET(prog, ret, ks, k) {
   const prompt = Symbol(); // gensym
   const rest = { stack: k, prompt: ks.prompt, arena: ks.arena, rest: ks.rest }
-  return prog(prompt, { stack: null, prompt, arena: null, rest }, RETURN)
+  return prog(prompt, { stack: null, prompt, arena: null, rest }, ret)
 }
 
 function SHIFT(p, body, ks, k) {

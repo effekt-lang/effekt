@@ -165,8 +165,8 @@ object TransformerCPS {
         (pred, matcher)
       }
       chez.Cond(cls, default.map(toChezExpr))
-    case Reset(prog, ks, k) =>
-      chez.Builtin(RESET, toChez(prog), toChez(ks), toChez(k))
+    case Reset(prog, arity, ks, k) =>
+      chez.Builtin(RESET, toChez(prog), returnFrom(arity), toChez(ks), toChez(k))
     case Resume(resumption, body, ks, k) =>
       chez.Builtin(RESUME, toChez(resumption), toChez(body), toChez(ks), toChez(k))
     case Shift(prompt, body, ks, k) =>
@@ -179,6 +179,15 @@ object TransformerCPS {
     case let: (LetCont | LetDef | LetExpr | ImpureApp
              | Region | Alloc | Get | Put | Dealloc | Var) =>
       chez.Let(Nil, toChez(stmt))
+  }
+
+  // Returns the answer of a reset to the stack below; Chez allocates this closed lambda statically:
+  //   (lambda (x0 ... xn ks) ((meta-cont-cont (meta-cont-rest ks)) x0 ... xn (meta-cont-rest ks)))
+  def returnFrom(arity: Int): chez.Expr = {
+    val values = List.tabulate(arity) { i => ChezName(s"x$i") }
+    val ks = ChezName("ks")
+    val rest = Builtin("meta-cont-rest", chez.Variable(ks))
+    chez.Lambda(values :+ ks, chez.Call(Builtin("meta-cont-cont", rest), values.map(chez.Variable.apply) :+ rest))
   }
 
   def toChez(expr: cps.Expr): chez.Expr = expr match {

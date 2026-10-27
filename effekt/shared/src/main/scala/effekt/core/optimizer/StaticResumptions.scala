@@ -232,7 +232,7 @@ object StaticResumptions {
           Stmt.App(Block.BlockVar(f, BlockType.Function(tps, cps, vps, bps, prompt.answer), capt), targs, vargs, bargs)
 
         // an exit that never returns is no exit
-        case leaf if leaf.tpe == List(Type.TBottom) => retypeAnswer(leaf, prompt.answer)
+        case leaf if leaf.tpe.contains(Type.TBottom) => retypeAnswer(leaf, prompt.answer)
 
         // a leaf produces the frame's value where it stands, so it jumps with that value: the frames
         // moved into the join point, the leaf did not
@@ -368,7 +368,7 @@ object StaticResumptions {
 
         // an exit that never returns is no exit
         case h: Stmt.Hole => retypeAnswer(h, result)
-        case exit if atPrompt || exit.tpe == List(Type.TBottom) => retypeAnswer(exit, result)
+        case exit if atPrompt || exit.tpe.contains(Type.TBottom) => retypeAnswer(exit, result)
         case _ => break(None)
       }
     }

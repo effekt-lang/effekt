@@ -107,27 +107,13 @@
 (define (top-level-k x _) x)
 (define top-level-ks (make-meta-cont top-level-k (gensym "toplevel") (create-store) '()))
 
-; a ..., MetaCont -> #
-; The single-value case is kept separate, since it does not allocate.
-(define return
-  (case-lambda
-    [(x ks)
-      (let* ([new-ks (meta-cont-rest ks)]
-             [k (meta-cont-cont new-ks)])
-        (k x new-ks))]
-    [xs+ks
-      (let* ([n (- (length xs+ks) 1)]
-             [new-ks (meta-cont-rest (list-ref xs+ks n))]
-             [k (meta-cont-cont new-ks)])
-        (apply k (append (list-head xs+ks n) (list new-ks))))]))
-
 ; Program a b = a, Cont b, MetaCont -> #
 
-; Program Prompt b, MetaCont, Cont b -> #
-(define (reset prog ks k)
+; Program Prompt b, (b, MetaCont -> #), MetaCont, Cont b -> #
+(define (reset prog ret ks k)
     (let ([prompt (gensym)])
          (meta-cont-cont-set! ks k)
-         (prog prompt (make-meta-cont return prompt (create-store) ks) return)))
+         (prog prompt (make-meta-cont ret prompt (create-store) ks) ret)))
 
 ; MetaCont, Prompt -> MetaCont * MetaCont
 (define (split-stack ks p)

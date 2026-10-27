@@ -45,6 +45,8 @@ object TransformerCps extends Transformer {
     metacont: Option[Id],
     // the original declaration context (used to compile pattern matching)
     declarations: DeclarationContext,
+    // the arities of resets in this module (used to generate their return continuations)
+    resets: collection.mutable.Set[Int],
     // the usual compiler context
     errors: Context
   )
@@ -71,14 +73,14 @@ object TransformerCps extends Transformer {
           None,
           Nil,
           None,
-          D, C)
+          D, collection.mutable.Set.empty, C)
 
         val name      = JSName(jsModuleName(module.path))
         val jsExterns = module.externs.filterNot(canInline).map(toJS)
         val jsDecls   = module.declarations.flatMap(toJS)
         val stmts     = module.definitions.map(toJS)
 
-        js.Module(name, Nil, exports, jsDecls ++ jsExterns ++ stmts)
+        js.Module(name, Nil, exports, jsDecls ++ jsExterns ++ returns ++ stmts)
     }
 
   def compileLSP(input: cps.ModuleDecl, coreModule: core.ModuleDecl)(using C: Context): List[js.Stmt] =
@@ -90,9 +92,10 @@ object TransformerCps extends Transformer {
           None,
           Nil,
           None,
-          D, C)
+          D, collection.mutable.Set.empty, C)
 
-    input.definitions.map(toJS)
+    val stmts = input.definitions.map(toJS)
+    returns ++ stmts
 
 
   def toJS(d: cps.ToplevelDefinition)(using ctx: TransformerContext): js.Stmt = d match {
@@ -458,8 +461,8 @@ object TransformerCps extends Transformer {
         toJS(body).run(k)
     }
 
-    case cps.Stmt.Reset(prog, ks, k) =>
-      pure(js.Return(Call(RESET, requiringThunk { toJS(prog)(using nonrecursive(prog)) }, toJS(ks), toJS(k))) :: Nil)
+    case cps.Stmt.Reset(prog, arity, ks, k) =>
+      pure(js.Return(Call(RESET, requiringThunk { toJS(prog)(using nonrecursive(prog)) }, returnFrom(arity), toJS(ks), toJS(k))) :: Nil)
 
     case cps.Stmt.Shift(prompt, body, ks, k) =>
       pure(js.Return(Call(SHIFT, nameRef(prompt), requiringThunk { toJS(body)(using nonrecursive(body)) }, toJS(ks), toJS(k))) :: Nil)
@@ -470,6 +473,21 @@ object TransformerCps extends Transformer {
     case cps.Stmt.Hole(span) =>
       pure(js.Return($effekt.call("hole", JsString(span.range.from.format))) :: Nil)
   }
+
+  // Returns the answer of a reset to the stack below
+  def returnFrom(arity: Int)(using C: TransformerContext): js.Expr =
+    C.resets += arity
+    js.Variable(JSName(s"RETURN_$arity"))
+
+  // const RETURN_n = (x0, ..., xn, ks) => ks.rest.stack(x0, ..., xn, ks.rest)
+  def returns(using C: TransformerContext): List[js.Stmt] =
+    C.resets.toList.sorted.map { arity =>
+      val values = List.tabulate(arity) { i => JSName(s"x$i") }
+      val ks = JSName("ks")
+      val rest = js.Member(js.Variable(ks), JSName("rest"))
+      js.Const(JSName(s"RETURN_$arity"),
+        js.Lambda(values :+ ks, js.Return(js.Call(js.Member(rest, JSName("stack")), values.map(js.Variable.apply) :+ rest))))
+    }
 
   def toJS(scrutinee: js.Expr, variant: Id, clause: cps.Clause)(using C: TransformerContext): (js.Expr, Binding[List[js.Stmt]]) =
     clause match {
@@ -592,7 +610,7 @@ object TransformerCps extends Transformer {
       case Stmt.Dealloc(ref, body) => canBeDirect(k, body)
       case Stmt.Get(ref, id, body) => canBeDirect(k, body)
       case Stmt.Put(ref, value, body) => notIn(value) && canBeDirect(k, body)
-      case Stmt.Reset(prog, ks, k) => notIn(stmt)
+      case Stmt.Reset(prog, arity, ks, k) => notIn(stmt)
       case Stmt.Shift(prompt, body, ks, k) => notIn(stmt)
       case Stmt.Resume(resumption, body, ks, k) => notIn(stmt)
       case Stmt.Hole(span) => true
