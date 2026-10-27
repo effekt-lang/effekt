@@ -1,3 +1,5 @@
+// The demand check: a record that is never matched is left alone.
+
 type Pt {
   MkPt(x: Int, y: Int)
 }

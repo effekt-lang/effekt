@@ -1,3 +1,5 @@
+// Interface methods take and return record fields as well.
+
 type Pt {
   MkPt(x: Int, y: Int)
 }

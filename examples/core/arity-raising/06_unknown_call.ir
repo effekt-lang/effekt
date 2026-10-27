@@ -1,3 +1,5 @@
+// Function types are translated, so calls through block parameters need no conversion.
+
 type Pt {
   MkPt(x: Int, y: Int)
 }

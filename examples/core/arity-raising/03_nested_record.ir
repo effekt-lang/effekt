@@ -1,3 +1,5 @@
+// Records inside records flatten all the way down.
+
 type Pt {
   MkPt(x: Int, y: Int)
 }

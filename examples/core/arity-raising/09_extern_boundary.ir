@@ -1,3 +1,5 @@
+// Records are rebuilt for extern arguments and matched apart from extern results.
+
 type Pt {
   MkPt(x: Int, y: Int)
 }

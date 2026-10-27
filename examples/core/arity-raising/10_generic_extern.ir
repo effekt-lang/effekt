@@ -1,3 +1,5 @@
+// Generic externs like genericEquals receive whole records.
+
 type Pt {
   MkPt(x: Int, y: Int)
 }
