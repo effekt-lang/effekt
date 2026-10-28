@@ -1,0 +1,97 @@
+import scanner
+import stringbuffer
+import random
+import set
+
+import examples/benchmarks/runner
+
+record Range(from: Int, to: Int)
+
+def parseRanges(): Array[Range] / { Scan[Char], fail } =
+  array::collect { list(',') {
+    val from = readDecimal()
+    mustSkip('-')
+    val to = readDecimal()
+    Range(from, to)
+  } }
+
+def repeated(k: Int, n: Int): Int = {
+  var multiplier = 1
+  var temp = n
+  while (temp > 0) {
+    multiplier = multiplier * 10
+    temp = temp / 10
+  }
+
+  var result = 0
+  k.repeat {
+    result = result * multiplier + n
+  }
+  result
+}
+
+def sumInvalid(ranges: Array[Range]) { isInvalid: Int => Bool }: Int = sum {
+  ranges.foreach { case Range(from, to) =>
+    for { range(from, to + 1) } { n =>
+      if (n.isInvalid) {
+        do emit(n)
+      }
+    }
+  }
+}
+
+def solveEasy(ranges: Array[Range]): Int = {
+  val repeatedTwice = set::collect(box compareInt) {
+    with takeWhile { n => n < 10000000000 }
+
+    for { rangeFrom(1) } { n =>
+      do emit(repeated(2, n))
+    }
+  }
+
+  sumInvalid(ranges) { n => repeatedTwice.contains(n) }
+}
+
+def solveHard(ranges: Array[Range]): Int = {
+  val repeatedManyTimes = set::collect(box compareInt) {
+    for { range(2, 12) } { k =>
+      with takeWhile { n => n < 10000000000 }
+      for { rangeFrom(1) } { n =>
+        do emit(repeated(k, n))
+      }
+    }
+  }
+
+  sumInvalid(ranges) { n => repeatedManyTimes.contains(n) }
+}
+
+def generate(): String = stringBuffer {
+  with minstd(42)
+  each(0, 20) { i =>
+    if (i > 0) { do write(",") }
+    val digits = randomInt(2, 10)
+    var from = 1
+    (digits - 1).repeat { from = from * 10 }
+    val start = from + randomInt(0, from * 9 - 1)
+    do write(show(start))
+    do write("-")
+    do write(show(start + randomInt(0, 999)))
+  }
+}
+
+def run(n: Int): Int = {
+  val input = generate()
+  var result = 0
+  repeat(n) {
+    val ranges = {
+      with feed(input)
+      with returning::peeking[Char, Array[Range]]
+      with crash("malformed input")
+      parseRanges()
+    }
+    result = result + solveEasy(ranges) + solveHard(ranges)
+  }
+  result
+}
+
+def main() = benchmark(1) { run }

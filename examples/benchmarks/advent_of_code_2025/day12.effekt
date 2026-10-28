@@ -1,0 +1,116 @@
+import scanner
+import stringbuffer
+import random
+
+import examples/benchmarks/runner
+
+record Array2[A](size0: Int, size1: Int, fields: Array[A])
+
+record Region(size0: Int, size1: Int, quantities: Array[Int])
+
+def parseProblem(): (Array[Array2[Bool]], List[Region]) / { Scan[Char], fail } = {
+  list::returning::collect {
+    array::collect {
+      loop {
+        do peek()
+        val number = readDecimal()
+        do next() match {
+          case ':' =>
+            mustSkip('\n')
+            var size0 = 0
+            var size1 = 0
+            val fields = array::collect[Bool] {
+              loop {
+                do peek() match {
+                  case '#' => ()
+                  case '.' => ()
+                  case '\n' => do stop()
+                  case _ => do fail()
+                }
+                size0 = size0 + 1
+                size1 = 0
+                line { loop {
+                  readWhen {
+                    case '#' => do emit(true)
+                    case '.' => do emit(false)
+                    case _ => do fail()
+                  }
+                  size1 = size1 + 1
+                } }
+              }
+            }
+            skip()
+            do emit(Array2(size0, size1, fields))
+          case 'x' =>
+            val size0 = number
+            val size1 = readDecimal()
+            mustSkip(':')
+            mustSkip(' ')
+            val quantities = array::collect[Int] {
+              line { list(' ') { readDecimal() } }
+            }
+            do emit(Region(size0, size1, quantities))
+          case _ => do fail()
+        }
+      }
+    }
+  }
+}
+
+def solveEasy(regions: List[Region]): Int =
+  sum {
+    regions.foreach { case Region(size0, size1, quantities) =>
+      val available = (size0 / 3) * (size1 / 3)
+      val required = quantities.sum
+      if (required <= available) {
+        do emit(1)
+      }
+    }
+  }
+
+def generate(): String = stringBuffer {
+  with minstd(42)
+  each(0, 6) { shape =>
+    do write(show(shape))
+    do write(":\n")
+    each(0, 3) { row =>
+      each(0, 3) { column =>
+        if ((row == 1 && column == 1) || randomInt(0, 2) != 0) { do write("#") } else { do write(".") }
+      }
+      do write("\n")
+    }
+    do write("\n")
+  }
+  repeat(1000) {
+    val size0 = randomInt(4, 50)
+    val size1 = randomInt(4, 50)
+    val target = (size0 / 3) * (size1 / 3)
+    do write(show(size0))
+    do write("x")
+    do write(show(size1))
+    do write(":")
+    repeat(6) {
+      do write(" ")
+      do write(show(randomInt(0, target / 3)))
+    }
+    do write("\n")
+  }
+}
+
+def run(n: Int): Int = {
+  val input = generate()
+  var result = 0
+  repeat(n) {
+    val problem = {
+      with feed(input)
+      with returning::peeking[Char, (Array[Array2[Bool]], List[Region])]
+      with crash("malformed input")
+      parseProblem()
+    }
+    val (_, regions) = problem
+    result = result + solveEasy(regions)
+  }
+  result
+}
+
+def main() = benchmark(1) { run }

@@ -1,0 +1,174 @@
+import scanner
+import stringbuffer
+import random
+import array
+
+import examples/benchmarks/runner
+
+def parseVector(): Array[Int] / { Scan[Char], fail } =
+  array::collect { loop {
+    do peek() match {
+      case c and c.isDigit => do emit(readDecimal())
+      case ' ' => skip()
+      case '\n' => skip(); do stop()
+      case '+' => skip(); do stop()
+      case '*' => skip(); do stop()
+      case _ => do fail()
+    }
+  } }
+
+def parseMatrix(): Array[Array[Int]] / { Scan[Char], fail } =
+  array::collect { loop {
+    do peek() match {
+      case c and c.isDigit => do emit(parseVector())
+      case ' ' => skip()
+      case '+' => do stop()
+      case '*' => do stop()
+      case _ => do fail()
+    }
+  } }
+
+def parseOperators(): Array[Char] / { Scan[Char], fail } =
+  array::collect { loop {
+    do peek() match {
+      case '+' => skip(); do emit('+')
+      case '*' => skip(); do emit('*')
+      case ' ' => skip()
+      case '\n' => do stop()
+      case _ => do fail()
+    }
+  } }
+
+def parseWorksheet(): (Array[Array[Int]], Array[Char]) / { Scan[Char], fail } = {
+  val matrix = parseMatrix()
+  val operators = parseOperators()
+  (matrix, operators)
+}
+
+def readLine(): Array[Char] / Scan[Char] =
+  array::collect { loop {
+    do next() match {
+      case '\n' => do stop()
+      case c => do emit(c)
+    }
+  } }
+
+def parseGrid(): Array[Array[Char]] / Scan[Char] =
+  array::collect { many { do peek(); readLine() } }
+
+def column[T](matrix: Array[Array[T]], i: Int): Unit / emit[T] =
+  matrix.foreach { vector => do emit(vector.get(i)) }
+
+def eachDown(n: Int) { action: Int => Unit }: Unit =
+  if (n > 0) {
+    action(n - 1)
+    eachDown(n - 1) {action}
+  }
+
+def reverseTranspose[T](matrix: Array[Array[T]]): Unit / emit[Array[T]] =
+  eachDown(matrix.get(0).size) { i =>
+    do emit(array::collect[T] { matrix.column(i) })
+  }
+
+def skipSpaces(): Unit / Scan[Char] =
+  loop {
+    do peek() match {
+      case ' ' => skip()
+      case _ => do stop()
+    }
+  }
+
+def solveEasy(matrix: Array[Array[Int]], operators: Array[Char]): Int =
+  sum {
+    operators.foreachIndex { (i, o) =>
+      o match {
+        case '+' => do emit(sum { matrix.column(i) })
+        case '*' => do emit(product { matrix.column(i) })
+        case _ => panic("malformed input")
+      }
+    }
+  }
+
+def solveHard(grid: Array[Array[Char]]): Int =
+  sum {
+    var stack = Nil()
+    for[Array[Char]] { grid.reverseTranspose } { line =>
+      with source[Char] { line.each }
+      with peeking[Char]
+      with boundary
+      with crash("malformed input")
+      skipSpaces()
+      do peek()
+      stack = readDecimal().Cons(stack)
+      skipSpaces()
+      do next() match {
+        case '+' =>
+          do emit(stack.sum)
+          stack = Nil()
+        case '*' =>
+          do emit(product { stack.each })
+          stack = Nil()
+        case _ => panic("malformed input")
+      }
+    }
+  }
+
+record Problem(width: Int, left: Bool, numbers: Array[Int], operator: String)
+
+def generate(): String = stringBuffer {
+  with minstd(42)
+  def number(length: Int): Int = {
+    var result = 0
+    length.repeat { result = result * 10 + randomInt(1, 9) }
+    result
+  }
+  val problems = array::collect[Problem] {
+    repeat(1000) {
+      val width = randomInt(1, 3)
+      val lengths = [randomInt(1, width), randomInt(1, width), randomInt(1, width), width].sort
+      val numbers = array::fromList(lengths.map { length => number(length) })
+      val operator = if (randomBool()) { "+" } else { "*" }
+      do emit(Problem(width, randomBool(), numbers, operator))
+    }
+  }
+  def padded(text: String, width: Int, left: Bool): Unit / write = {
+    if (left) { do write(text) }
+    (width - text.length).repeat { do write(" ") }
+    if (not(left)) { do write(text) }
+  }
+  each(0, 4) { row =>
+    problems.foreachIndex { (i, problem) =>
+      if (i > 0) { do write(" ") }
+      padded(show(problem.numbers.get(row)), problem.width, problem.left)
+    }
+    do write("\n")
+  }
+  problems.foreachIndex { (i, problem) =>
+    if (i > 0) { do write(" ") }
+    padded(problem.operator, problem.width, true)
+  }
+  do write("\n")
+}
+
+def run(n: Int): Int = {
+  val input = generate()
+  var result = 0
+  repeat(n) {
+    val worksheet = {
+      with feed(input)
+      with returning::peeking[Char, (Array[Array[Int]], Array[Char])]
+      with crash("malformed input")
+      parseWorksheet()
+    }
+    val (matrix, operators) = worksheet
+    val grid = {
+      with feed(input)
+      with returning::peeking[Char, Array[Array[Char]]]
+      parseGrid()
+    }
+    result = result + solveEasy(matrix, operators) + solveHard(grid)
+  }
+  result
+}
+
+def main() = benchmark(1) { run }

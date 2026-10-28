@@ -1,0 +1,84 @@
+import scanner
+import stringbuffer
+import random
+
+import examples/benchmarks/runner
+
+def parseBanks(): Array[List[Int]] / { Scan[Char], fail } =
+  array::collect { many { line {
+    list::collect[Int] { many { readDigit() } }
+  } } }
+
+def digitsToInt(digits: List[Int]): Int = {
+  var result = 0
+  for { digits.each } { d =>
+    result = result * 10 + d
+  }
+  result
+}
+
+interface Nondet { def choose[T](options: List[T]): T }
+
+def nondeterministically { body: => Unit / Nondet }: Unit =
+  try body() with Nondet { def choose[T](options) = for { options.each } { x => resume(x) } }
+
+def selectBatteries(k: Int, bank: List[Int]): List[Int] = {
+  with crash("no such element")
+  with first
+  with nondeterministically
+
+  var remaining = bank
+
+  def pickNextHighestDigit(): Int = {
+    val digit = do choose([9, 8, 7, 6, 5, 4, 3, 2, 1])
+    val suffixes = list::collect[List[Int]] {
+      for { remaining.tails } {
+        case Cons(x, xs) and x == digit => do emit(xs)
+        case _ => ()
+      }
+    }
+    remaining = do choose(suffixes)
+    digit
+  }
+
+  val selected = list::build(k) { _ => pickNextHighestDigit() }
+  do emit(selected)
+}
+
+def totalJoltage(k: Int, banks: Array[List[Int]]): Int = sum {
+  banks.foreach { bank =>
+    do emit(selectBatteries(k, bank).digitsToInt)
+  }
+}
+
+def solveEasy(banks: Array[List[Int]]): Int = totalJoltage(2, banks)
+
+def solveHard(banks: Array[List[Int]]): Int = totalJoltage(12, banks)
+
+def generate(): String = stringBuffer {
+  with minstd(42)
+  repeat(100) {
+    repeat(100) {
+      val digit = if (randomInt(0, 9) == 0) { randomInt(1, 9) } else { randomInt(1, 5) }
+      do write(show(digit))
+    }
+    do write("\n")
+  }
+}
+
+def run(n: Int): Int = {
+  val input = generate()
+  var result = 0
+  repeat(n) {
+    val banks = {
+      with feed(input)
+      with returning::peeking[Char, Array[List[Int]]]
+      with crash("malformed input")
+      parseBanks()
+    }
+    result = result + solveEasy(banks) + solveHard(banks)
+  }
+  result
+}
+
+def main() = benchmark(1) { run }

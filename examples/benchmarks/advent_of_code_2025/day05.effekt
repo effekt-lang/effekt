@@ -1,0 +1,118 @@
+import scanner
+import stringbuffer
+import random
+import list
+
+import examples/benchmarks/runner
+
+record Range(from: Int, to: Int)
+type ID = Int
+
+def parseRange(): Range / { Scan[Char], fail } = {
+  val from = readDecimal()
+  mustSkip('-')
+  val to = readDecimal()
+  Range(from, to)
+}
+
+def parseDatabase(): (List[Range], List[ID]) / { Scan[Char], fail } = {
+  val ranges = list::collect[Range] { many {
+    if (do peek() == '\n') { do stop() }
+    line { parseRange() }
+  } }
+  mustSkip('\n')
+  val ids = list::collect[ID] { many { line { readDecimal() } } }
+  (ranges, ids)
+}
+
+def compare(left: Range, right: Range): Ordering =
+  if (left.from < right.from) Less()
+  else if (left.from > right.from) Greater()
+  else if (left.to < right.to) Less()
+  else if (left.to > right.to) Greater()
+  else Equal()
+
+def intersects(left: Range, right: Range): Bool =
+  left.from <= right.to && right.from <= left.to
+
+def infixLeq(left: Range, right: Range): Bool =
+  left.compare(right) match {
+    case Less() => true
+    case Equal() => true
+    case Greater() => false
+  }
+
+def contains(range: Range, id: ID): Bool =
+  id >= range.from && id <= range.to
+
+def merge(left: Range, right: Range): Range =
+  Range(min(left.from, right.from), max(left.to, right.to))
+
+def union { stream: () => Unit / emit[Range] }: Unit / emit[Range] = {
+  val sorted =
+    list::collect[Range] { stream() }.sortBy { infixLeq }
+  var current: Option[Range] = None()
+  for { sorted.each } { range =>
+    current match {
+      case None() =>
+        current = Some(range)
+      case Some(r) =>
+        if (r.intersects(range)) {
+          current = Some(r.merge(range))
+        } else {
+          do emit(r)
+          current = Some(range)
+        }
+    }
+  }
+  if (current is Some(value)) {
+    do emit(value)
+  }
+}
+
+def size(range: Range): Int =
+  range.to - range.from + 1
+
+def solveEasy(ranges: List[Range], ids: List[ID]): Int =
+  countIf { id => ranges.any { range => range.contains(id) } } { ids.each }
+
+def solveHard(ranges: List[Range]): Int =
+  sum {
+    for { union { ranges.each } } { range =>
+      do emit(range.size)
+    }
+  }
+
+def generate(): String = stringBuffer {
+  with minstd(42)
+  repeat(180) {
+    val from = randomInt(0, 499999999999)
+    do write(show(from))
+    do write("-")
+    do write(show(from + randomInt(0, 4999999999)))
+    do write("\n")
+  }
+  do write("\n")
+  repeat(1000) {
+    do write(show(randomInt(0, 499999999999)))
+    do write("\n")
+  }
+}
+
+def run(n: Int): Int = {
+  val input = generate()
+  var result = 0
+  repeat(n) {
+    val database = {
+      with feed(input)
+      with returning::peeking[Char, (List[Range], List[ID])]
+      with crash("malformed input")
+      parseDatabase()
+    }
+    val (ranges, ids) = database
+    result = result + solveEasy(ranges, ids) + solveHard(ranges)
+  }
+  result
+}
+
+def main() = benchmark(1) { run }

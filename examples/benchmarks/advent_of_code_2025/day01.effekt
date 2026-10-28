@@ -1,0 +1,77 @@
+import scanner
+import stringbuffer
+import random
+
+import examples/benchmarks/runner
+
+type Rotation { Left(delta: Int); Right(delta: Int) }
+
+def parseRotations(): Array[Rotation] / { Scan[Char], fail } =
+  array::collect { many { line {
+    do next() match {
+      case 'L' => Left(readDecimal())
+      case 'R' => Right(readDecimal())
+      case _ => do fail()
+    }
+  } } }
+
+def rem(n: Int, m: Int): Int = {
+  val r = n.mod(m)
+  if (r < 0) r + m else r
+}
+
+def countZeros { positions: () => Unit / emit[Int] }: Int =
+  countIf { position => position.rem(100) == 0 } {positions}
+
+def solveEasy(rotations: Array[Rotation]): Int = countZeros {
+  var current = 50
+  rotations.foreach { rotation =>
+    rotation match {
+      case Left(delta) =>
+        current = (current - delta).rem(100)
+      case Right(delta) =>
+        current = (current + delta).rem(100)
+    }
+    do emit(current)
+  }
+}
+
+def solveHard(rotations: Array[Rotation]): Int = countZeros {
+  var current = 50
+  rotations.foreach { rotation =>
+    rotation match {
+      case Left(delta) =>
+        stream::range(current - delta, current)
+        current = (current - delta).rem(100)
+      case Right(delta) =>
+        stream::range(current + 1, current + delta + 1)
+        current = (current + delta).rem(100)
+    }
+  }
+}
+
+def generate(): String = stringBuffer {
+  with minstd(42)
+  repeat(4000) {
+    if (randomBool()) { do write("L") } else { do write("R") }
+    do write(show(randomInt(1, 999)))
+    do write("\n")
+  }
+}
+
+def run(n: Int): Int = {
+  val input = generate()
+  var result = 0
+  repeat(n) {
+    val rotations = {
+      with feed(input)
+      with returning::peeking[Char, Array[Rotation]]
+      with crash("malformed input")
+      parseRotations()
+    }
+    result = result + solveEasy(rotations) + solveHard(rotations)
+  }
+  result
+}
+
+def main() = benchmark(1) { run }
