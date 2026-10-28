@@ -15,7 +15,7 @@ def parseRanges(): Array[Range] / { Scan[Char], fail } =
     Range(from, to)
   } }
 
-def repeat(k: Int, n: Int): Int = {
+def repeated(k: Int, n: Int): Int = {
   var multiplier = 1
   var temp = n
   while (temp > 0) {
@@ -32,8 +32,8 @@ def repeat(k: Int, n: Int): Int = {
 
 def sumInvalid(ranges: Array[Range]) { isInvalid: Int => Bool }: Int = sum {
   ranges.foreach { case Range(from, to) =>
-    for { range(from, to + 1) } { (n: Int) =>
-      if (n.isInvalid()) {
+    for { range(from, to + 1) } { n =>
+      if (n.isInvalid) {
         do emit(n)
       }
     }
@@ -42,10 +42,10 @@ def sumInvalid(ranges: Array[Range]) { isInvalid: Int => Bool }: Int = sum {
 
 def solveEasy(ranges: Array[Range]): Int = {
   val repeatedTwice = set::collect(box compareInt) {
-    with takeWhile[Int] { n => n < 10000000000 }
+    with takeWhile { n => n < 10000000000 }
 
-    for {rangeFrom(1)} { (n: Int) =>
-      do emit(repeat(2, n))
+    for { rangeFrom(1) } { n =>
+      do emit(repeated(2, n))
     }
   }
 
@@ -54,10 +54,10 @@ def solveEasy(ranges: Array[Range]): Int = {
 
 def solveHard(ranges: Array[Range]): Int = {
   val repeatedManyTimes = set::collect(box compareInt) {
-    for {range(2, 12)} { (k: Int) =>
-      with takeWhile[Int] { n => n < 10000000000 }
-      for {rangeFrom(1)} { (n: Int) =>
-        do emit(repeat(k, n))
+    for { range(2, 12) } { k =>
+      with takeWhile { n => n < 10000000000 }
+      for { rangeFrom(1) } { n =>
+        do emit(repeated(k, n))
       }
     }
   }

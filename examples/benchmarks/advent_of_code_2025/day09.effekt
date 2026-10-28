@@ -57,7 +57,7 @@ def edges(polygon: Array[Point]): Unit / emit[Line] =
 
 def isInside(point: Point, polygon: Array[Point]): Bool = {
   var crossings = 0
-  for[Line] { polygon.edges } {
+  for { polygon.edges } {
     case Horizontal(_, _, _) => ()
     case Vertical(place, lower, upper) =>
       if (place > point._1) {
@@ -71,7 +71,7 @@ def isInside(point: Point, polygon: Array[Point]): Bool = {
   return crossings != 0
 }
 
-def isInside(rectangle: (Point, Point), polygon: Array[Point]) = {
+def isInside(rectangle: (Point, Point), polygon: Array[Point]): Bool = {
   with start[Bool]
   val (p, q) = rectangle
   val min1 = min(p._1, q._1)
@@ -84,7 +84,7 @@ def isInside(rectangle: (Point, Point), polygon: Array[Point]) = {
   if (not(isInside(Point(q._1, p._2), polygon))) { do done(false) }
   if (not(isInside(Point(q._1, q._2), polygon))) { do done(false) }
 
-  for[Line] { polygon.edges } {
+  for { polygon.edges } {
     case Horizontal(place, lower, upper) =>
       if (min2 < place && place < max2) {
         if (not(max(lower, upper) <= min1 || min(lower, upper) >= max1)) {

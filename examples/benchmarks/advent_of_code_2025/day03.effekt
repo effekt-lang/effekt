@@ -11,7 +11,7 @@ def parseBanks(): Array[List[Int]] / { Scan[Char], fail } =
 
 def digitsToInt(digits: List[Int]): Int = {
   var result = 0
-  for {digits.each} { d =>
+  for { digits.each } { d =>
     result = result * 10 + d
   }
   result
@@ -34,7 +34,7 @@ def selectBatteries(k: Int, bank: List[Int]): List[Int] = {
     val suffixes = list::collect[List[Int]] {
       for { remaining.tails } {
         case Cons(x, xs) and x == digit => do emit(xs)
-        case _                          => ()
+        case _ => ()
       }
     }
     remaining = do choose(suffixes)

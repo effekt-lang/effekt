@@ -7,23 +7,23 @@ import examples/benchmarks/runner
 
 record Point(_1: Int, _2: Int)
 
-def compare(p1: Point, p2: Point): Ordering =
-  if (p1._1 < p2._1) Less()
-  else if (p1._1 > p2._1) Greater()
-  else if (p1._2 < p2._2) Less()
-  else if (p1._2 > p2._2) Greater()
+def compare(p: Point, q: Point): Ordering =
+  if (p._1 < q._1) Less()
+  else if (p._1 > q._1) Greater()
+  else if (p._2 < q._2) Less()
+  else if (p._2 > q._2) Greater()
   else Equal()
 
 def parseRolls(): Set[Point] / { Scan[Char], fail } = {
   var c2 = 0
-  set::collect[Point](box compare) {
+  set::collect(box compare) {
     loop { line {
       var c1 = 0
       loop {
         do next() match {
           case '@' => do emit(Point(c1, c2))
           case '.' => ()
-          case _   => do fail()
+          case _ => do fail()
         }
         c1 = c1 + 1
       }
@@ -33,8 +33,8 @@ def parseRolls(): Set[Point] / { Scan[Char], fail } = {
 }
 
 def neighboursOf(point: Point): Unit / emit[Point] = {
-  with val d1 = for[Int] { [0, -1, 1].each }
-  with val d2 = for[Int] { [0, -1, 1].each }
+  with val d1 = for { [0, -1, 1].each }
+  with val d2 = for { [0, -1, 1].each }
 
   if (d1 != 0 || d2 != 0) {
     do emit(Point(point._1 + d1, point._2 + d2))
@@ -42,7 +42,7 @@ def neighboursOf(point: Point): Unit / emit[Point] = {
 }
 
 def neighboursAtMost(k: Int, points: Set[Point]): Unit / emit[Point] =
-  for {points.each} { point =>
+  for { points.each } { point =>
     val reachableBy = {
       with countIf { neighbour => points.contains(neighbour) }
       point.neighboursOf
@@ -61,7 +61,7 @@ def solveHard(rolls: Set[Point]): Int = {
 
   loop {
     var removedAtLeastOne = false
-    for { neighboursAtMost(4, grid) } { (point: Point) =>
+    for { neighboursAtMost(4, grid) } { point =>
       grid = grid.delete(point)
       removedAtLeastOne = true
     }
