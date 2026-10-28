@@ -11,7 +11,7 @@ def parseRotations(): Array[Rotation] / { Scan[Char], fail } =
     do next() match {
       case 'L' => Left(readDecimal())
       case 'R' => Right(readDecimal())
-      case _   => do fail()
+      case _ => do fail()
     }
   } } }
 
@@ -21,13 +21,13 @@ def rem(n: Int, m: Int): Int = {
 }
 
 def countZeros { positions: () => Unit / emit[Int] }: Int =
-  countIf[Int] { position => position.rem(100) == 0 } {positions}
+  countIf { position => position.rem(100) == 0 } {positions}
 
 def solveEasy(rotations: Array[Rotation]): Int = countZeros {
   var current = 50
   rotations.foreach { rotation =>
     rotation match {
-      case Left(delta)  =>
+      case Left(delta) =>
         current = (current - delta).rem(100)
       case Right(delta) =>
         current = (current + delta).rem(100)
@@ -40,7 +40,7 @@ def solveHard(rotations: Array[Rotation]): Int = countZeros {
   var current = 50
   rotations.foreach { rotation =>
     rotation match {
-      case Left(delta)  =>
+      case Left(delta) =>
         stream::range(current - delta, current)
         current = (current - delta).rem(100)
       case Right(delta) =>

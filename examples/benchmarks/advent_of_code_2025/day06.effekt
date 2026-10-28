@@ -20,13 +20,13 @@ def parseVector(): Array[Int] / { Scan[Char], fail } =
 def parseMatrix(): Array[Array[Int]] / { Scan[Char], fail } =
   array::collect { loop {
     do peek() match {
-      case c and c.isDigit() => do emit(parseVector())
+      case c and c.isDigit => do emit(parseVector())
       case ' ' => skip()
       case '+' => do stop()
       case '*' => do stop()
       case _ => do fail()
     }
-  }}
+  } }
 
 def parseOperators(): Array[Char] / { Scan[Char], fail } =
   array::collect { loop {
@@ -37,7 +37,7 @@ def parseOperators(): Array[Char] / { Scan[Char], fail } =
       case '\n' => do stop()
       case _ => do fail()
     }
-  }}
+  } }
 
 def parseWorksheet(): (Array[Array[Int]], Array[Char]) / { Scan[Char], fail } = {
   val matrix = parseMatrix()
@@ -54,13 +54,7 @@ def readLine(): Array[Char] / Scan[Char] =
   } }
 
 def parseGrid(): Array[Array[Char]] / Scan[Char] =
-  array::collect[Array[Char]] { many { do peek(); readLine() }}
-
-def product(list: List[Int]): Int = {
-  var n = 1;
-  list.foreach { x => n = n * x };
-  return n
-}
+  array::collect { many { do peek(); readLine() } }
 
 def column[T](matrix: Array[Array[T]], i: Int): Unit / emit[T] =
   matrix.foreach { vector => do emit(vector.get(i)) }
@@ -68,7 +62,7 @@ def column[T](matrix: Array[Array[T]], i: Int): Unit / emit[T] =
 def eachDown(n: Int) { action: Int => Unit }: Unit =
   if (n > 0) {
     action(n - 1)
-    eachDown(n - 1){action}
+    eachDown(n - 1) {action}
   }
 
 def reverseTranspose[T](matrix: Array[Array[T]]): Unit / emit[Array[T]] =
@@ -90,14 +84,14 @@ def solveEasy(matrix: Array[Array[Int]], operators: Array[Char]): Int =
       o match {
         case '+' => do emit(sum { matrix.column(i) })
         case '*' => do emit(product { matrix.column(i) })
-        case _ => panic("non-operator")
+        case _ => panic("malformed input")
       }
     }
   }
 
 def solveHard(grid: Array[Array[Char]]): Int =
   sum {
-    var stack = Nil[Int]()
+    var stack = Nil()
     for[Array[Char]] { grid.reverseTranspose } { line =>
       with source[Char] { line.each }
       with peeking[Char]
@@ -109,12 +103,12 @@ def solveHard(grid: Array[Array[Char]]): Int =
       skipSpaces()
       do next() match {
         case '+' =>
-          do emit(stack.sum);
+          do emit(stack.sum)
           stack = Nil()
         case '*' =>
-          do emit(stack.product);
+          do emit(product { stack.each })
           stack = Nil()
-        case _ => panic("malformed input!")
+        case _ => panic("malformed input")
       }
     }
   }

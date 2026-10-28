@@ -9,8 +9,8 @@ record Array2[A](size0: Int, size1: Int, fields: Array[A])
 record Region(size0: Int, size1: Int, quantities: Array[Int])
 
 def parseProblem(): (Array[Array2[Bool]], List[Region]) / { Scan[Char], fail } = {
-  list::returning::collect[Region, Array[Array2[Bool]]] {
-    array::collect[Array2[Bool]] {
+  list::returning::collect {
+    array::collect {
       loop {
         do peek()
         val number = readDecimal()
@@ -28,6 +28,7 @@ def parseProblem(): (Array[Array2[Bool]], List[Region]) / { Scan[Char], fail } =
                   case _ => do fail()
                 }
                 size0 = size0 + 1
+                size1 = 0
                 line { loop {
                   readWhen {
                     case '#' => do emit(true)
@@ -60,7 +61,7 @@ def solveEasy(regions: List[Region]): Int =
   sum {
     regions.foreach { case Region(size0, size1, quantities) =>
       val available = (size0 / 3) * (size1 / 3)
-      val required = quantities.sum()
+      val required = quantities.sum
       if (required <= available) {
         do emit(1)
       }

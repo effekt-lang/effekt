@@ -27,7 +27,7 @@ def parseMachine(): Machine / { Scan[Char], fail } = {
     val affected = list::collect[Int] { list(',') { readDecimal() } }
     mustSkip(')')
     return affected
-  }}
+  } }
   mustSkip('{')
   val joltages = array::collect[Int] { list(',') { readDecimal() } }
   mustSkip('}')
@@ -37,7 +37,7 @@ def parseMachine(): Machine / { Scan[Char], fail } = {
 def parseMachines(): Array[Machine] / { Scan[Char], fail } =
   array::collect { many { line { parseMachine() } } }
 
-def mappedIndex[A, B](array: Array[A]){ function: (Int, A) => B }: Array[B] = {
+def mappedIndex[A, B](array: Array[A]) { function: (Int, A) => B }: Array[B] = {
   val result = unsafeAllocate(array.size)
   array.foreachIndex { (i, e) =>
     result.set(i, function(i, e))
@@ -48,13 +48,13 @@ def mappedIndex[A, B](array: Array[A]){ function: (Int, A) => B }: Array[B] = {
 effect fork(): Bool
 effect loss(weight: Double): Unit
 
-def choose[A] { path1: () => A } { path2: () => A }: A / fork =
-  if (do fork()) { path1() } else { path2() }
+def choose[A] { first: () => A } { second: () => A }: A / fork =
+  if (do fork()) { first() } else { second() }
 
 def where(constraint: Bool): Unit / fail =
   if (not(constraint)) { do fail() }
 
-def minimize[A]{ program: () => A / {loss, fork, fail}}: Unit / emit[Weighted[A]] = {
+def minimize[A] { program: () => A / { loss, fork, fail } }: Unit / emit[Weighted[A]] = {
   var current = 0.0
   var tasks = Empty()
   try {
@@ -89,7 +89,7 @@ def solveEasy(machines: Array[Machine]): Int =
     machines.foreach {
       case Machine(targets, buttons, _) =>
         try {
-          minimize[Unit] {
+          minimize {
             var lights = targets
             buttons.foreach { button =>
               choose { () } {
@@ -97,7 +97,7 @@ def solveEasy(machines: Array[Machine]): Int =
                 lights = applyEasy(button, lights)
               }
             }
-            where(not(any[Bool] { b => b } { lights.each }))
+            where(not(any { b => b } { lights.each }))
           }
         } with emit[Weighted[Unit]] {
           case Weighted(_, weight) => do emit(weight.round)
@@ -110,7 +110,7 @@ def solveHard(machines: Array[Machine]): Int =
     machines.foreach {
       case Machine(_, buttons, targets) =>
         try {
-          minimize[Unit] {
+          minimize {
             var level = 1.0
             def go(targets: Array[Int]): Unit / loss = {
               if (not(all { i => i == 0 } { targets.each })) {
@@ -194,26 +194,26 @@ def run(n: Int): Int = {
 
 def main() = benchmark(1) { run }
 
-def meld[A](heap1: Heap[A], heap2: Heap[A]): Heap[A] =
-  (heap1, heap2) match {
+def meld[A](left: Heap[A], right: Heap[A]): Heap[A] =
+  (left, right) match {
     case (Empty(), Empty()) => Empty()
-    case (heap1, Empty()) => heap1
-    case (Empty(), heap2) => heap2
-    case (Heap(x1, w1, subheaps1), Heap(x2, w2, subheaps2)) =>
-      if (w1 < w2)
-        Heap(x1, w1, Cons(Heap(x2, w2, subheaps2), subheaps1))
+    case (left, Empty()) => left
+    case (Empty(), right) => right
+    case (Heap(x, v, xs), Heap(y, w, ys)) =>
+      if (v < w)
+        Heap(x, v, Cons(Heap(y, w, ys), xs))
       else
-        Heap(x2, w2, Cons(Heap(x1, w1, subheaps1), subheaps2))
+        Heap(y, w, Cons(Heap(x, v, xs), ys))
   }
 
 def mergePairs[A](heap: Heap[A], heaps: List[Heap[A]]): Heap[A] =
   heaps match {
     case Nil() =>
       heap
-    case Cons(heap1, Nil()) =>
-      meld(heap, heap1)
-    case Cons(heap1, Cons(heap2, heaps)) =>
-      meld(meld(heap, heap1), mergePairs(heap2, heaps))
+    case Cons(first, Nil()) =>
+      meld(heap, first)
+    case Cons(first, Cons(second, heaps)) =>
+      meld(meld(heap, first), mergePairs(second, heaps))
   }
 
 def insert[A](heap: Heap[A], value: A, weight: Double): Heap[A] =

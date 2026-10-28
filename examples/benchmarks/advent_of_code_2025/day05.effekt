@@ -17,7 +17,7 @@ def parseRange(): Range / { Scan[Char], fail } = {
 
 def parseDatabase(): (List[Range], List[ID]) / { Scan[Char], fail } = {
   val ranges = list::collect[Range] { many {
-    if (do peek[Char]() == '\n') { do stop() }
+    if (do peek() == '\n') { do stop() }
     line { parseRange() }
   } }
   mustSkip('\n')
@@ -37,22 +37,22 @@ def intersects(left: Range, right: Range): Bool =
 
 def infixLeq(left: Range, right: Range): Bool =
   left.compare(right) match {
-    case Less()    => true
-    case Equal()   => true
+    case Less() => true
+    case Equal() => true
     case Greater() => false
   }
 
 def contains(range: Range, id: ID): Bool =
   id >= range.from && id <= range.to
 
-def merge(r1: Range, r2: Range): Range =
-  Range(min(r1.from, r2.from), max(r1.to, r2.to))
+def merge(left: Range, right: Range): Range =
+  Range(min(left.from, right.from), max(left.to, right.to))
 
 def union { stream: () => Unit / emit[Range] }: Unit / emit[Range] = {
   val sorted =
     list::collect[Range] { stream() }.sortBy { infixLeq }
   var current: Option[Range] = None()
-  for { sorted.each } { (range: Range) =>
+  for { sorted.each } { range =>
     current match {
       case None() =>
         current = Some(range)
@@ -74,12 +74,12 @@ def size(range: Range): Int =
   range.to - range.from + 1
 
 def solveEasy(ranges: List[Range], ids: List[ID]): Int =
-  countIf[ID] { id => ranges.any { range => range.contains(id) } } { ids.each }
+  countIf { id => ranges.any { range => range.contains(id) } } { ids.each }
 
 def solveHard(ranges: List[Range]): Int =
   sum {
     for { union { ranges.each } } { range =>
-      do emit(range.size())
+      do emit(range.size)
     }
   }
 
