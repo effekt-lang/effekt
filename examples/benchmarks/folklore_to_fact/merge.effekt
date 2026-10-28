@@ -37,16 +37,16 @@ def merge(l1: List[Int], l2: List[Int]): List[Int] =
     }
   }
 
-def head(l: List[Int]): Int =
+def sum_loop(l: List[Int], acc: Int): Int =
   l match {
-    case Nil() => -1
-    case Cons(x, xs) => x
+    case Nil() => acc
+    case Cons(x, xs) => sum_loop(xs, acc + x)
   }
 
 def run(n: Int): Int = {
   val l1 = tabulate(n) { x => 2 * x }
   val l2 = tabulate(n) { x => (2 * x) + 1 }
-  merge(l1, l2).head
+  sum_loop(merge(l1, l2), 0)
 }
 
 def main() = benchmark(10){run}

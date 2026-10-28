@@ -107,12 +107,13 @@ def mk_ans(a: Expr, b: Expr): Expr =
           Cons(Num(0), Nil())))))
 
 def run(n: Int): Int = {
-  // only one argument
-  val m = n + 2
-  val res = deriv(mk_exp(Num(n), Num(m)))
-  val expected = mk_ans(Num(n), Num(m))
-
-  if (equal(expected, res)) { 1 } else { 0 }
+  def loop(i: Int, acc: Int): Int =
+    if (i > n) { acc } else {
+      val res = deriv(mk_exp(Num(i), Num(i + 2)))
+      val expected = mk_ans(Num(i), Num(i + 2))
+      loop(i + 1, if (equal(expected, res)) { acc + 1 } else { acc })
+    }
+  loop(1, 0)
 }
 
 def main() = benchmark(5){run}
