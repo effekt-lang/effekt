@@ -47,12 +47,12 @@ def mas(x: List[Int], y: List[Int], z: List[Int]): List[Int] =
     )
   }
 
-def run(x: Int): Int = {
-  // only one argument
-  val y = x - 2
-  val z = x - 6
+def run(n: Int): Int = {
+  val x = n
+  val y = (2 * n) / 3
+  val z = n / 3
   len(mas(list_n(x), list_n(y), list_n(z)))
 }
 
 
-def main() = benchmark(14){run}
+def main() = benchmark(18){run}

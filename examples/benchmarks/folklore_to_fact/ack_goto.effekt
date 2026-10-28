@@ -16,6 +16,6 @@ def ack(m: Int, n: Int): Int / goto = {
 
 def run(n: Int): Int =
   // we only have one input to the benchmark program
-  try { ack(n / 2, n) } with goto { i => i }
+  try { ack(3, n) } with goto { i => i }
 
 def main() = benchmark(4){run}
