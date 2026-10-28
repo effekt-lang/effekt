@@ -137,7 +137,7 @@ lazy val integers: Builtins = Map(
     case As.Int(x) :: As.Int(y) :: Nil => Value.Int(x * y)
   },
   builtin("effekt::rem(Int, Int)") {
-    case As.Int(x) :: As.Int(y) :: Nil => Value.Int(x - y * (x / y))
+    case As.Int(x) :: As.Int(y) :: Nil => Value.Int(x % y)
   },
   builtin("effekt::quot(Int, Int)") {
     case As.Int(x) :: As.Int(y) :: Nil => Value.Int(x / y)
@@ -181,9 +181,6 @@ lazy val integers: Builtins = Map(
   },
   builtin("effekt::bitwiseNot(Int)") {
     case As.Int(x) :: Nil => Value.Int(~x)
-  },
-  builtin("effekt::bitwiseMsb(Int)") {
-    case As.Int(x) :: Nil => Value.Int(x >> 63)
   },
 
   // Comparison

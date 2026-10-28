@@ -1,10 +1,26 @@
-8 `divmod` 3 = 2, 2
-8 `divmod` -3 = -2, 2
--8 `divmod` 3 = -3, 1
--8 `divmod` -3 = 3, 1
+8 `divmod` 3 = 2, 2 (true)
+8 `divmod` -3 = -2, 2 (true)
+-8 `divmod` 3 = -3, 1 (true)
+-8 `divmod` -3 = 3, 1 (true)
+6 `divmod` 3 = 2, 0 (true)
+6 `divmod` -3 = -2, 0 (true)
+-6 `divmod` 3 = -2, 0 (true)
+-6 `divmod` -3 = 2, 0 (true)
+5000000002 `divmod` 3 = 1666666667, 1 (true)
+5000000002 `divmod` -3 = -1666666667, 1 (true)
+-5000000002 `divmod` 3 = -1666666668, 2 (true)
+-5000000002 `divmod` -3 = 1666666668, 2 (true)
 
-8 `quotrem` 3 = 2, 2
-8 `quotrem` -3 = -2, 2
--8 `quotrem` 3 = -2, -2
--8 `quotrem` -3 = 2, -2
+8 `quotrem` 3 = 2, 2 (true)
+8 `quotrem` -3 = -2, 2 (true)
+-8 `quotrem` 3 = -2, -2 (true)
+-8 `quotrem` -3 = 2, -2 (true)
+6 `quotrem` 3 = 2, 0 (true)
+6 `quotrem` -3 = -2, 0 (true)
+-6 `quotrem` 3 = -2, 0 (true)
+-6 `quotrem` -3 = 2, 0 (true)
+5000000002 `quotrem` 3 = 1666666667, 1 (true)
+5000000002 `quotrem` -3 = -1666666667, 1 (true)
+-5000000002 `quotrem` 3 = -1666666667, -1 (true)
+-5000000002 `quotrem` -3 = 1666666667, -1 (true)
 
