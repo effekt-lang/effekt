@@ -1,0 +1,100 @@
+import scanner
+import stringbuffer
+import random
+import set
+
+import examples/benchmarks/runner
+
+record Point(_1: Int, _2: Int)
+
+def compare(p1: Point, p2: Point): Ordering =
+  if (p1._1 < p2._1) Less()
+  else if (p1._1 > p2._1) Greater()
+  else if (p1._2 < p2._2) Less()
+  else if (p1._2 > p2._2) Greater()
+  else Equal()
+
+def parseRolls(): Set[Point] / { Scan[Char], fail } = {
+  var c2 = 0
+  set::collect[Point](box compare) {
+    loop { line {
+      var c1 = 0
+      loop {
+        do next() match {
+          case '@' => do emit(Point(c1, c2))
+          case '.' => ()
+          case _   => do fail()
+        }
+        c1 = c1 + 1
+      }
+      c2 = c2 + 1
+    } }
+  }
+}
+
+def neighboursOf(point: Point): Unit / emit[Point] = {
+  with val d1 = for[Int] { [0, -1, 1].each }
+  with val d2 = for[Int] { [0, -1, 1].each }
+
+  if (d1 != 0 || d2 != 0) {
+    do emit(Point(point._1 + d1, point._2 + d2))
+  }
+}
+
+def neighboursAtMost(k: Int, points: Set[Point]): Unit / emit[Point] =
+  for {points.each} { point =>
+    val reachableBy = {
+      with countIf { neighbour => points.contains(neighbour) }
+      point.neighboursOf
+    }
+
+    if (reachableBy < k) {
+      do emit(point)
+    }
+  }
+
+def solveEasy(rolls: Set[Point]): Int =
+  count[Point] { neighboursAtMost(4, rolls) }
+
+def solveHard(rolls: Set[Point]): Int = {
+  var grid = rolls
+
+  loop {
+    var removedAtLeastOne = false
+    for { neighboursAtMost(4, grid) } { (point: Point) =>
+      grid = grid.delete(point)
+      removedAtLeastOne = true
+    }
+
+    if (not(removedAtLeastOne)) { do stop() }
+  }
+
+  rolls.size - grid.size
+}
+
+def generate(): String = stringBuffer {
+  with minstd(42)
+  repeat(25) {
+    repeat(25) {
+      if (randomInt(0, 3) == 0) { do write(".") } else { do write("@") }
+    }
+    do write("\n")
+  }
+}
+
+def run(n: Int): Int = {
+  val input = generate()
+  var result = 0
+  repeat(n) {
+    val rolls = {
+      with feed(input)
+      with returning::peeking[Char, Set[Point]]
+      with crash("malformed input")
+      parseRolls()
+    }
+    result = result + solveEasy(rolls) + solveHard(rolls)
+  }
+  result
+}
+
+def main() = benchmark(1) { run }

@@ -1,0 +1,111 @@
+import scanner
+import stringbuffer
+import random
+
+import examples/benchmarks/runner
+
+type Field = Bool
+type Position = Int
+
+def parseFirstLine(): Position / { Scan[Char], fail } = must { line {
+  var position = 0
+  loop { skipIf('.'); position = position + 1 }
+  mustSkip('S')
+  loop { skipIf('.') }
+  return position
+} }
+
+def parseLine(): Array[Field] / { Scan[Char], fail, stop } =
+  array::collect { line { many { do next() match {
+    case '.' => false
+    case '^' => true
+    case _ => do fail()
+  } } } }
+
+def parseManifold(): (Position, Array[Array[Field]]) / { Scan[Char], fail } =
+  array::returning::collect {
+    val position = parseFirstLine()
+    many { parseLine() }
+    return position
+  }
+
+def add(a: Array[Int], i: Int, v: Int): Unit =
+  a.set(i, a.get(i) + v)
+
+def solveEasy(position: Position, grid: Array[Array[Field]]): Int = {
+  var splits = 0
+  var beams = array(grid.get(0).size, false)
+  beams.set(position, true)
+
+  grid.foreach { splitters =>
+    val next = array(beams.size, false)
+    each(0, next.size) { i =>
+      if (beams.get(i) && not(splitters.get(i))) {
+        next.set(i, true)
+      }
+      if (beams.get(i) && splitters.get(i)) {
+        next.set(i - 1, true)
+        next.set(i + 1, true)
+        splits = splits + 1
+      }
+    }
+    beams = next
+  }
+
+  splits
+}
+
+def solveHard(position: Position, grid: Array[Array[Field]]): Int = {
+  var beams = array(grid.get(0).size, 0)
+  beams.set(position, 1)
+
+  grid.foreach { splitters =>
+    val next = array(beams.size, 0)
+    each(0, next.size) { i =>
+      if (splitters.get(i)) {
+        next.add(i - 1, beams.get(i))
+        next.add(i + 1, beams.get(i))
+      } else {
+        next.add(i, beams.get(i))
+      }
+    }
+    beams = next
+  }
+
+  beams.sum
+}
+
+def generate(): String = stringBuffer {
+  with minstd(42)
+  val width = 141
+  each(0, width) { i => if (i == width / 2) { do write("S") } else { do write(".") } }
+  do write("\n")
+  each(1, 141) { row =>
+    each(0, width) { i =>
+      if (row.mod(2) == 0 && i > 0 && i < width - 1 && randomInt(0, 2) == 0) {
+        do write("^")
+      } else {
+        do write(".")
+      }
+    }
+    do write("\n")
+  }
+}
+
+def run(n: Int): Int = {
+  val input = generate()
+  var result = 0
+  repeat(n) {
+    val manifold = {
+      with feed(input)
+      with returning::peeking[Char, (Position, Array[Array[Field]])]
+      with crash("malformed input")
+      parseManifold()
+    }
+    val (position, grid) = manifold
+    result = result + solveEasy(position, grid) + solveHard(position, grid)
+  }
+  result
+}
+
+def main() = benchmark(1) { run }

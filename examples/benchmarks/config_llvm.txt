@@ -59,3 +59,15 @@ folklore_to_fact/tak_goto 24
 folklore_to_fact/takl 25
 folklore_to_fact/cps_tak 27
 folklore_to_fact/deriv 74421
+advent_of_code_2025/day01 100
+advent_of_code_2025/day02 64
+advent_of_code_2025/day03 64
+advent_of_code_2025/day04 256
+advent_of_code_2025/day05 512
+advent_of_code_2025/day06 256
+advent_of_code_2025/day07 512
+advent_of_code_2025/day08 100
+advent_of_code_2025/day09 100
+advent_of_code_2025/day10 4096
+advent_of_code_2025/day11 1024
+advent_of_code_2025/day12 512

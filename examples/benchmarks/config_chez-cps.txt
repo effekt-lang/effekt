@@ -22,3 +22,15 @@ effect_handlers_bench/product_early 32768
 effect_handlers_bench/resume_nontail 1366
 effect_handlers_bench/tree_explore 14
 effect_handlers_bench/triples 256
+advent_of_code_2025/day01 70
+advent_of_code_2025/day02 25
+advent_of_code_2025/day03 70
+advent_of_code_2025/day04 300
+advent_of_code_2025/day05 800
+advent_of_code_2025/day06 320
+advent_of_code_2025/day07 800
+advent_of_code_2025/day08 110
+advent_of_code_2025/day09 60
+advent_of_code_2025/day10 3400
+advent_of_code_2025/day11 1000
+advent_of_code_2025/day12 500

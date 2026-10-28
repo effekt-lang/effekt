@@ -1,0 +1,167 @@
+import scanner
+import stringbuffer
+import random
+
+import examples/benchmarks/runner
+
+record Point(_1: Int, _2: Int)
+
+def parsePoints(): Array[Point] / { Scan[Char], fail } =
+  array::collect { many { line {
+    val c1 = readDecimal()
+    mustSkip(',')
+    val c2 = readDecimal()
+    Point(c1, c2)
+  } } }
+
+def area(p: Point, q: Point): Int = {
+  val d1 = p._1 - q._1
+  val d2 = p._2 - q._2
+  (abs(d1) + 1) * (abs(d2) + 1)
+}
+
+def maximum { stream: () => Unit / emit[Int] }: Option[Int] = {
+  var result = None()
+  for[Int] { stream() } { value =>
+    result = result match {
+      case None() => Some(value)
+      case Some(current) => Some(max(current, value))
+    }
+  }
+  return result
+}
+
+effect done[R](result: R): Unit
+
+def start[R] { program: () => R / done[R] }: R =
+  try { program() } with done[R] { result => result }
+
+type Line {
+  Horizontal(place: Int, lower: Int, upper: Int)
+  Vertical(place: Int, lower: Int, upper: Int)
+}
+
+def between(p: Point, q: Point): Line =
+  if (p._1 == q._1) {
+    Vertical(p._1, p._2, q._2)
+  } else if (p._2 == q._2) {
+    Horizontal(p._2, p._1, q._1)
+  } else {
+    panic("edge not axis-aligned")
+  }
+
+def edges(polygon: Array[Point]): Unit / emit[Line] =
+  each(0, polygon.size) { i =>
+    do emit(between(polygon.get(i), polygon.get((i + 1).mod(polygon.size))))
+  }
+
+def isInside(point: Point, polygon: Array[Point]): Bool = {
+  var crossings = 0
+  for[Line] { polygon.edges } {
+    case Horizontal(_, _, _) => ()
+    case Vertical(place, lower, upper) =>
+      if (place > point._1) {
+        if (lower <= point._2 && point._2 < upper) {
+          crossings = crossings + 1
+        } else if (upper <= point._2 && point._2 < lower) {
+          crossings = crossings - 1
+        }
+      }
+  }
+  return crossings != 0
+}
+
+def isInside(rectangle: (Point, Point), polygon: Array[Point]) = {
+  with start[Bool]
+  val (p, q) = rectangle
+  val min1 = min(p._1, q._1)
+  val max1 = max(p._1, q._1)
+  val min2 = min(p._2, q._2)
+  val max2 = max(p._2, q._2)
+
+  if (not(isInside(Point(p._1, p._2), polygon))) { do done(false) }
+  if (not(isInside(Point(p._1, q._2), polygon))) { do done(false) }
+  if (not(isInside(Point(q._1, p._2), polygon))) { do done(false) }
+  if (not(isInside(Point(q._1, q._2), polygon))) { do done(false) }
+
+  for[Line] { polygon.edges } {
+    case Horizontal(place, lower, upper) =>
+      if (min2 < place && place < max2) {
+        if (not(max(lower, upper) <= min1 || min(lower, upper) >= max1)) {
+          do done(false)
+        }
+      }
+    case Vertical(place, lower, upper) =>
+      if (min1 < place && place < max1) {
+        if (not(max(lower, upper) <= min2 || min(lower, upper) >= max2)) {
+          do done(false)
+        }
+      }
+  }
+
+  return true
+}
+
+def solveEasy(points: Array[Point]): Int = {
+  val result = maximum {
+    points.foreach { p =>
+      points.foreach { q =>
+        do emit(area(p, q))
+      }
+    }
+  }
+  result.getOrElse { 0 }
+}
+
+def solveHard(points: Array[Point]): Int = {
+  val result = maximum {
+    points.foreach { p =>
+      points.foreach { q =>
+        if (isInside((p, q), points)) {
+          do emit(area(p, q))
+        }
+      }
+    }
+  }
+  result.getOrElse { 0 }
+}
+
+def generate(): String = stringBuffer {
+  with minstd(42)
+  def point(c1: Int, c2: Int): Unit / write = {
+    do write(show(c1))
+    do write(",")
+    do write(show(c2))
+    do write("\n")
+  }
+  val start = randomInt(1, 1000)
+  point(start, 1)
+  var c1 = start
+  var height = 0
+  repeat(40) {
+    var next = randomInt(2, 100001)
+    if (next == height) { next = next + 1 }
+    height = next
+    point(c1, height)
+    c1 = c1 + randomInt(1, 2000)
+    point(c1, height)
+  }
+  point(c1, 1)
+}
+
+def run(n: Int): Int = {
+  val input = generate()
+  var result = 0
+  repeat(n) {
+    val points = {
+      with feed(input)
+      with returning::peeking[Char, Array[Point]]
+      with crash("malformed input")
+      parsePoints()
+    }
+    result = result + solveEasy(points) + solveHard(points)
+  }
+  result
+}
+
+def main() = benchmark(1) { run }
