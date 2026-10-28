@@ -107,10 +107,7 @@ def perm9(m: Int, n: Int): Bool =
     sumlists(result) == (((n * (n + 1)) * factorial(n)) / 2)
   }
 
-def run(m: Int): Int = {
-  // only one argument
-  val n = m * 3
-  if (perm9(m, n)) { 1 } else { 0 }
-}
+def run(m: Int): Int =
+  if (perm9(m, 8)) { 1 } else { 0 }
 
-def main() = benchmark(2){run}
+def main() = benchmark(1){run}

@@ -76,14 +76,14 @@ def map[A, B](l: List[A]) { f: A => B }: List[B] = l match {
   case Cons(a, as) => Cons(f(a), as.map {f})
 }
 
-def tabulate_loop(n: Int, len: Int) { f: () => Option[Player] }: List[Option[Player]] =
+def tabulate_loop(n: Int, len: Int) { f: Int => Option[Player] }: List[Option[Player]] =
   if (n == len) {
     Nil()
   } else {
-    Cons(f(), tabulate_loop(n + 1, len) { f })
+    Cons(f(n), tabulate_loop(n + 1, len) { f })
   }
 
-def tabulate(len: Int) { f: () => Option[Player] }: List[Option[Player]] =
+def tabulate(len: Int) { f: Int => Option[Player] }: List[Option[Player]] =
   if (len < 0) {
     Nil()
   } else {
@@ -118,8 +118,12 @@ def all[A](list: List[A]) { predicate: A => Bool }: Bool = {
 
 // Actual functions
 
-def emptyBoard(): List[Option[Player]] =
-  tabulate(9) { () => None() }
+def startBoard(empty: Int): List[Option[Player]] =
+  tabulate(9) { i =>
+    if (i >= 9 - empty) None()
+    else if (mod(i, 2) == 0) Some(X())
+    else Some(O())
+  }
 
 def is_full(board: List[Option[Player]]): Bool =
   all(board) { p => is_some(p) }
@@ -242,7 +246,9 @@ def minimax(p: Player, board: List[Option[Player]]): RoseTree[(List[Option[Playe
     }
   }
 
-def run(n: Int): Int =
-  minimax(X(), emptyBoard()).top.snd
+def run(n: Int): Int = {
+  val player = if (mod(n, 2) == 1) X() else O()
+  minimax(player, startBoard(n)).top.snd
+}
 
-def main() = benchmark(1){run}
+def main() = benchmark(5){run}
