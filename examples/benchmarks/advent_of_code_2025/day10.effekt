@@ -1,0 +1,227 @@
+import scanner
+import stringbuffer
+import random
+
+import examples/benchmarks/runner
+
+record Machine(lights: Array[Bool], buttons: List[List[Int]], joltages: Array[Int])
+
+record Weighted[A](value: A, weight: Double)
+
+type Heap[A] {
+  Heap(value: A, weight: Double, subheaps: List[Heap[A]])
+  Empty()
+}
+
+def parseMachine(): Machine / { Scan[Char], fail } = {
+  mustSkip('[')
+  val lights = array::collect[Bool] { many { readWhen {
+    case '.' => false
+    case '#' => true
+    case _ => do fail()
+  } } }
+  mustSkip(']')
+  mustSkip(' ')
+  val buttons = list::collect[List[Int]] { list(' ') {
+    readIf('(')
+    val affected = list::collect[Int] { list(',') { readDecimal() } }
+    mustSkip(')')
+    return affected
+  }}
+  mustSkip('{')
+  val joltages = array::collect[Int] { list(',') { readDecimal() } }
+  mustSkip('}')
+  Machine(lights, buttons, joltages)
+}
+
+def parseMachines(): Array[Machine] / { Scan[Char], fail } =
+  array::collect { many { line { parseMachine() } } }
+
+def mappedIndex[A, B](array: Array[A]){ function: (Int, A) => B }: Array[B] = {
+  val result = unsafeAllocate(array.size)
+  array.foreachIndex { (i, e) =>
+    result.set(i, function(i, e))
+  }
+  return result
+}
+
+effect fork(): Bool
+effect loss(weight: Double): Unit
+
+def choose[A] { path1: () => A } { path2: () => A }: A / fork =
+  if (do fork()) { path1() } else { path2() }
+
+def where(constraint: Bool): Unit / fail =
+  if (not(constraint)) { do fail() }
+
+def minimize[A]{ program: () => A / {loss, fork, fail}}: Unit / emit[Weighted[A]] = {
+  var current = 0.0
+  var tasks = Empty()
+  try {
+    do emit(Weighted(program(), current))
+  } with fail { () =>
+    ()
+  } with fork { () =>
+    resume(true)
+    resume(false)
+  } with loss { weight =>
+    tasks = tasks.insert(box { resume(()) }, current + weight)
+  }
+  while (tasks.extract is Some((Weighted(task, weight), rest))) {
+    current = weight
+    tasks = rest
+    task()
+  }
+}
+
+def applyEasy(button: List[Int], lights: Array[Bool]): Array[Bool] =
+  lights.mappedIndex { (i, s) =>
+    if (button.any { j => j == i }) { s.not } else { s }
+  }
+
+def applyHard(button: List[Int], joltages: Array[Int]): Array[Int] =
+  joltages.mappedIndex { (i, s) =>
+    if (button.any { j => j == i }) { s - 1 } else { s }
+  }
+
+def solveEasy(machines: Array[Machine]): Int =
+  sum {
+    machines.foreach {
+      case Machine(targets, buttons, _) =>
+        try {
+          minimize[Unit] {
+            var lights = targets
+            buttons.foreach { button =>
+              choose { () } {
+                do loss(1.0)
+                lights = applyEasy(button, lights)
+              }
+            }
+            where(not(any[Bool] { b => b } { lights.each }))
+          }
+        } with emit[Weighted[Unit]] {
+          case Weighted(_, weight) => do emit(weight.round)
+        }
+    }
+  }
+
+def solveHard(machines: Array[Machine]): Int =
+  sum {
+    machines.foreach {
+      case Machine(_, buttons, targets) =>
+        try {
+          minimize[Unit] {
+            var level = 1.0
+            def go(targets: Array[Int]): Unit / loss = {
+              if (not(all { i => i == 0 } { targets.each })) {
+                var joltages = targets
+                buttons.foreach { button =>
+                  choose { () } {
+                    do loss(level)
+                    joltages = applyHard(button, joltages)
+                    where(all { j => j >= 0 } { joltages.each })
+                  }
+                }
+                where(all { j => j.mod(2) == 0 } { joltages.each })
+                level = level * 2.0
+                go(joltages.mapped { j => j / 2 })
+              }
+            }
+            go(targets)
+          }
+        } with emit[Weighted[Unit]] {
+          case Weighted(_, weight) => do emit(weight.round)
+        }
+    }
+  }
+
+def generate(machines: Int): String = stringBuffer {
+  with minstd(42)
+  repeat(machines) {
+    val size = randomInt(4, 6)
+    val buttons = list::collect[Array[Bool]] {
+      repeat(randomInt(4, 6)) {
+        val button = array::build(size) { _ => randomBool() }
+        button.set(randomInt(0, size - 1), true)
+        do emit(button)
+      }
+    }
+    val lights = array(size, false)
+    val joltages = array(size, 0)
+    buttons.foreach { button =>
+      val toggled = randomBool()
+      val presses = randomInt(0, 7)
+      button.foreachIndex { (i, affected) =>
+        if (affected) {
+          if (toggled) { lights.set(i, not(lights.get(i))) }
+          joltages.set(i, joltages.get(i) + presses)
+        }
+      }
+    }
+    do write("[")
+    lights.foreach { on => if (on) { do write("#") } else { do write(".") } }
+    do write("]")
+    buttons.foreach { button =>
+      do write(" (")
+      var first = true
+      button.foreachIndex { (i, affected) =>
+        if (affected) {
+          if (not(first)) { do write(",") }
+          do write(show(i))
+          first = false
+        }
+      }
+      do write(")")
+    }
+    do write(" {")
+    joltages.foreachIndex { (i, joltage) =>
+      if (i > 0) { do write(",") }
+      do write(show(joltage))
+    }
+    do write("}\n")
+  }
+}
+
+def run(n: Int): Int = {
+  val machines = {
+    with feed(generate(n))
+    with returning::peeking[Char, Array[Machine]]
+    with crash("malformed input")
+    parseMachines()
+  }
+  solveEasy(machines) + solveHard(machines)
+}
+
+def main() = benchmark(1) { run }
+
+def meld[A](heap1: Heap[A], heap2: Heap[A]): Heap[A] =
+  (heap1, heap2) match {
+    case (Empty(), Empty()) => Empty()
+    case (heap1, Empty()) => heap1
+    case (Empty(), heap2) => heap2
+    case (Heap(x1, w1, subheaps1), Heap(x2, w2, subheaps2)) =>
+      if (w1 < w2)
+        Heap(x1, w1, Cons(Heap(x2, w2, subheaps2), subheaps1))
+      else
+        Heap(x2, w2, Cons(Heap(x1, w1, subheaps1), subheaps2))
+  }
+
+def mergePairs[A](heap: Heap[A], heaps: List[Heap[A]]): Heap[A] =
+  heaps match {
+    case Nil() =>
+      heap
+    case Cons(heap1, Nil()) =>
+      meld(heap, heap1)
+    case Cons(heap1, Cons(heap2, heaps)) =>
+      meld(meld(heap, heap1), mergePairs(heap2, heaps))
+  }
+
+def insert[A](heap: Heap[A], value: A, weight: Double): Heap[A] =
+  meld(Heap(value, weight, Nil()), heap)
+
+def extract[A](heap: Heap[A]): Option[(Weighted[A], Heap[A])] =
+  heap match {
+    case Empty() => None()
+    case Heap(value, weight, Nil()) => Some((Weighted(value, weight), Empty()))
+    case Heap(value, weight, Cons(heap, heaps)) => Some((Weighted(value, weight), mergePairs(heap, heaps)))
+  }

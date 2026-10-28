@@ -1,0 +1,114 @@
+import scanner
+import stringbuffer
+import random
+import dictionary
+
+import examples/benchmarks/runner
+
+def parseWord(): String / Scan[Char] =
+  string::collect { many { readIf { c => c.isLower } } }
+
+def parseGraph(): Dictionary[Array[String]] / { Scan[Char], fail } =
+  dictionary::collect { many { line {
+    val key = parseWord()
+    mustSkip(':')
+    mustSkip(' ')
+    val values = array::collect[String] {
+      list(' ') { parseWord() }
+    }
+    Tagged(key.fromString, values)
+  } } }
+
+def paths(graph: Dictionary[Array[String]], source: String, target: String): Int = {
+  val counts = dictionary::empty()
+  counts.insert(target, 1)
+
+  def go(key: String): Int = {
+    counts.lookup(key) match {
+      case Some(count) =>
+        return count
+      case None() =>
+        val count = sum {
+          graph.lookup(key) match {
+            case None() => ()
+            case Some(children) =>
+              children.foreach { child =>
+                do emit(go(child))
+              }
+          }
+        }
+        counts.insert(key, count)
+        return count
+    }
+  }
+
+  go(source)
+}
+
+def solveEasy(graph: Dictionary[Array[String]]): Int =
+  paths(graph, "you", "out")
+
+def solveHard(graph: Dictionary[Array[String]]): Int = {
+  val svrDac = paths(graph, "svr", "dac")
+  val svrFft = paths(graph, "svr", "fft")
+  val dacFft = paths(graph, "dac", "fft")
+  val fftDac = paths(graph, "fft", "dac")
+  val dacOut = paths(graph, "dac", "out")
+  val fftOut = paths(graph, "fft", "out")
+
+  (svrDac * dacFft * fftOut) + (svrFft * fftDac * dacOut)
+}
+
+def generate(): String = stringBuffer {
+  with minstd(42)
+  val size = 500
+  val special = ["svr", "you", "dac", "fft", "out"]
+  var counter = 0
+  def fresh(): String = {
+    def letter(k: Int): String = (k.mod(26) + 97).toChar.toString
+    val name = letter(counter / 676) ++ letter(counter / 26) ++ letter(counter)
+    counter = counter + 1
+    if (special.any { s => s == name }) { fresh() } else { name }
+  }
+  val names = array::build(size) { i =>
+    if (i == 0) { "svr" }
+    else if (i == size / 4) { "you" }
+    else if (i == size / 3) { "dac" }
+    else if (i == 2 * size / 3) { "fft" }
+    else if (i == size - 1) { "out" }
+    else { fresh() }
+  }
+  each(0, size - 1) { i =>
+    do write(names.get(i))
+    do write(":")
+    val window = min(8, size - 1 - i)
+    val first = i + 1 + randomInt(0, window - 1)
+    do write(" ")
+    do write(names.get(first))
+    if (randomInt(0, 2) == 0) {
+      val second = i + 1 + randomInt(0, window - 1)
+      if (second != first) {
+        do write(" ")
+        do write(names.get(second))
+      }
+    }
+    do write("\n")
+  }
+}
+
+def run(n: Int): Int = {
+  val input = generate()
+  var result = 0
+  repeat(n) {
+    val graph = {
+      with feed(input)
+      with returning::peeking[Char, Dictionary[Array[String]]]
+      with crash("malformed input")
+      parseGraph()
+    }
+    result = result + solveEasy(graph) + solveHard(graph)
+  }
+  result
+}
+
+def main() = benchmark(1) { run }

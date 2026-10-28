@@ -1,0 +1,208 @@
+import scanner
+import stringbuffer
+import random
+
+import examples/benchmarks/runner
+
+record Point(_1: Double, _2: Double, _3: Double)
+
+record Weighted[A](value: A, weight: Double)
+
+type Heap[A] {
+  Heap(value: A, weight: Double, subheaps: List[Heap[A]])
+  Empty()
+}
+
+def parsePoints(): Array[Point] / { Scan[Char], fail } =
+  array::collect { many { line {
+    val c1 = readDecimal().toDouble
+    mustSkip(',')
+    val c2 = readDecimal().toDouble
+    mustSkip(',')
+    val c3 = readDecimal().toDouble
+    Point(c1, c2, c3)
+  } } }
+
+def distance(p: Point, q: Point): Double = {
+  val d1 = p._1 - q._1
+  val d2 = p._2 - q._2
+  val d3 = p._3 - q._3
+  d1 * d1 + d2 * d2 + d3 * d3
+}
+
+def pairsByDistance(points: Array[Point]): Heap[(Int, Int)] =
+  collect[(Int, Int)] {
+    points.foreachIndex { (i1, p1) =>
+      points.foreachIndex { (i2, p2) =>
+        if (i1 < i2) {
+          do emit(Weighted((i1, i2), distance(p1, p2)))
+        }
+      }
+    }
+  }
+
+def find(sets: Array[List[Int]], this: Int): Int = {
+  var result = None()
+  boundary {
+    sets.foreachIndex { (i, elements) =>
+      if (elements.any { x => x == this }) {
+        result = Some(i)
+        do stop()
+      }
+    }
+  }
+  return result.getOrElse { panic("missing element") }
+}
+
+def union(sets: Array[List[Int]], r1: Int, r2: Int): Unit =
+  if (r1 != r2) {
+    if (r1 < r2) {
+      sets.set(r1, sets.get(r1).append(sets.get(r2)))
+      sets.set(r2, Nil())
+    } else {
+      sets.set(r2, sets.get(r2).append(sets.get(r1)))
+      sets.set(r1, Nil())
+    }
+  }
+
+def maximum(list: List[Int]): Int =
+  list match {
+    case Nil() => panic("empty list")
+    case Cons(element, Nil()) => element
+    case Cons(element, rest) => max(element, rest.maximum)
+  }
+
+def delete(list: List[Int], element: Int): List[Int] =
+  list match {
+    case Nil() => panic("empty list")
+    case Cons(other, rest) =>
+      if (element == other) {
+        rest
+      } else {
+        Cons(other, rest.delete(element))
+      }
+  }
+
+def solveEasy(points: Array[Point]): Int = {
+  val pairs = pairsByDistance(points)
+  val circuits = array::build(points.size) { i => list::singleton(i) }
+
+  for[Weighted[(Int, Int)]] { limit[Weighted[(Int, Int)]](points.size) { pairs.each } } {
+    case Weighted((i1, i2), _) =>
+      val r1 = circuits.find(i1)
+      val r2 = circuits.find(i2)
+      circuits.union(r1, r2)
+  }
+
+  val sizes = circuits.toList.map { elements => elements.size }
+
+  val m0 = sizes.maximum
+  val s0 = sizes.delete(m0)
+  val m1 = s0.maximum
+  val s1 = s0.delete(m1)
+  val m2 = s1.maximum
+
+  m0 * m1 * m2
+}
+
+def solveHard(points: Array[Point]): Int = {
+  val pairs = pairsByDistance(points)
+  val circuits = array::build(points.size) { i => list::singleton(i) }
+
+  var result = 0
+
+  boundary {
+    for[Weighted[(Int, Int)]] { pairs.each } {
+      case Weighted((i1, i2), _) =>
+        val r1 = circuits.find(i1)
+        val r2 = circuits.find(i2)
+        circuits.union(r1, r2)
+        if (circuits.get(0).size == points.size) {
+          result = points.get(i1)._1.floor * points.get(i2)._1.floor
+          do stop()
+        }
+    }
+  }
+
+  result
+}
+
+def generate(): String = stringBuffer {
+  with minstd(42)
+  repeat(200) {
+    do write(show(randomInt(0, 99999)))
+    do write(",")
+    do write(show(randomInt(0, 99999)))
+    do write(",")
+    do write(show(randomInt(0, 99999)))
+    do write("\n")
+  }
+}
+
+def run(n: Int): Int = {
+  val input = generate()
+  var result = 0
+  repeat(n) {
+    val points = {
+      with feed(input)
+      with returning::peeking[Char, Array[Point]]
+      with crash("malformed input")
+      parsePoints()
+    }
+    result = result + solveEasy(points) + solveHard(points)
+  }
+  result
+}
+
+def main() = benchmark(1) { run }
+
+def meld[A](heap1: Heap[A], heap2: Heap[A]): Heap[A] =
+  (heap1, heap2) match {
+    case (Empty(), Empty()) => Empty()
+    case (heap1, Empty()) => heap1
+    case (Empty(), heap2) => heap2
+    case (Heap(x1, w1, subheaps1), Heap(x2, w2, subheaps2)) =>
+      if (w1 < w2)
+        Heap(x1, w1, Cons(Heap(x2, w2, subheaps2), subheaps1))
+      else
+        Heap(x2, w2, Cons(Heap(x1, w1, subheaps1), subheaps2))
+  }
+
+def mergePairs[A](heap: Heap[A], heaps: List[Heap[A]]): Heap[A] =
+  heaps match {
+    case Nil() =>
+      heap
+    case Cons(heap1, Nil()) =>
+      meld(heap, heap1)
+    case Cons(heap1, Cons(heap2, heaps)) =>
+      meld(meld(heap, heap1), mergePairs(heap2, heaps))
+  }
+
+def insert[A](heap: Heap[A], value: A, weight: Double): Heap[A] =
+  meld(Heap(value, weight, Nil()), heap)
+
+def extract[A](heap: Heap[A]): Option[(Weighted[A], Heap[A])] =
+  heap match {
+    case Empty() => None()
+    case Heap(value, weight, Nil()) => Some((Weighted(value, weight), Empty()))
+    case Heap(value, weight, Cons(heap, heaps)) => Some((Weighted(value, weight), mergePairs(heap, heaps)))
+  }
+
+def collect[A] { stream: () => Unit / emit[Weighted[A]] }: Heap[A] = {
+  var heap = Empty()
+  try {
+    stream()
+  } with emit[Weighted[A]] { case Weighted(value, weight) =>
+    heap = heap.insert(value, weight)
+    resume(())
+  }
+  return heap
+}
+
+def each[A](heap: Heap[A]): Unit / emit[Weighted[A]] =
+  heap.extract match {
+    case None() => ()
+    case Some((element, heap)) =>
+      do emit(element)
+      each(heap)
+  }

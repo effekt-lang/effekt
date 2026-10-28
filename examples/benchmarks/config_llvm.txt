@@ -35,3 +35,15 @@ input_output/networked_numbers 200000
 input_output/sender_receiver 5000000
 input_output/channel_primes 30000
 input_output/thread_ring 5000000
+advent_of_code_2025/day01 100
+advent_of_code_2025/day02 64
+advent_of_code_2025/day03 64
+advent_of_code_2025/day04 256
+advent_of_code_2025/day05 512
+advent_of_code_2025/day06 256
+advent_of_code_2025/day07 512
+advent_of_code_2025/day08 100
+advent_of_code_2025/day09 100
+advent_of_code_2025/day10 4096
+advent_of_code_2025/day11 1024
+advent_of_code_2025/day12 512
