@@ -361,31 +361,47 @@ extern def infixMinus(x: Int, y: Int) at {}: Int =
   chez "(- ${x} ${y})"
   llvm "%z = sub  %Int ${x}, ${y} ret %Int %z"
 
-/// Computes the quotient based on truncated-division
-def quot(x: Int, y: Int): Int =
-  infixSlash(x, y)
+/// Computes the quotient of truncated division (rounds towards zero)
+extern def quot(x: Int, y: Int) at {}: Int =
+  js "Math.trunc(${x} / ${y})"
+  chez "(quotient ${x} ${y})"
+  llvm "%z = sdiv %Int ${x}, ${y} ret %Int %z"
 
-/// Computes the remainder based on truncated-division
- extern def rem(x: Int, y: Int) at {}: Int =
-   llvm "%z = srem %Int ${x}, ${y} ret %Int %z"
-   default { x - y * (x / y) }
+/// Computes the remainder of truncated division (has the sign of the dividend)
+extern def rem(x: Int, y: Int) at {}: Int =
+  js "(${x} % ${y})"
+  chez "(remainder ${x} ${y})"
+  llvm "%z = srem %Int ${x}, ${y} ret %Int %z"
 
-/// Computes the result of Euclidean division
-def div(x: Int, y: Int): Int = {
-  val q = x / y
-  val r = x.rem(y)
-  val rNeg = r.bitwiseMsb
-  val ySign = y.bitwiseMsb.bitwiseOr(1)
-  q - rNeg.bitwiseAnd(ySign)
-}
+/// Computes the quotient of Euclidean division
+extern def div(x: Int, y: Int) at {}: Int =
+  js "$effekt.div(${x}, ${y})"
+  chez "(div ${x} ${y})"
+  llvm """
+    %q = sdiv %Int ${x}, ${y}
+    %r = srem %Int ${x}, ${y}
+    %rNeg = ashr %Int %r, 63
+    %yNeg = ashr %Int ${y}, 63
+    %ySign = or %Int %yNeg, 1
+    %adjust = and %Int %rNeg, %ySign
+    %z = sub %Int %q, %adjust
+    ret %Int %z
+  """
 
-/// Computes the result of Euclidean modulo
-def mod(x: Int, y: Int): Int = {
-  val r = x.rem(y)
-  val rNeg = r.bitwiseMsb
-  val absY = y.bitwiseXor(y.bitwiseMsb) - y.bitwiseMsb
-  r + rNeg.bitwiseAnd(absY)
-}
+/// Computes the remainder of Euclidean division (is never negative)
+extern def mod(x: Int, y: Int) at {}: Int =
+  js "$effekt.mod(${x}, ${y})"
+  chez "(mod ${x} ${y})"
+  llvm """
+    %r = srem %Int ${x}, ${y}
+    %rNeg = ashr %Int %r, 63
+    %yNeg = ashr %Int ${y}, 63
+    %yFlip = xor %Int ${y}, %yNeg
+    %yAbs = sub %Int %yFlip, %yNeg
+    %adjust = and %Int %rNeg, %yAbs
+    %z = add %Int %r, %adjust
+    ret %Int %z
+  """
 
 extern def infixPlus(x: Double, y: Double) at {}: Double =
   js "(${x} + ${y})"
@@ -687,11 +703,6 @@ extern def bitwiseNot(x: Int) at {}: Int =
   js "(~${x})"
   chez "(lognot ${x})"
   llvm "%z = xor %Int ${x}, -1 ret %Int %z"
-
-extern def bitwiseMsb(x: Int) at {}: Int =
-   js "${x} >> 31"
-   chez "(bitwise-arithmetic-shift-right ${x} 63)"
-   llvm "%z = ashr %Int ${x}, 63 ret %Int %z"
 
 // Byte operations
 // ===============
