@@ -162,7 +162,11 @@ object TransformerCps extends Transformer {
 
   def toJS(d: core.Declaration): List[js.Stmt] = d match {
     case core.Data(did, tparams, ctors) =>
-      ctors.zipWithIndex.map { case (ctor, index) => generateConstructor(ctor, index) }
+      ctors.zipWithIndex.flatMap { case (ctor, index) =>
+        val cls = generateConstructor(ctor, index)
+        if ctor.fields.isEmpty then List(cls, js.Const(instanceName(ctor.id), js.New(nameRef(ctor.id), Nil)))
+        else List(cls)
+      }
 
     // interfaces are structurally typed at the moment, no need to generate anything.
     case core.Interface(id, tparams, operations) =>
@@ -226,6 +230,7 @@ object TransformerCps extends Transformer {
     case Expr.Literal(b: Byte, core.Type.TByte)       => js.RawExpr(UByte.unsafeFromByte(b).toHexString)
     case literal: Expr.Literal       => js.RawExpr(literal.value.toString) // TODO This should match on the type...
     case Expr.PureApp(id, vargs)     => inlineExtern(id, vargs)
+    case Expr.Make(data, tag, Nil) => js.Variable(instanceName(tag))
     case Expr.Make(data, tag, vargs) => js.New(nameRef(tag), vargs map toJS)
     case Expr.Box(b)                 => argumentToJS(b)
   }
