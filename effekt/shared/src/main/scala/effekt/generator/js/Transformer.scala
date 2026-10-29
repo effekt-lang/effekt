@@ -125,6 +125,9 @@ trait Transformer {
 
   def nameRef(id: Id): js.Expr = js.Variable(uniqueName(id))
 
+  /** A nullary constructor has no state but its tag, so all its uses share one instance. */
+  def instanceName(constructor: Id): JSName = JSName(uniqueName(constructor).name + "$instance")
+
   // name references for fields and methods
   def memberNameRef(id: Id): JSName = uniqueName(id)
 
