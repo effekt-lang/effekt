@@ -1,0 +1,48 @@
+// from Knuth's "Structured Programming with Go To Statements" (1974)
+// via https://en.wikipedia.org/wiki/Zahn%27s_construct
+
+effect found(i: Int, j: Int): Unit
+effect missing(): Unit
+
+record Table(data: Array[Array[Int]], size: Int)
+
+def get(table: Table, i: Int, j: Int) =
+  table.data.get(i).get(j)
+
+// exitwhen found or missing;
+//     for I := 1 to N do
+//         for J := 1 to M do
+//             if table[I,J] = target then found;
+//     missing;
+// exits
+//     found:   print ("item is in table");
+//     missing: print ("item is not in table");
+// endexit;
+
+def find(table: Table, target: Int): Unit =
+  try {
+    for { range(0, table.size) } { (i: Int) =>
+      for { range(0, table.size) } { (j: Int) =>
+        if (table.get(i, j) == target) do found(i, j)
+      }
+    }
+    do missing()
+  } with found { (i, j) =>
+    println(s"item is in the table at ${i.show}, ${j.show}")
+  } with missing {
+    println("item is not in the table")
+  }
+
+def main() = {
+  val data = [
+    [1, 2, 3].fromList,
+    [4, 5, 6].fromList,
+    [7, 8, 9].fromList,
+  ].fromList
+  val table = Table(data, 3)
+  
+  find(table, 5)
+  find(table, 9)
+  find(table, 0)
+  find(table, 10)
+}
