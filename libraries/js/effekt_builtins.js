@@ -18,6 +18,15 @@ $effekt.equals = function(obj1, obj2) {
   }
 }
 
+$effekt.mod = function(x, y) {
+  const r = x % y
+  return r < 0 ? r + Math.abs(y) : r
+}
+
+$effekt.div = function(x, y) {
+  return (x - $effekt.mod(x, y)) / y
+}
+
 function compare$prim(n1, n2) {
   if (n1 == n2) { return 0; }
   else if (n1 > n2) { return 1; }

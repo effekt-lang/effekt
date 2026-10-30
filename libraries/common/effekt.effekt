@@ -334,6 +334,12 @@ extern def infixNeq(x: Byte, y: Byte) at {}: Bool =
 
 // Math ops
 // ========
+
+// Numeric representations in the backends:
+// LLVM: int64_t (64-bit integer)
+// JS: 64-bit floating-point (64-bit IEEE 754)
+// Chez: 64-bit integer
+
 extern def infixPlus(x: Int, y: Int) at {}: Int =
   js "(${x} + ${y})"
   chez "(+ ${x} ${y})"
@@ -355,10 +361,47 @@ extern def infixMinus(x: Int, y: Int) at {}: Int =
   chez "(- ${x} ${y})"
   llvm "%z = sub  %Int ${x}, ${y} ret %Int %z"
 
-extern def mod(x: Int, y: Int) at {}: Int =
+/// Computes the quotient of truncated division (rounds towards zero)
+extern def quot(x: Int, y: Int) at {}: Int =
+  js "Math.trunc(${x} / ${y})"
+  chez "(quotient ${x} ${y})"
+  llvm "%z = sdiv %Int ${x}, ${y} ret %Int %z"
+
+/// Computes the remainder of truncated division (has the sign of the dividend)
+extern def rem(x: Int, y: Int) at {}: Int =
   js "(${x} % ${y})"
-  chez "(modulo ${x} ${y})"
+  chez "(remainder ${x} ${y})"
   llvm "%z = srem %Int ${x}, ${y} ret %Int %z"
+
+/// Computes the quotient of Euclidean division
+extern def div(x: Int, y: Int) at {}: Int =
+  js "$effekt.div(${x}, ${y})"
+  chez "(div ${x} ${y})"
+  llvm """
+    %q = sdiv %Int ${x}, ${y}
+    %r = srem %Int ${x}, ${y}
+    %rNeg = ashr %Int %r, 63
+    %yNeg = ashr %Int ${y}, 63
+    %ySign = or %Int %yNeg, 1
+    %adjust = and %Int %rNeg, %ySign
+    %z = sub %Int %q, %adjust
+    ret %Int %z
+  """
+
+/// Computes the remainder of Euclidean division (is never negative)
+extern def mod(x: Int, y: Int) at {}: Int =
+  js "$effekt.mod(${x}, ${y})"
+  chez "(mod ${x} ${y})"
+  llvm """
+    %r = srem %Int ${x}, ${y}
+    %rNeg = ashr %Int %r, 63
+    %yNeg = ashr %Int ${y}, 63
+    %yFlip = xor %Int ${y}, %yNeg
+    %yAbs = sub %Int %yFlip, %yNeg
+    %adjust = and %Int %rNeg, %yAbs
+    %z = add %Int %r, %adjust
+    ret %Int %z
+  """
 
 extern def infixPlus(x: Double, y: Double) at {}: Double =
   js "(${x} + ${y})"
@@ -660,7 +703,6 @@ extern def bitwiseNot(x: Int) at {}: Int =
   js "(~${x})"
   chez "(lognot ${x})"
   llvm "%z = xor %Int ${x}, -1 ret %Int %z"
-
 
 // Byte operations
 // ===============
