@@ -575,40 +575,49 @@ def binarySearch[A](arr: Array[A], toFind: A) { ord: (A, A) => Ordering }: Optio
 }
 
 /// Sort an array in-place using provided comparison function.
-/// Note: `sort` is unstable since it uses QuickSort (unlike `list::sortBy`)
+/// Note: `sort` is stable since it uses MergeSort (like `list::sortBy`)
+/// and allocates a temporary array of half the size.
 ///
-/// O(N log N) average case
+/// O(N log N)
 def sort[A](arr: Array[A]) { ord: (A, A) => Ordering }: Unit = {
-  def partition(low: Int, high: Int): Int = {
-    val pivot = arr.get(high)
-    var i = low - 1
+  val n = arr.size
+  if (n > 1) {
+    val tmp = array(n / 2, arr.get(0))
 
-    each(low, high) { j =>
-      if (ord(arr.get(j), pivot) is Less()) {
-        i = i + 1
-        swap(arr, i, j)
+    def merge(lo: Int, mid: Int, hi: Int): Unit = {
+      val leftLength = mid - lo
+      def loop(i: Int, j: Int, k: Int): Unit =
+        if (i < leftLength) {
+          if (j < hi) {
+            val x = tmp.get(i)
+            val y = arr.get(j)
+            ord(y, x) match {
+              case Less() => arr.set(k, y); loop(i, j + 1, k + 1)
+              case _ => arr.set(k, x); loop(i + 1, j, k + 1)
+            }
+          } else copy(tmp, i, arr, k, leftLength - i)
+        }
+      copy(arr, lo, tmp, 0, leftLength)
+      loop(0, mid, lo)
+    }
+
+    def mergeSort(lo: Int, hi: Int): Unit =
+      if (hi - lo > 1) {
+        val mid = lo + (hi - lo) / 2
+        mergeSort(lo, mid)
+        mergeSort(mid, hi)
+        merge(lo, mid, hi)
       }
-    }
-    swap(arr, i + 1, high)
-    i + 1
-  }
 
-  def quickSort(low: Int, high: Int): Unit = {
-    if (low < high) {
-      val par = partition(low, high)
-      quickSort(low, par - 1)
-      quickSort(par + 1, high)
-    }
+    mergeSort(0, n)
   }
-
-  quickSort(0, arr.size - 1)
 }
 
 /// Sort an array using provided comparison function.
 /// A newly allocated sorted array is returned as result, i.e., the sorting is not in-place.
-/// Note: `sorted` is unstable since it uses QuickSort (unlike `list::sortBy`)
+/// Note: `sorted` is stable since it uses MergeSort (like `list::sortBy`)
 ///
-/// O(N log N) average case
+/// O(N log N)
 def sorted[A](arr: Array[A]) { ord: (A, A) => Ordering }: Array[A] = {
   val res = arr.copy()
   res.sort { ord }
@@ -621,16 +630,14 @@ def sorted[A](arr: Array[A]) { ord: (A, A) => Ordering }: Array[A] = {
 // TODO: These can eventually be replaced if we ever figure out monomorphization on extern types
 
 def showBuiltin[A](arr: Array[A]) { showA: A => String }: String = {
-  var output = "Array("
-  val lastIndex = arr.size - 1
+  def go(lo: Int, hi: Int): String =
+    if (hi - lo == 1) showA(arr.get(lo))
+    else {
+      val mid = lo + (hi - lo) / 2
+      go(lo, mid) ++ ", " ++ go(mid, hi)
+    }
 
-  arr.foreachIndex { (index, a) =>
-    if (index == lastIndex) output = output ++ showA(a)
-    else output = output ++ showA(a) ++ ", "
-  }
-  output = output ++ ")"
-
-  output
+  if (arr.size == 0) "Array()" else "Array(" ++ go(0, arr.size) ++ ")"
 }
 
 def showBuiltin(l: Array[Int]): String = showBuiltin(l) { e => show(e) }
