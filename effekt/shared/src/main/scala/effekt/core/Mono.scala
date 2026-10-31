@@ -1131,7 +1131,8 @@ object Mono extends Phase[CoreTransformed, CoreTransformed] {
       case BlockVar(id, annotatedTpe, annotatedCapt) => BlockVar(id, monomorphize(annotatedTpe), annotatedCapt)
 
     def monomorphize(field: Field)(using ctx: State)(using DeclarationContext): Field = field match
-      case Field(id, tpe) => Field(id, monomorphize(tpe))
+      // fields of different instances are distinct (backends like Chez define one accessor per field)
+      case Field(id, tpe) => Field(Id(id), monomorphize(tpe))
 
     private def specializeCall(callee: BlockVar, targs: List[ValueType])(using ctx: State)(using DeclarationContext): (BlockVar, List[ValueType]) =
       if ctx.isPolyExtern(callee.id) then

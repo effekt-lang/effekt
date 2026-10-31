@@ -1,0 +1,60 @@
+// An array passed to another extern stays an array of records.
+
+type Pt {
+  MkPt(x: Int, y: Int)
+}
+
+extern type Array['A]
+
+extern {global} def unsafeAllocate['A](size: Int): Array['A] = js ""
+extern {} def size['A](arr: Array['A]): Int = js ""
+extern {global} def get['A](arr: Array['A], index: Int): 'A = js ""
+extern {global} def set['A](arr: Array['A], index: Int, value: 'A): Unit = js ""
+extern {io} def consume(arr: Array[Pt]): Unit = js ""
+
+def main() = {
+  let ! a = (unsafeAllocate: ['A](Int) => Array['A] @ {global})[Pt](10)
+  let ! c = (consume: (Array[Pt]) => Unit @ {io})(a: Array[Pt])
+  let p = make Pt MkPt(1, 2)
+  let ! u = (set: ['A](Array['A], Int, 'A) => Unit @ {global})[Pt](a: Array[Pt], 0, p: Pt)
+  let ! q = (get: ['A](Array['A], Int) => 'A @ {global})[Pt](a: Array[Pt], 0)
+  q: Pt match [Int] {
+    MkPt: { (x: Int, y: Int) => return x: Int }
+  }
+}
+
+// The array reaches an extern that is not componentwise, so it keeps its
+// representation; records are packed into and opened from it.
+/// ARITY_RAISE
+
+type Pt {
+  MkPt(x: Int, y: Int)
+}
+
+extern type Array['A]
+
+extern {global} def unsafeAllocate['A](size: Int): Array['A] = js ""
+extern {} def size['A](arr: Array['A]): Int = js ""
+extern {global} def get['A](arr: Array['A], index: Int): 'A = js ""
+extern {global} def set['A](arr: Array['A], index: Int, value: 'A): Unit = js ""
+extern {io} def consume(arr: Array[Pt]): Unit = js ""
+
+def main() = {
+  let ! t0 = (unsafeAllocate: ['A](Int) => Array['A] @ {global})[Pt](10)
+  let a = t0: Array[Pt]
+  let ! t1 = (consume: (Array[Pt]) => Unit @ {io})(a: Array[Pt])
+  let c = t1: Unit
+  let p_0 = 1
+  let p_1 = 2
+  let ! t2 = (set: ['A](Array['A], Int, 'A) => Unit @ {global})[Pt](a: Array[Pt], 0, make Pt MkPt(p_0: Int, p_1: Int))
+  let u = t2: Unit
+  let ! t3 = (get: ['A](Array['A], Int) => 'A @ {global})[Pt](a: Array[Pt], 0)
+  val r_0, r_1 = t3: Pt match [Int, Int] {
+    MkPt: { (x_0: Int, y_0: Int) => return x_0: Int, y_0: Int }
+  };
+  let q_0 = r_0: Int
+  let q_1 = r_1: Int
+  let x = q_0: Int
+  let y = q_1: Int
+  return x: Int
+}

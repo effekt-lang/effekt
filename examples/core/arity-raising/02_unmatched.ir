@@ -1,0 +1,30 @@
+// The demand check: a record that is never matched is left alone.
+
+type Pt {
+  MkPt(x: Int, y: Int)
+}
+
+def id(p: Pt) = {
+  return p: Pt
+}
+
+def main() = {
+  let p = make Pt MkPt(1, 2)
+  (id: (Pt) => Pt @ {})(p: Pt)
+}
+
+// A record that is never matched gains nothing from flattening.
+/// ARITY_RAISE
+
+type Pt {
+  MkPt(x: Int, y: Int)
+}
+
+def id(p: Pt) = {
+  return p: Pt
+}
+
+def main() = {
+  let p = make Pt MkPt(1, 2)
+  (id: (Pt) => Pt @ {})(p: Pt)
+}

@@ -1,0 +1,32 @@
+// Edge case: a match with no clauses.
+
+type Pt {
+  MkPt(x: Int, y: Int)
+}
+
+def use(p: Pt) = {
+  p: Pt match [Int] {
+    MkPt: { (x: Int, y: Int) => return x: Int }
+  }
+}
+
+def absurd(p: Pt) = {
+  p: Pt match [Int] {}
+}
+
+// A match without clauses and default keeps (the packed) scrutinee.
+/// ARITY_RAISE
+
+type Pt {
+  MkPt(x: Int, y: Int)
+}
+
+def use(p_0: Int, p_1: Int) = {
+  let x = p_0: Int
+  let y = p_1: Int
+  return x: Int
+}
+
+def absurd(p_0: Int, p_1: Int) = {
+  make Pt MkPt(p_0: Int, p_1: Int) match [Int] {}
+}

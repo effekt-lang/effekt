@@ -1,0 +1,34 @@
+// Generic externs like genericEquals receive whole records.
+
+type Pt {
+  MkPt(x: Int, y: Int)
+}
+
+extern {} def genericEquals['R](x: 'R, y: 'R): Bool = js ""
+
+def main() = {
+  let p = make Pt MkPt(1, 2)
+  let b = (genericEquals: ['R]('R, 'R) => Bool @ {})[Pt](p: Pt, p: Pt)
+  p: Pt match [Bool] {
+    MkPt: { (x: Int, y: Int) => return b: Bool }
+  }
+}
+
+// An extern that mentions its type parameter only bare may inspect its
+// arguments; it is not componentwise and receives packed records.
+/// ARITY_RAISE
+
+type Pt {
+  MkPt(x: Int, y: Int)
+}
+
+extern {} def genericEquals['R](x: 'R, y: 'R): Bool = js ""
+
+def main() = {
+  let p_0 = 1
+  let p_1 = 2
+  let b = (genericEquals: ['R]('R, 'R) => Bool @ {})[Pt](make Pt MkPt(p_0: Int, p_1: Int), make Pt MkPt(p_0: Int, p_1: Int))
+  let x = p_0: Int
+  let y = p_1: Int
+  return b: Bool
+}

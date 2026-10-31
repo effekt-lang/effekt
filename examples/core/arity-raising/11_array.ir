@@ -1,0 +1,57 @@
+// An array of records becomes one array per field.
+
+type Pt {
+  MkPt(x: Int, y: Int)
+}
+
+extern type Array['A]
+
+extern {global} def unsafeAllocate['A](size: Int): Array['A] = js ""
+extern {} def size['A](arr: Array['A]): Int = js ""
+extern {global} def get['A](arr: Array['A], index: Int): 'A = js ""
+extern {global} def set['A](arr: Array['A], index: Int, value: 'A): Unit = js ""
+
+def main() = {
+  let ! a = (unsafeAllocate: ['A](Int) => Array['A] @ {global})[Pt](10)
+  let p = make Pt MkPt(1, 2)
+  let ! u = (set: ['A](Array['A], Int, 'A) => Unit @ {global})[Pt](a: Array[Pt], 0, p: Pt)
+  let ! q = (get: ['A](Array['A], Int) => 'A @ {global})[Pt](a: Array[Pt], 0)
+  let n = (size: ['A](Array['A]) => Int @ {})[Pt](a: Array[Pt])
+  q: Pt match [Int] {
+    MkPt: { (x: Int, y: Int) => return n: Int }
+  }
+}
+
+// An array of records becomes a record of arrays.
+/// ARITY_RAISE
+
+type Pt {
+  MkPt(x: Int, y: Int)
+}
+
+extern type Array['A]
+
+extern {global} def unsafeAllocate['A](size: Int): Array['A] = js ""
+extern {} def size['A](arr: Array['A]): Int = js ""
+extern {global} def get['A](arr: Array['A], index: Int): 'A = js ""
+extern {global} def set['A](arr: Array['A], index: Int, value: 'A): Unit = js ""
+
+def main() = {
+  let ! a0 = (unsafeAllocate: ['A](Int) => Array['A] @ {global})[Int](10)
+  let ! a1 = (unsafeAllocate: ['A](Int) => Array['A] @ {global})[Int](10)
+  let a_0 = a0: Array[Int]
+  let a_1 = a1: Array[Int]
+  let p_0 = 1
+  let p_1 = 2
+  let ! s0 = (set: ['A](Array['A], Int, 'A) => Unit @ {global})[Int](a_0: Array[Int], 0, p_0: Int)
+  let ! s1 = (set: ['A](Array['A], Int, 'A) => Unit @ {global})[Int](a_1: Array[Int], 0, p_1: Int)
+  let u = s1: Unit
+  let ! g0 = (get: ['A](Array['A], Int) => 'A @ {global})[Int](a_0: Array[Int], 0)
+  let ! g1 = (get: ['A](Array['A], Int) => 'A @ {global})[Int](a_1: Array[Int], 0)
+  let q_0 = g0: Int
+  let q_1 = g1: Int
+  let n = (size: ['A](Array['A]) => Int @ {})[Int](a_0: Array[Int])
+  let x = q_0: Int
+  let y = q_1: Int
+  return n: Int
+}
