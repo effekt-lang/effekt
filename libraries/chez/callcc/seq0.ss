@@ -1,14 +1,13 @@
 ; [ [f1, f2, f3, f4| fields | prompt], [f1, f2, f3, f4| fields | prompt]... ]
-(define-record Stack (
-  [immutable frames]
-  [immutable arena]
-  [immutable prompt]))
+(define-record-type Stack
+  (fields frames arena prompt)
+  (nongenerative)
+  (sealed #t))
 
-(define-record Substack (
-  [immutable frames]
-  [immutable arena]
-  [immutable field-backup]
-  [immutable prompt]))
+(define-record-type Substack
+  (fields frames arena field-backup prompt)
+  (nongenerative)
+  (sealed #t))
 
 ; MetaCont = (non-empty-list-of Stack)
 ; SubCont = (non-empty-list-of Stack)

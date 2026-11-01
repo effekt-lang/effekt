@@ -84,8 +84,6 @@ trait Transformer {
       chez.Call(chez.Call(chez.Variable(nameRef(method)), List(toChez(b))), vargs.map(toChez) ++ bargs.map(toChez))
     case If(cond, thn, els) => chez.If(toChez(cond), toChezExpr(thn), toChezExpr(els))
     case Val(ids, binding, body) => bind(toChezExpr(binding), ids.map(nameDef), toChez(body))
-    // empty matches are translated to a hole in chez scheme
-    case Match(scrutinee, tpe, Nil, None) => chez.Builtin("unreachable")
     case Match(scrutinee, tpe, clauses, default) =>
       val sc = toChez(scrutinee)
       val cls = clauses.map { case (constr, branch) =>
@@ -94,7 +92,7 @@ trait Transformer {
         val matcher = chez.Call(chez.Variable(names.matcher), List(sc, toChez(branch)))
         (pred, matcher)
       }
-      chez.Cond(cls, default.map(toChezExpr))
+      generateMatch(cls, default.map(toChezExpr))
 
     case Hole(tpe, span) => chez.Builtin("hole", chez.ChezString(span.range.from.format))
 

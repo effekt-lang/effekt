@@ -49,7 +49,8 @@ object PrettyPrinter extends ParenPrettyPrinter {
     case Record(typeName, constructorName, predicateName, uid, fields) =>
       parens("define-record-type" <+> parens(toDoc(typeName) <+> toDoc(constructorName) <+> toDoc(predicateName)) <>
         nest(line <> parens("fields" <+> align(vcat(fields map { f => brackets("immutable" <+> toDoc(f) <+> toDoc(f)) })))) <>
-        nest(line <> parens("nongenerative" <+> toDoc(uid))))
+        nest(line <> parens("nongenerative" <+> toDoc(uid))) <>
+        nest(line <> parens("sealed" <+> "#t")))
   }
 
   def toDoc(block: Block): Doc = block match {

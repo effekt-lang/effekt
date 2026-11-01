@@ -2,23 +2,23 @@
 ; Generation = Int
 
 ; Ref = Store * Value * Generation 
-(define-record-type ref (fields store (mutable value) (mutable generation)))
+(define-record-type ref (fields store (mutable value) (mutable generation)) (nongenerative) (sealed #t))
 
 ; Node = box MEM | box Diff
 
 ; MEM
 ; Means the correct values are in MEMory
-(define-record-type mem (fields))
+(define-record-type mem (fields) (nongenerative) (sealed #t))
 
 ; Diff = Ref * Value * Generation * Node
 ; Notes the DIFFerences between root and the current state in MEMory
-(define-record-type diff (fields ref value generation root))
+(define-record-type diff (fields ref value generation root) (nongenerative) (sealed #t))
 
 ; Store = Node * Generation
-(define-record-type store (fields (mutable root) (mutable generation)))
+(define-record-type store (fields (mutable root) (mutable generation)) (nongenerative) (sealed #t))
 
 ; Snapshot = Store * Node * Generation
-(define-record-type snap (fields store root generation))
+(define-record-type snap (fields store root generation) (nongenerative) (sealed #t))
 
 ; -> Store
 (define (create-store) (make-store (box (make-mem)) 0))
@@ -72,7 +72,9 @@
 ; Holds a "copy" of k, as well as its prompt and store.
 ; A segment's store is #f until its first variable or region creates it.
 (define-record-type meta-cont 
-    (fields (mutable cont) prompt (mutable store) (mutable rest)))
+    (fields (mutable cont) prompt (mutable store) (mutable rest))
+    (nongenerative)
+    (sealed #t))
 
 ; MetaCont -> Store
 (define (segment-store ks)
