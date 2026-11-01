@@ -128,10 +128,13 @@
     (worker '() ks))
 
 ; Prompt, Program MetaCont b, MetaCont, Cont b -> #
-(define (shift p prog ks k)
-    (meta-cont-cont-set! ks k)
-    (let-values ([(c underC) (split-stack ks p)])
-                (prog c underC (meta-cont-cont underC))))
+(define-syntax shift
+  (syntax-rules ()
+    [(_ p-expr prog-expr ks-expr k-expr)
+     (let ([p p-expr] [prog prog-expr] [ks ks-expr] [k k-expr])
+       (meta-cont-cont-set! ks k)
+       (let-values ([(c underC) (split-stack ks p)])
+         (prog c underC (meta-cont-cont underC))))]))
 
 ; MetaCont, MetaCont -> MetaCont
 (define (rewind cont ks)
