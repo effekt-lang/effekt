@@ -95,13 +95,13 @@
                 (set-box! oldRoot (make-diff ref oldVal rGen newRoot))
                 (store-root-set! store newRoot)))))
 
-; MetaCont -> MetaCont
-(define (create-region ks) ks)
+; MetaCont -> Store
+(define (create-region ks) (meta-cont-store ks))
 
-; Value, MetaCont -> Ref
-(define allocate var)
+; Value, Store -> Ref
+(define (allocate init store) (make-ref store init (store-generation store)))
 
-; Ref | MetaCont -> void
+; Ref | Store -> void
 (define (deallocate _) (void))
 
 (define (top-level-k x _) x)
