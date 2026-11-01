@@ -88,7 +88,7 @@ trait Transformer {
       val sc = toChez(scrutinee)
       val cls = clauses.map { case (constr, branch) =>
         val names = RecordNames(constr)
-        val pred = chez.Call(chez.Variable(names.predicate), List(sc))
+        val pred = generateTest(constr, branch.vparams.isEmpty, sc)
         val matcher = chez.Call(chez.Variable(names.matcher), List(sc, toChez(branch)))
         (pred, matcher)
       }
@@ -119,7 +119,9 @@ trait Transformer {
 
   def toChez(decl: core.Declaration): List[chez.Def] = decl match {
     case Data(did, tparams, ctors) =>
-      ctors.flatMap { ctor => generateConstructor(ctor.id, ctor.fields.map(f => f.id)) }
+      ctors.flatMap { ctor =>
+        generateConstructor(ctor.id, ctor.fields.map(f => f.id)) ++ Option.when(ctor.fields.isEmpty)(generateInstance(ctor.id))
+      }
 
     // We use chez scheme records to also represent capabilities.
     case Declaration.Interface(id, tparams, operations) =>
@@ -234,6 +236,7 @@ trait Transformer {
     case ValueVar(id, _)        => chez.Variable(nameRef(id))
 
     case PureApp(b, targs, args) => chez.Call(toChez(b), args map toChez)
+    case Make(data, tag, targs, Nil) => chez.Variable(RecordNames(tag).instance)
     case Make(data, tag, targs, args) => chez.Call(chez.Variable(nameRef(tag)), args map toChez)
 
     case Box(b, _) => toChez(b)

@@ -56,7 +56,9 @@ object TransformerCPS {
 
   def toChez(declaration: core.Declaration): List[chez.Def] = declaration match {
     case Declaration.Data(id, _, constructors) =>
-      constructors.flatMap { ctor => generateConstructor(ctor.id, ctor.fields.map(f => f.id)) }
+      constructors.flatMap { ctor =>
+        generateConstructor(ctor.id, ctor.fields.map(f => f.id)) ++ Option.when(ctor.fields.isEmpty)(generateInstance(ctor.id))
+      }
     case Declaration.Interface(id, _, properties) =>
       generateConstructor(id, properties.map(_.id))
   }
@@ -158,7 +160,7 @@ object TransformerCPS {
       val sc = toChez(scrutinee)
       val cls = clauses.map { case (constr, branch) =>
         val names = RecordNames(constr)
-        val pred = chez.Call(chez.Variable(names.predicate), sc)
+        val pred = generateTest(constr, branch.vparams.isEmpty, sc)
         val matcher = chez.Call(chez.Variable(names.matcher), sc, toChez(branch))
         (pred, matcher)
       }
@@ -200,6 +202,7 @@ object TransformerCPS {
     case Literal(n: Long, core.Type.TInt) => intLiteral(n)
     case Literal(value, _) => chez.RawValue(value.toString()) // TODO this should match on the actual types...
     case PureApp(id, vargs) => chez.Call(toChez(id), vargs.map(toChez))
+    case Make(_, tag, Nil) => chez.Variable(RecordNames(tag).instance)
     case Make(_, tag, vargs) =>
       chez.Call(nameRef(tag), vargs.map(toChez))
     case Box(id) => toChez(id)

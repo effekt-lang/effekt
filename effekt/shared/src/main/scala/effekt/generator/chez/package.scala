@@ -41,6 +41,7 @@ case class RecordNames(sym: Symbol) {
   val predicate = ChezName(name + "?")
   val matcher = ChezName("match-" + name)
   val constructor = ChezName(name)
+  val instance = ChezName(name + "$instance")
 }
 
 // https://www.scheme.com/csug8/objects.html
@@ -79,6 +80,20 @@ def generateConstructor(id: Symbol, fields: List[Symbol]): List[chez.Def] = {
 
   List(record, matcher)
 }
+
+/** Generate the singleton instance of a constructor without fields. */
+def generateInstance(id: Symbol): chez.Def = {
+  val names = RecordNames(id)
+  chez.Constant(names.instance, chez.Call(chez.Variable(names.constructor), Nil))
+}
+
+/** Tests whether `sc` was built by constructor `id`. If the constructor has no fields, we can use `eq?` instead of the full predicate. */
+def generateTest(id: Symbol, nullary: Boolean, sc: chez.Expr): chez.Expr =
+  if (nullary) {
+    chez.Call(chez.Variable(ChezName("eq?")), List(sc, chez.Variable(RecordNames(id).instance)))
+  } else {
+    chez.Call(chez.Variable(RecordNames(id).predicate), List(sc))
+  }
 
 /**
  * Generates a `match` from its clauses, each a `(predicate test, matcher call)` pair, plus its default:
