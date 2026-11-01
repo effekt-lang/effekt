@@ -2,7 +2,7 @@
 layout: docs
 title: Pretty Printer
 permalink: docs/casestudies/prettyprinter
-redirect_to: docs/casestudies/frontend#prettyprinter
+redirect_to: docs/casestudies/frontend#pretty-printer
 ---
 
 # Pretty Printer

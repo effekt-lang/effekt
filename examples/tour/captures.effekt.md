@@ -135,7 +135,7 @@ Capture sets can contain (at least) three different kinds of elements:
 
 - capabilities introduced by handlers
 - memory regions (see [regions](./regions))
-- builtin resources (see [ffi](./ffi) and [IO](./IO))
+- builtin resources (see [ffi](./ffi) and [IO](./io))
 
 An example of a builtin resource is `io`, which is handled by the runtime. Other builtin resources include `global` (for global mutable state) and `async` (for asynchronicity).
 
