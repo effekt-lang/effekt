@@ -1,0 +1,11 @@
+import bench
+import string
+
+// On Chez, an Int is a fixnum (i61), and overflowing arithmetic is UB (like on LLVM).
+def main() = {
+  println(1152921504606846976)  // a literal that does not fit wraps into a fixnum
+  val before = timestamp()
+  val after = timestamp()
+  println(after - before >= 0)
+  println(unsafeToInt("42"))
+}

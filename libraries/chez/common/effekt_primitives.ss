@@ -109,16 +109,32 @@
 
 ; time in milliseconds
 (define (timed block)
-  (let ([before (current-time)])
+  (let ([before (current-time 'time-monotonic)])
     (block)
-    (let ([after (current-time)])
+    (let ([after (current-time 'time-monotonic)])
       (seconds (time-difference after before)))))
 
 (define (seconds diff)
   (+ (time-second diff) (/ (time-nanosecond diff) 1000000000.0)))
 
+; An Int is a fixnum, so the nanoseconds since the epoch (which exceed it) wrap into one,
+; but differences between nearby timestamps are unaffected.
 (define (timestamp)
   (let ([t (current-time)])
+    (fixnum-wrap (+ (* (time-second t) 1000000000) (time-nanosecond t)))))
+
+; Integer -> Fixnum, two's complement in (fixnum-width) bits
+(define (fixnum-wrap n)
+  (let ([half (expt 2 (- (fixnum-width) 1))])
+    (- (modulo (+ n half) (* 2 half)) half)))
+
+; Fixnum, Fixnum -> Fixnum
+; `fxquotient` does not check for zero at optimize-level 3; `quotient` raises the usual error.
+(define (int-quotient x y)
+  (if (fx= y 0) (quotient x y) (fxquotient x y)))
+
+(define (relative-timestamp)
+  (let ([t (current-time 'time-monotonic)])
     (+ (* (time-second t) 1000000000) (time-nanosecond t))))
 
 (define (measure block warmup iterations)

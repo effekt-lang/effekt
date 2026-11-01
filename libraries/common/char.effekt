@@ -106,7 +106,7 @@ extern def toChar(codepoint: Int) at {}: Char =
 
 extern def infixLt(x: Char, y: Char) at {}: Bool =
   js "(${x} < ${y})"
-  chez "(< ${x} ${y})"
+  chez "(fx< ${x} ${y})"
   llvm """
     %z = icmp slt %Int ${x}, ${y}
     %fat_z = zext i1 %z to i64
@@ -116,7 +116,7 @@ extern def infixLt(x: Char, y: Char) at {}: Bool =
 
 extern def infixLte(x: Char, y: Char) at {}: Bool =
   js "(${x} <= ${y})"
-  chez "(<= ${x} ${y})"
+  chez "(fx<= ${x} ${y})"
   llvm """
     %z = icmp sle %Int ${x}, ${y}
     %fat_z = zext i1 %z to i64
@@ -126,7 +126,7 @@ extern def infixLte(x: Char, y: Char) at {}: Bool =
 
 extern def infixGt(x: Char, y: Char) at {}: Bool =
   js "(${x} > ${y})"
-  chez "(> ${x} ${y})"
+  chez "(fx> ${x} ${y})"
   llvm """
     %z = icmp sgt %Int ${x}, ${y}
     %fat_z = zext i1 %z to i64
@@ -136,7 +136,7 @@ extern def infixGt(x: Char, y: Char) at {}: Bool =
 
 extern def infixGte(x: Char, y: Char) at {}: Bool =
   js "(${x} >= ${y})"
-  chez "(>= ${x} ${y})"
+  chez "(fx>= ${x} ${y})"
   llvm """
     %z = icmp sge %Int ${x}, ${y}
     %fat_z = zext i1 %z to i64

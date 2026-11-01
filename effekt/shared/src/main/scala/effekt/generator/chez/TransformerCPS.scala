@@ -197,6 +197,7 @@ object TransformerCPS {
     case Literal(b: Boolean, core.Type.TBoolean) =>
       if (b) chez.RawValue("#t") else chez.RawValue("#f")
     case Literal(b: Byte, core.Type.TByte) => chez.RawValue(UByte.unsafeFromByte(b).toInt.toString)
+    case Literal(n: Long, core.Type.TInt) => intLiteral(n)
     case Literal(value, _) => chez.RawValue(value.toString()) // TODO this should match on the actual types...
     case PureApp(id, vargs) => chez.Call(toChez(id), vargs.map(toChez))
     case Make(_, tag, vargs) =>
