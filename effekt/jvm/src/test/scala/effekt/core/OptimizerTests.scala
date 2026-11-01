@@ -611,4 +611,75 @@ class OptimizerTests extends CoreTests {
 
     normalizeWith(Default(threshold = 0, onceLimit = Some(0), carryingLimit = 0))(input, input)
   }
+
+  // only the Normalizer, no Deadcode
+  def normalizeOnly(input: String, expected: String)(using munit.Location) =
+    assertTransformsTo(input, expected) { tree =>
+      Normalizer.normalize(Set(mainSymbol), BindSubexpressions.transform(tree), Unique(threshold = 50))
+    }
+
+  test("a match without clauses is its default") {
+    val input =
+      """ type Data { A() B() }
+        | def main = { (x: Data) => x:Data match [Int] {} else { return 1 } }
+        |""".stripMargin
+
+    val expected =
+      """ type Data { A() B() }
+        | def main = { (x: Data) => return 1 }
+        |""".stripMargin
+
+    normalizeOnly(input, expected)
+  }
+
+  test("a match whose clauses cover every constructor loses its default") {
+    val input =
+      """ type Data { A() B() }
+        | def main = { (x: Data) => x:Data match [Int] { A: { () => return 1 } B: { () => return 2 } } else { return 3 } }
+        |""".stripMargin
+
+    val expected =
+      """ type Data { A() B() }
+        | def main = { (x: Data) => x:Data match [Int] { A: { () => return 1 } B: { () => return 2 } } }
+        |""".stripMargin
+
+    normalizeOnly(input, expected)
+  }
+
+  test("a match whose clauses miss a constructor keeps its default") {
+    val input =
+      """ type Data { A() B() }
+        | def main = { (x: Data) => x:Data match [Int] { A: { () => return 1 } } else { return 3 } }
+        |""".stripMargin
+
+    normalizeOnly(input, input)
+  }
+
+  test("a clause for a constructor that is never made is removed, the default is kept") {
+    val input =
+      """ type Data { A() B() }
+        | def main = { () => make Data A() match [Int] { A: { () => return 1 } B: { () => return 2 } } else { return 3 } }
+        |""".stripMargin
+
+    val expected =
+      """ type Data { A() }
+        | def main = { () => make Data A() match [Int] { A: { () => return 1 } } else { return 3 } }
+        |""".stripMargin
+
+    removeUnused(input, expected)
+  }
+
+  test("a match that loses all of its clauses is its default") {
+    val input =
+      """ type Data { A() B() }
+        | def main = { () => make Data A() match [Int] { B: { () => return 1 } } else { return 2 } }
+        |""".stripMargin
+
+    val expected =
+      """ type Data { A() }
+        | def main = { () => return 2 }
+        |""".stripMargin
+
+    removeUnused(input, expected)
+  }
 }
