@@ -142,4 +142,4 @@
   (raise
     (condition
       (make-error)
-      (make-message-condition ("should not be reachable!")))))
+      (make-message-condition "should not be reachable!"))))
