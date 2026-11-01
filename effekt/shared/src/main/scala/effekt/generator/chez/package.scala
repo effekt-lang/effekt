@@ -73,3 +73,15 @@ def generateConstructor(id: Symbol, fields: List[Symbol]): List[chez.Def] = {
 
   List(record, matcher)
 }
+
+/**
+ * Generates a `match` from its clauses, each a `(predicate test, matcher call)` pair, plus its default:
+ *   (cond [... (<PREDICATE-i> sc) (<MATCHER-i> sc block-i)] ... [else <DEFAULT>])
+ * Without a default, the match is exhaustive, so its last clause becomes the default.
+ */
+def generateMatch(clauses: List[(chez.Expr, chez.Expr)], default: Option[chez.Expr]): chez.Expr = (clauses, default) match {
+  case (Nil, None) => chez.Builtin("unreachable") // no constructor can reach this match
+  case (tested :+ ((_, last)), None) => generateMatch(tested, Some(last)) // move last clause into the default
+  case (Nil, Some(otherwise)) => otherwise
+  case (tested, otherwise) => chez.Cond(tested, otherwise)
+}
