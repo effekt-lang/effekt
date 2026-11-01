@@ -109,9 +109,9 @@
 
 ; time in milliseconds
 (define (timed block)
-  (let ([before (current-time)])
+  (let ([before (current-time 'time-monotonic)])
     (block)
-    (let ([after (current-time)])
+    (let ([after (current-time 'time-monotonic)])
       (seconds (time-difference after before)))))
 
 (define (seconds diff)
@@ -119,6 +119,10 @@
 
 (define (timestamp)
   (let ([t (current-time)])
+    (+ (* (time-second t) 1000000000) (time-nanosecond t))))
+
+(define (relative-timestamp)
+  (let ([t (current-time 'time-monotonic)])
     (+ (* (time-second t) 1000000000) (time-nanosecond t))))
 
 (define (measure block warmup iterations)

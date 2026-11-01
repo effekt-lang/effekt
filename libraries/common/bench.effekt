@@ -36,6 +36,7 @@ extern jsNode """
 /// as gives no guarantees on the absolute time (unlike a UNIX timestamp).
 extern def relativeTimestamp() at io: Nanos =
   js "Math.round(performance.now() * 1000000)"
+  chez "(relative-timestamp)"
   default { timestamp() }
 
 type Duration = Int
