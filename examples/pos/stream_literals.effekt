@@ -1,0 +1,13 @@
+import list
+import stream
+
+
+def collectList{body: => Unit / emit[Int]} = list::collect[Int]{body}
+
+def main() = {
+  println(show(collectList#[1,2,3]))
+  println(show(list::collect[Int]{
+    #[1,2]
+    #[3,4]
+  }))
+}
