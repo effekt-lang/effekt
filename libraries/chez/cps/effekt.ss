@@ -23,12 +23,13 @@
 ; -> Store
 (define (create-store) (make-store (box (make-mem)) 0))
 
-; Store -> Snapshot
+; Store | #f -> Snapshot | #f
 (define (snapshot store)
-    (let* ([sGen (store-generation store)]
-           [snap (make-snap store (store-root store) sGen)])
-        (store-generation-set! store (+ sGen 1))
-        snap))
+    (and store ; no need to snapshot if the store is empty
+        (let* ([sGen (store-generation store)]
+               [snap (make-snap store (store-root store) sGen)])
+            (store-generation-set! store (+ sGen 1))
+            snap)))
 
 ; Node, [box Diff] -> [box Diff]
 (define (collectDiffs n acc)
@@ -67,14 +68,22 @@
 ; Cont a = a, MetaCont -> #
 ; Prompt = Symbol
 
-; MetaCont = Cont * Prompt * Store | Snapshot * MetaCont?
-; Holds a "copy" of k, as well as its prompt and store
+; MetaCont = Cont * Prompt * (Store | #f) | (Snapshot | #f) * MetaCont?
+; Holds a "copy" of k, as well as its prompt and store.
+; A segment's store is #f when created, populated only by its first variable.
 (define-record-type meta-cont 
     (fields (mutable cont) prompt (mutable store) (mutable rest)))
 
+; MetaCont -> Store
+(define (segment-store ks)
+    (or (meta-cont-store ks)           ; if there is a store, use it
+        (let ([store (create-store)])  ; otherwise, create it
+            (meta-cont-store-set! ks store)
+            store)))
+
 ; Value, MetaCont -> Ref
 (define (var init ks)
-    (let ([store (meta-cont-store ks)])
+    (let ([store (segment-store ks)])
         (make-ref store init (store-generation store))))
 
 ; Ref -> Value
@@ -103,7 +112,7 @@
         (store-root-set! store newRoot)))
 
 ; MetaCont -> Store
-(define (create-region ks) (meta-cont-store ks))
+(define (create-region ks) (segment-store ks))
 
 ; Value, Store -> Ref
 (define (allocate init store) (make-ref store init (store-generation store)))
@@ -112,7 +121,7 @@
 (define (deallocate _) (void))
 
 (define (top-level-k x _) x)
-(define top-level-ks (make-meta-cont top-level-k (gensym "toplevel") (create-store) '()))
+(define top-level-ks (make-meta-cont top-level-k (gensym "toplevel") #f '()))
 
 ; Program a b = a, Cont b, MetaCont -> #
 
@@ -120,7 +129,7 @@
 (define (reset prog ret ks k)
     (let ([prompt (gensym)])
          (meta-cont-cont-set! ks k)
-         (prog prompt (make-meta-cont ret prompt (create-store) ks) ret)))
+         (prog prompt (make-meta-cont ret prompt #f ks) ret)))
 
 ; MetaCont, Prompt -> MetaCont * MetaCont
 (define (split-stack ks p)
@@ -151,9 +160,9 @@
                [next (meta-cont-rest cont)]
                [newKs (make-meta-cont (meta-cont-cont cont)
                                       (meta-cont-prompt cont)
-                                      (snap-store snap)
+                                      (and snap (snap-store snap))
                                       ks)])
-            (restore snap)
+            (when snap (restore snap))
             (rewind next newKs))))
 
 ; Block b = Cont b, MetaCont -> #
