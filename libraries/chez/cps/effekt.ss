@@ -70,7 +70,7 @@
 
 ; MetaCont = Cont * Prompt * (Store | #f) | (Snapshot | #f) * MetaCont?
 ; Holds a "copy" of k, as well as its prompt and store.
-; A segment's store is #f when created, populated only by its first variable.
+; A segment's store is #f until its first variable or region creates it.
 (define-record-type meta-cont 
     (fields (mutable cont) prompt (mutable store) (mutable rest)))
 
