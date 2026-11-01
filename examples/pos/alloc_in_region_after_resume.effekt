@@ -1,0 +1,14 @@
+effect flip(): Bool
+
+// `x` is allocated into `r` only after resuming, and must then backtrack with the second `Flip`.
+def main() = try {
+  region r {
+    val b = do flip()
+    var x in r = if (b) 10 else 20
+    val c = do flip()
+    x = x + (if (c) 1 else 2)
+    println(x)
+  }
+} with flip { 
+  resume(true); resume(false)
+}
