@@ -1,111 +1,121 @@
 module heap
-import resizable_array
 
-/// Resizable 2-ary min-heap, backed by a resizable array
-/// `cmp` defines the ordering of elements
-record Heap[T](rawContents: ResizableArray[T], cmp: (T, T) => Ordering at {})
+import stream
 
-/// Make a new Heap with the given comparison operation
-def heap[T](cmp: (T,T) => Ordering at {}) = 
-  Heap[T](resizableArray(), cmp)
-
-/// Make a new Heap with the given comparison operation and initial capacity
-def heap[T](cmp: (T,T) => Ordering at {}, capacity: Int) = 
-  Heap[T](resizableArray(capacity), cmp)
+/// A value together with its priority. Smaller weights come first.
+record Weighted[A](value: A, weight: Double)
 
 namespace internal {
-  def left(idx: Int) = 2 * idx + 1
-  def right(idx: Int) = 2 * idx + 2
-  def parent(idx: Int) = (idx - 1) / 2
-
-  def bubbleUp[A](heap: Heap[A], idx: Int) = {
-    val arr = heap.rawContents
-    arr.boundsCheck(idx) // idx > parent(idx), parent(parent(idx)) etc
-
-    def go(idx: Int): Unit = {
-      if (idx > 0 and (heap.cmp)(arr.get(parent(idx)), arr.get(idx)) is Greater()) {
-        arr.swap(parent(idx), idx)
-        go(parent(idx))
-      }
-    }
-    go(idx)
+  /// A pairing heap: empty, or a minimal element with its subheaps.
+  type Tree[A] {
+    Node(value: A, weight: Double, subheaps: List[Tree[A]])
+    Empty()
   }
-  def sinkDown[A](heap: Heap[A], idx: Int) = {
-    val arr = heap.rawContents
 
-    def infixLt(x: A, y: A) = {
-      if ((heap.cmp)(x,y) is Less()) { true } else { false }
-    }
-    
-    def go(idx: Int): Unit = {
-      if (right(idx) < arr.size) {
-        val v = arr.get(idx)
-        val l = arr.get(left(idx))
-        val r = arr.get(right(idx))
-        if (l < v && r < v) {
-          // swap with the smaller one
-          if (l < r) {
-            arr.swap(left(idx), idx)
-            go(left(idx))
-          } else {
-            arr.swap(right(idx), idx)
-            go(right(idx))
-          }
-        } else if (l < v) {
-          arr.swap(left(idx), idx)
-          go(left(idx))
-        } else if (r < v) {
-          arr.swap(right(idx), idx)
-          go(right(idx))
-        }
-      } else if (left(idx) < arr.size) {
-        if (arr.get(left(idx)) < arr.get(idx)) {
-          arr.swap(left(idx), idx)
-          go(left(idx))
-        }
-      } // else: we are at the bottom
-    }
-    go(idx)
+  /// Merge a nonempty list of heaps, given as head and tail, using the two-pass pairing strategy.
+  ///
+  /// O(log n) amortized
+  def mergePairs[A](heap: Tree[A], heaps: List[Tree[A]]): Tree[A] = heaps match {
+    case Nil() => heap
+    case Cons(heap1, Nil()) => meld(heap, heap1)
+    case Cons(heap1, Cons(heap2, rest)) => meld(meld(heap, heap1), mergePairs(heap2, rest))
   }
 }
 
-/// Insert value into heap
-///
-/// O(log n) worst case if capacity suffices, O(1) average
-def insert[T](heap: Heap[T], value: T): Unit = {
-  with on[OutOfBounds].panic();
-  val idx = heap.rawContents.add(value)
-  internal::bubbleUp(heap, idx)
-}
+/// Persistent min-heap, implemented as a pairing heap.
+type Heap[A] = internal::Tree[A]
 
-/// find and return (but not remove) the minimal element in this heap
-/// panics when heap is empty
+/// The empty heap.
 ///
 /// O(1)
-def findMin[T](heap: Heap[T]): T / Exception[OutOfBounds] = {
-  heap.rawContents.get(0)
-}
+def empty[A](): Heap[A] = internal::Empty()
 
-/// find and remove the minimal element in this heap
-/// panics when heap is empty
-///
-/// O(log n)
-def deleteMin[T](heap: Heap[T]): T / Exception[OutOfBounds] = {
-  val arr = heap.rawContents
-  val res = arr.get(0)
-  if (arr.size == 1) {
-    arr.popRight()
-    res
-  } else {
-    arr.set(0, arr.popRight())
-    internal::sinkDown(heap, 0)
-    res
-  }
-}
-
-/// Number of elements in the heap
+/// A heap containing exactly one element.
 ///
 /// O(1)
-def size[T](heap: Heap[T]): Int = {
-  heap.rawContents.size
+def single[A](value: A, weight: Double): Heap[A] = internal::Node(value, weight, Nil())
+
+/// Check if the heap is empty.
+///
+/// O(1)
+def isEmpty[A](heap: Heap[A]): Bool = heap match {
+  case internal::Empty() => true
+  case internal::Node(_, _, _) => false
+}
+
+/// Merge two heaps.
+///
+/// O(1)
+def meld[A](heap1: Heap[A], heap2: Heap[A]): Heap[A] = (heap1, heap2) match {
+  case (internal::Empty(), heap2) => heap2
+  case (heap1, internal::Empty()) => heap1
+  case (internal::Node(x1, w1, subheaps1), internal::Node(x2, w2, subheaps2)) =>
+    if (w1 < w2) {
+      internal::Node(x1, w1, Cons(heap2, subheaps1))
+    } else {
+      internal::Node(x2, w2, Cons(heap1, subheaps2))
+    }
+}
+
+/// Insert a value with the given weight.
+///
+/// O(1)
+def insert[A](heap: Heap[A], value: A, weight: Double): Heap[A] =
+  meld(single(value, weight), heap)
+
+/// The element with the smallest weight, without removing it.
+/// Returns `None()` if the heap is empty.
+///
+/// O(1)
+def findMinimum[A](heap: Heap[A]): Option[Weighted[A]] = heap match {
+  case internal::Empty() => None()
+  case internal::Node(x, w, _) => Some(Weighted(x, w))
+}
+
+/// Remove the element with the smallest weight, returning it and the remaining heap.
+/// Returns `None()` if the heap is empty.
+///
+/// O(log n) amortized
+def extract[A](heap: Heap[A]): Option[(Weighted[A], Heap[A])] = heap match {
+  case internal::Empty() => None()
+  case internal::Node(x, w, Nil()) => Some((Weighted(x, w), internal::Empty()))
+  case internal::Node(x, w, Cons(heap1, heaps)) => Some((Weighted(x, w), internal::mergePairs(heap1, heaps)))
+}
+
+/// Insert the given value and remove the element with the smallest weight.
+/// Returns the given value and the unchanged heap if its weight is not larger than all others.
+///
+/// O(log n) amortized
+def exchange[A](heap: Heap[A], value: A, weight: Double): (Weighted[A], Heap[A]) = heap match {
+  case internal::Node(x, w, heaps) =>
+    if (w < weight) {
+      (Weighted(x, w), internal::mergePairs(single(value, weight), heaps))
+    } else {
+      (Weighted(value, weight), heap)
+    }
+  case internal::Empty() => (Weighted(value, weight), heap)
+}
+
+/// Emit all elements in ascending order of weight.
+///
+/// O(n log n)
+def each[A](heap: Heap[A]): Unit / emit[Weighted[A]] = extract(heap) match {
+  case None() => ()
+  case Some((element, rest)) =>
+    do emit(element)
+    each(rest)
+}
+
+/// Collect all emitted elements into a heap.
+///
+/// O(n)
+def collectHeap[A] { stream: () => Unit / emit[Weighted[A]] }: Heap[A] = {
+  var heap: Heap[A] = empty()
+  try {
+    stream()
+  } with emit[Weighted[A]] { case Weighted(value, weight) =>
+    heap = insert(heap, value, weight)
+    resume(())
+  }
+  heap
 }
