@@ -81,19 +81,26 @@
 (define (get ref) (ref-value ref))
 
 ; Ref, Value -> void
-(define (put ref value)
-    (let* ([rGen (ref-generation ref)]
-           [store (ref-store ref)]
-           [sGen (store-generation store)])
-        (if (= rGen sGen)
-            (ref-value-set! ref value)
-            (let ([oldVal (ref-value ref)]
-                  [newRoot (box (make-mem))]
-                  [oldRoot (store-root store)])
-                (ref-value-set! ref value)
-                (ref-generation-set! ref sGen)
-                (set-box! oldRoot (make-diff ref oldVal rGen newRoot))
-                (store-root-set! store newRoot)))))
+(define-syntax put
+  (syntax-rules ()
+    [(_ ref-expr value-expr)
+     (let ([ref ref-expr] [value value-expr])
+       (let ([store (ref-store ref)])
+         (if (= (ref-generation ref) (store-generation store))
+             (ref-value-set! ref value)
+             (put-recording ref value store))))]))
+
+; Ref, Value, Store -> void
+(define (put-recording ref value store)
+    (let ([rGen (ref-generation ref)]
+          [sGen (store-generation store)]
+          [oldVal (ref-value ref)]
+          [newRoot (box (make-mem))]
+          [oldRoot (store-root store)])
+        (ref-value-set! ref value)
+        (ref-generation-set! ref sGen)
+        (set-box! oldRoot (make-diff ref oldVal rGen newRoot))
+        (store-root-set! store newRoot)))
 
 ; MetaCont -> Store
 (define (create-region ks) (meta-cont-store ks))
