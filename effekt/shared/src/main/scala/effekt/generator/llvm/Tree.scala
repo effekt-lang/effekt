@@ -71,6 +71,8 @@ enum Instruction {
   case FAdd(result: String, operand0: Operand, operand1: Operand)
   case InsertValue(result: String, aggregate: Operand, element: Operand, index: Int)
   case ExtractValue(result: String, aggregate: Operand, index: Int)
+  // predicate is one of LLVM's icmp predicates, for example: "ult", "eq", "ule"
+  case Icmp(result: String, predicate: String, tpe: Type, operand0: Operand, operand1: Operand)
   case Comment(msg: String)
 }
 export Instruction.*
@@ -80,6 +82,7 @@ enum Terminator {
   case Ret(operand: Operand)
   case Switch(operand: Operand, defaultDest: String, dests: List[(Int, String)])
   case CondBr(condition: Operand, trueDest: String, falseDest: String)
+  case Unreachable()
 }
 export Terminator.*
 
