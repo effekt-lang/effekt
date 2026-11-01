@@ -231,6 +231,7 @@ trait Transformer {
     case Literal(s: String, _)  => escape(s)
     case Literal(b: Boolean, _) => if (b) chez.RawValue("#t") else chez.RawValue("#f")
     case Literal(b: Byte, _)    => chez.RawValue(UByte.unsafeFromByte(b).toInt.toString)
+    case Literal(n: Long, Type.TInt) => intLiteral(n)
     case l: Literal             => chez.RawValue(l.value.toString)
     case ValueVar(id, _)        => chez.Variable(nameRef(id))
 

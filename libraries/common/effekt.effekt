@@ -240,7 +240,7 @@ extern def infixEq(x: Unit, y: Unit) at {}: Bool =
 
 extern def infixEq(x: Int, y: Int) at {}: Bool =
   js "${x} === ${y}"
-  chez "(equal? ${x} ${y})"
+  chez "(fx= ${x} ${y})"
   llvm """
     %z = icmp eq %Int ${x}, ${y}
     %fat_z = zext i1 %z to i64
@@ -250,7 +250,7 @@ extern def infixEq(x: Int, y: Int) at {}: Bool =
 
 extern def infixNeq(x: Int, y: Int) at {}: Bool =
   js "${x} !== ${y}"
-  chez "(not (equal? ${x} ${y}))"
+  chez "(not (fx= ${x} ${y}))"
   llvm """
     %z = icmp ne %Int ${x}, ${y}
     %fat_z = zext i1 %z to i64
@@ -260,7 +260,7 @@ extern def infixNeq(x: Int, y: Int) at {}: Bool =
 
 extern def infixEq(x: Char, y: Char) at {}: Bool =
   js "${x} === ${y}"
-  chez "(equal? ${x} ${y})"
+  chez "(fx= ${x} ${y})"
   llvm """
     %z = icmp eq %Int ${x}, ${y}
     %fat_z = zext i1 %z to i64
@@ -270,7 +270,7 @@ extern def infixEq(x: Char, y: Char) at {}: Bool =
 
 extern def infixNeq(x: Char, y: Char) at {}: Bool =
   js "${x} !== ${y}"
-  chez "(not (equal? ${x} ${y}))"
+  chez "(not (fx= ${x} ${y}))"
   llvm """
     %z = icmp ne %Int ${x}, ${y}
     %fat_z = zext i1 %z to i64
@@ -314,7 +314,7 @@ extern def infixNeq(x: Bool, y: Bool) at {}: Bool =
 
 extern def infixEq(x: Byte, y: Byte) at {}: Bool =
   js "${x} === ${y}"
-  chez "(equal? ${x} ${y})"
+  chez "(fx= ${x} ${y})"
   llvm """
     %z = icmp eq %Byte ${x}, ${y}
     %fat_z = zext i1 %z to i64
@@ -324,7 +324,7 @@ extern def infixEq(x: Byte, y: Byte) at {}: Bool =
 
 extern def infixNeq(x: Byte, y: Byte) at {}: Bool =
   js "${x} !== ${y}"
-  chez "(not (equal? ${x} ${y}))"
+  chez "(not (fx= ${x} ${y}))"
   llvm """
     %z = icmp ne %Byte ${x}, ${y}
     %fat_z = zext i1 %z to i64
@@ -336,28 +336,28 @@ extern def infixNeq(x: Byte, y: Byte) at {}: Bool =
 // ========
 extern def infixPlus(x: Int, y: Int) at {}: Int =
   js "(${x} + ${y})"
-  chez "(+ ${x} ${y})"
+  chez "(fx+/wraparound ${x} ${y})"
   llvm "%z = add  %Int ${x}, ${y} ret %Int %z"
 
 extern def infixStar(x: Int, y: Int) at {}: Int =
   js "(${x} * ${y})"
-  chez "(* ${x} ${y})"
+  chez "(fx*/wraparound ${x} ${y})"
   llvm "%z = mul  %Int ${x}, ${y} ret %Int %z"
 
 /// Truncating signed integer division (quotient rounded towards zero)
 extern def infixSlash(x: Int, y: Int) at {}: Int =
   js "Math.trunc(${x} / ${y})"
-  chez "(quotient ${x} ${y})"
+  chez "(int-quotient ${x} ${y})"
   llvm "%z = sdiv %Int ${x}, ${y} ret %Int %z"
 
 extern def infixMinus(x: Int, y: Int) at {}: Int =
   js "(${x} - ${y})"
-  chez "(- ${x} ${y})"
+  chez "(fx-/wraparound ${x} ${y})"
   llvm "%z = sub  %Int ${x}, ${y} ret %Int %z"
 
 extern def mod(x: Int, y: Int) at {}: Int =
   js "(${x} % ${y})"
-  chez "(modulo ${x} ${y})"
+  chez "(fxmodulo ${x} ${y})"
   llvm "%z = srem %Int ${x}, ${y} ret %Int %z"
 
 extern def infixPlus(x: Double, y: Double) at {}: Double =
@@ -515,7 +515,7 @@ def abs(n: Int): Int =
 
 extern def infixLt(x: Int, y: Int) at {}: Bool =
   js "(${x} < ${y})"
-  chez "(< ${x} ${y})"
+  chez "(fx< ${x} ${y})"
   llvm """
     %z = icmp slt %Int ${x}, ${y}
     %fat_z = zext i1 %z to i64
@@ -525,7 +525,7 @@ extern def infixLt(x: Int, y: Int) at {}: Bool =
 
 extern def infixLte(x: Int, y: Int) at {}: Bool =
   js "(${x} <= ${y})"
-  chez "(<= ${x} ${y})"
+  chez "(fx<= ${x} ${y})"
   llvm """
     %z = icmp sle %Int ${x}, ${y}
     %fat_z = zext i1 %z to i64
@@ -535,7 +535,7 @@ extern def infixLte(x: Int, y: Int) at {}: Bool =
 
 extern def infixGt(x: Int, y: Int) at {}: Bool =
   js "(${x} > ${y})"
-  chez "(> ${x} ${y})"
+  chez "(fx> ${x} ${y})"
   llvm """
     %z = icmp sgt %Int ${x}, ${y}
     %fat_z = zext i1 %z to i64
@@ -545,7 +545,7 @@ extern def infixGt(x: Int, y: Int) at {}: Bool =
 
 extern def infixGte(x: Int, y: Int) at {}: Bool =
   js "(${x} >= ${y})"
-  chez "(>= ${x} ${y})"
+  chez "(fx>= ${x} ${y})"
   llvm """
     %z = icmp sge %Int ${x}, ${y}
     %fat_z = zext i1 %z to i64
@@ -632,33 +632,33 @@ def infixAmpAmp { first: => Bool } { second: => Bool }: Bool =
 /// Arithmetic left shift
 extern def bitwiseShl(x: Int, y: Int) at {}: Int =
   js "(${x} << ${y})"
-  chez "(ash ${x} ${y})"
+  chez "(fxsll/wraparound ${x} ${y})"
   llvm "%z = shl %Int ${x}, ${y} ret %Int %z"
 
 /// Arithmetic right shift
 extern def bitwiseShr(x: Int, y: Int) at {}: Int =
   js "(${x} >> ${y})"
-  chez "(ash ${x} (- ${y}))"
+  chez "(fxsra ${x} ${y})"
   llvm "%z = ashr %Int ${x}, ${y} ret %Int %z"
 
 extern def bitwiseAnd(x: Int, y: Int) at {}: Int =
   js "(${x} & ${y})"
-  chez "(logand ${x} ${y})"
+  chez "(fxand ${x} ${y})"
   llvm "%z = and %Int ${x}, ${y} ret %Int %z"
 
 extern def bitwiseOr(x: Int, y: Int) at {}: Int =
   js "(${x} | ${y})"
-  chez "(logior ${x} ${y})"
+  chez "(fxior ${x} ${y})"
   llvm "%z = or %Int ${x}, ${y} ret %Int %z"
 
 extern def bitwiseXor(x: Int, y: Int) at {}: Int =
   js "(${x} ^ ${y})"
-  chez "(logxor ${x} ${y})"
+  chez "(fxxor ${x} ${y})"
   llvm "%z = xor %Int ${x}, ${y} ret %Int %z"
 
 extern def bitwiseNot(x: Int) at {}: Int =
   js "(~${x})"
-  chez "(lognot ${x})"
+  chez "(fxnot ${x})"
   llvm "%z = xor %Int ${x}, -1 ret %Int %z"
 
 
@@ -667,7 +667,7 @@ extern def bitwiseNot(x: Int) at {}: Int =
 extern def toByte(n: Int) at {}: Byte =
   js "(${n} & 0xFF)"
   llvm "%z = trunc %Int ${n} to %Byte ret %Byte %z"
-  chez "(logand ${n} 255)"
+  chez "(fxand ${n} 255)"
 
 extern def toInt(n: Byte) at {}: Int =
   js "${n}"

@@ -19,6 +19,12 @@ def nameRef(id: Symbol): ChezName = nameDef(id)
 // TODO sanitize
 def nameDef(id: Symbol): ChezName = ChezName(uniqueName(id))
 
+/** An Effekt Int is a fixnum (i61) on Chez with wrapping arithmetic. */
+def intLiteral(n: Long): chez.Expr = {
+  val spare = 64 - 61 // |long| - |fixnum|
+  chez.RawValue(((n << spare) >> spare).toString) // wrap correctly
+}
+
 def intersperse[T](l: List[T], el: T): List[T] = l match {
   case Nil => Nil
   case head :: Nil => head :: Nil

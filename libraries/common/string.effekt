@@ -174,7 +174,7 @@ def toInt(str: String, base: Int): Int / fail = {
 /// Native versions of toInt (unused right now)
 extern def unsafeToInt(str: String) at {}: Int =
   js "(Number.isNaN(parseInt(${str})) ? undefined : parseInt(${str}))"
-  chez "(string->number ${str})"
+  chez "(let ([n (string->number ${str})]) (and (fixnum? n) n))"
 
 
 /// Returns the index of the first occurrence of `sub` in `str`
