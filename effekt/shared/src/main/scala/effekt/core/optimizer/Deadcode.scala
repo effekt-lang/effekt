@@ -33,11 +33,16 @@ class Deadcode(reachable: Map[Id, Usage])
         case b => Stmt.Reset(b)
       }
 
-    case Stmt.Match(sc, tpe, clauses, default) => for {
-      sc2      <- rewrite(sc)
-      clauses2 <- all(clauses.filter { case (id, clause) => used(id) }, rewrite)
-      default2 <- opt(default, rewrite)
-    } yield Match(sc2, tpe, clauses2, default2)
+    // Remove clauses for constructors that are never built
+    case Stmt.Match(sc, tpe, clauses, default) =>
+      (clauses.filter { case (id, clause) => used(id) }, default) match {
+        case (Nil, Some(stmt)) => rewrite(stmt) // no clauses ~> use the default
+        case (liveClauses, default) => for {
+          sc2      <- rewrite(sc)
+          clauses2 <- all(liveClauses, rewrite)
+          default2 <- opt(default, rewrite)
+        } yield Match(sc2, tpe, clauses2, default2)
+      }
 
     case other => super.rewrite(other)
   }

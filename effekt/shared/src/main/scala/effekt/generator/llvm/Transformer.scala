@@ -147,8 +147,9 @@ object Transformer {
         emit(ExtractValue(tagName, transform(value), 0))
         emit(ExtractValue(objectName, transform(value), 1))
 
-        // if there's no default clause, tell LLVM that it can assume that the tag is less than number of clauses
-        if (default.isEmpty) {
+        // Assumption: no default ~> the clauses cover every tag the scrutinee can have
+        // In debug mode, the default checks this, so we cannot let LLVM assume it
+        if (default.isEmpty && !MC.debug) {
           val cmpName = freshName("tagInRange")
           val numTags = clauses.iterator.map(_._1).max + 1 // TODO: carry this on the switch / data type?
           emit(Icmp(cmpName, "ult", IntegerType64(), LocalReference(IntegerType64(), tagName), ConstantInt(numTags)))
@@ -177,7 +178,7 @@ object Transformer {
         val defaultLabel = default match {
           case Some(clause) => labelClause(clause, isDefault = true)
           // No default ~> clauses cover every tag the scrutinee can have ~> unreachable
-          // in `--debug` mode, we emit a call to [[unmatchedTag]] for better debugging
+          // In debug mode, we call [[unmatchedTag]] first, so that a compiler bug panics
           case None =>
             val label = freshName("label");
             val checks = if MC.debug then List(Call("_", Ccc(), VoidType(), unmatchedTag, List())) else Nil

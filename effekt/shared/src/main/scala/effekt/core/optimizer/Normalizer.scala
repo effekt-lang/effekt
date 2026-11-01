@@ -59,10 +59,10 @@ object Normalizer { normal =>
   }
 
   /**
-   * Do the clauses name every constructor of the scrutinee's type?
-   * If so, the default is unreachable!
+   * Does every constructor of data type [[tpe]] have one of the [[clauses]]?
+   * If so, the match leaves nothing for its default.
    *
-   * Beware: Deadcode might have dropped constructors that are never built.
+   * Beware: [[Deadcode]] drops constructors that are never built.
    */
   private def covers(tpe: ValueType, clauses: List[(Id, BlockLit)])(using C: Context): Boolean = tpe match {
     case ValueType.Data(name, _) => C.decls.findData(name).exists { data =>
@@ -300,6 +300,9 @@ object Normalizer { normal =>
           Stmt.Invoke(normalized.shared, method, methodTpe, targs, vargs.map(normalize), bargs.map(normalize))
       }
 
+    // [[ sc match {} else { stmt } ]] = [[ stmt ]]
+    case Stmt.Match(_, _, Nil, Some(default)) => normalize(default)
+
     case Stmt.Match(scrutinee, tpe, clauses, default) => active(scrutinee) match {
       case Expr.Make(data, tag, targs, vargs) if clauses.exists { case (id, _) => id == tag } =>
         val clause: BlockLit = clauses.collectFirst { case (id, cl) if id == tag => cl }.get
@@ -310,9 +313,10 @@ object Normalizer { normal =>
         normalize(default.get)
       case _ =>
         val normalized = normalize(scrutinee)
+        val reachableDefault = if covers(normalized.tpe, clauses) then None else default
         Stmt.Match(normalized, tpe, clauses.map { case (tag, clause) =>
           tag -> normalize(clause)(using selecting(normalized, tag, clause))
-        }, default.filter(_ => !covers(normalized.tpe, clauses)).map(normalize))
+        }, reachableDefault.map(normalize))
     }
 
     // [[ if (true) stmt1 else stmt2 ]] = [[ stmt1 ]]
