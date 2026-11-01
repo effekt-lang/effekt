@@ -1,15 +1,14 @@
 def main() = {
-  val ops = [
-    (box { (x: Int, y: Int) => (x.div(y), x.mod(y), x == y * x.div(y) + x.mod(y)) }, "divmod"),
-    (box { (x: Int, y: Int) => (x.quot(y), x.rem(y), x == y * x.quot(y) + x.rem(y)) }, "quotrem"),
-  ]
-  ops.foreach { case (op, name) =>
-    [8, 8.neg, 6, 6.neg, 5000000002, 5000000002.neg].foreach { dividend =>
-      [3, 3.neg].foreach { divisor =>
-        val (q, r, assertion) = op(dividend, divisor)
-        println(s"${dividend.show} `${name}` ${divisor.show} = ${q.show}, ${r.show} (${assertion.show})")
-      }
+  [8, 8.neg, 6, 6.neg, 5000000002, 5000000002.neg].foreach { x =>
+    [3, 3.neg].foreach { y =>
+      println(s"${x.show} `divmod` ${y.show} = ${x.div(y).show}, ${x.mod(y).show} (${(x == y * x.div(y) + x.mod(y)).show})")
     }
-    println("")
   }
+  println("")
+  [8, 8.neg, 6, 6.neg, 5000000002, 5000000002.neg].foreach { x =>
+    [3, 3.neg].foreach { y =>
+      println(s"${x.show} `quotrem` ${y.show} = ${x.quot(y).show}, ${x.rem(y).show} (${(x == y * x.quot(y) + x.rem(y)).show})")
+    }
+  }
+  println("")
 }
