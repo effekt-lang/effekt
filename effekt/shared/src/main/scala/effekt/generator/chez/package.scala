@@ -19,7 +19,7 @@ def nameRef(id: Symbol): ChezName = nameDef(id)
 // TODO sanitize
 def nameDef(id: Symbol): ChezName = ChezName(uniqueName(id))
 
-/** An Effekt Int is a fixnum (i61) on Chez with wrapping arithmetic. */
+/** An Effekt Int is a fixnum (i61) on Chez, so a literal that does not fit wraps into one. */
 def intLiteral(n: Long): chez.Expr = {
   val spare = 64 - 61 // |long| - |fixnum|
   chez.RawValue(((n << spare) >> spare).toString) // wrap correctly

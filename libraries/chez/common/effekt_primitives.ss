@@ -117,8 +117,8 @@
 (define (seconds diff)
   (+ (time-second diff) (/ (time-nanosecond diff) 1000000000.0)))
 
-; An Int is a fixnum, so the nanoseconds since the epoch (which exceed it) wrap,
-; but differences between timestamps stay exact.
+; An Int is a fixnum, so the nanoseconds since the epoch (which exceed it) wrap into one,
+; but differences between nearby timestamps are unaffected.
 (define (timestamp)
   (let ([t (current-time)])
     (fixnum-wrap (+ (* (time-second t) 1000000000) (time-nanosecond t)))))

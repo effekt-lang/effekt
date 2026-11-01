@@ -336,12 +336,12 @@ extern def infixNeq(x: Byte, y: Byte) at {}: Bool =
 // ========
 extern def infixPlus(x: Int, y: Int) at {}: Int =
   js "(${x} + ${y})"
-  chez "(fx+/wraparound ${x} ${y})"
+  chez "(fx+ ${x} ${y})"
   llvm "%z = add  %Int ${x}, ${y} ret %Int %z"
 
 extern def infixStar(x: Int, y: Int) at {}: Int =
   js "(${x} * ${y})"
-  chez "(fx*/wraparound ${x} ${y})"
+  chez "(fx* ${x} ${y})"
   llvm "%z = mul  %Int ${x}, ${y} ret %Int %z"
 
 /// Truncating signed integer division (quotient rounded towards zero)
@@ -352,7 +352,7 @@ extern def infixSlash(x: Int, y: Int) at {}: Int =
 
 extern def infixMinus(x: Int, y: Int) at {}: Int =
   js "(${x} - ${y})"
-  chez "(fx-/wraparound ${x} ${y})"
+  chez "(fx- ${x} ${y})"
   llvm "%z = sub  %Int ${x}, ${y} ret %Int %z"
 
 extern def mod(x: Int, y: Int) at {}: Int =
@@ -632,7 +632,7 @@ def infixAmpAmp { first: => Bool } { second: => Bool }: Bool =
 /// Arithmetic left shift
 extern def bitwiseShl(x: Int, y: Int) at {}: Int =
   js "(${x} << ${y})"
-  chez "(fxsll/wraparound ${x} ${y})"
+  chez "(fxsll ${x} ${y})"
   llvm "%z = shl %Int ${x}, ${y} ret %Int %z"
 
 /// Arithmetic right shift

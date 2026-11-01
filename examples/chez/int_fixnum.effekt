@@ -1,13 +1,9 @@
 import bench
 import string
 
-// On Chez, an Int is a fixnum (i61) with wrapping arithmetic.
+// On Chez, an Int is a fixnum (i61), and overflowing arithmetic is UB (like on LLVM).
 def main() = {
-  val max = 1152921504606846975
-  println(max + 1)
-  println(1152921504606846976)  // a literal that does not fit wraps the same way
-  println(max * 2)
-  println(bitwiseShl(1, 60))
+  println(1152921504606846976)  // a literal that does not fit wraps into a fixnum
   val before = timestamp()
   val after = timestamp()
   println(after - before >= 0)
