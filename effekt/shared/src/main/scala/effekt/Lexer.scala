@@ -91,7 +91,6 @@ enum TokenKind {
   case `{`
   case `}`
   case `}$`
-  case `$|`
   case `(`
   case `)`
   case `[`
@@ -426,7 +425,6 @@ class Lexer(source: Source) extends Iterator[Token] {
       case ('\'',  _)                        => advanceWith(stringLike(CharString))   // ' ... '
       case ('<', '"')                        => advance2With(stringLike(HoleString))  // <" ... ">
       case ('#', '|')                        => advance2With(stringLike(RawString))   // #|...
-      case ('$', '|')                        => delimiters.push(RawString); advance2With(`$|`)
 
       // Comments
       case ('/', '*') => advance2With(multilineComment())
