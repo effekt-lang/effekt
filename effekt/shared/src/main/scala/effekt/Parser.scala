@@ -158,7 +158,7 @@ class Parser(tokens: Seq[Token], source: Source) {
       if position < 0 then fail("Unexpected start of file")
 
       tokens(position).failOnErrorToken(position) match {
-        case token if token.kind == `$|` => go(position - 1)
+        case token if token.kind == `$|` => fail("Multi-line splices in raw strings are intentionally unsupported") // return `go(position - 1)` here to allow multiline splices
         case token if isSpace(token.kind) && token.kind != Newline => go(position - 1)
         case token if token.kind.isInstanceOf[RawStr] => true // raw string literals are always terminated by newline
         case token if token.kind == Newline => true
@@ -219,7 +219,7 @@ class Parser(tokens: Seq[Token], source: Source) {
   def isSpace(kind: TokenKind): Boolean =
     kind match {
       case TokenKind.Space | TokenKind.Comment(_) | TokenKind.Newline => true
-      case TokenKind.`$|` if sawNewlineLast => true
+      case TokenKind.`$|` if sawNewlineLast => fail("Multi-line splices in raw strings are intentionally unsupported") // return true to allow multi-line splices
       case _ => false
     }
 

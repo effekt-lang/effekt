@@ -1,0 +1,6 @@
+def main() = {
+  val foo = #| Hallo ${
+            $| "Welt" } // ERROR Multi-line splices
+            #| !
+  println(foo)
+}
