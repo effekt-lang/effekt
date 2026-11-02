@@ -280,7 +280,7 @@ extern def infixNeq(x: Char, y: Char) at {}: Bool =
 
 extern def infixEq(x: String, y: String) at {}: Bool =
   js "${x} === ${y}"
-  chez "(equal? ${x} ${y})"
+  chez "(string=? ${x} ${y})"
   llvm """
     %res = call %Pos @c_bytearray_equal(%Pos ${x}, %Pos ${y})
     ret %Pos %res
@@ -290,7 +290,7 @@ def infixNeq(x: String, y: String): Bool = not(x == y)
 
 extern def infixEq(x: Bool, y: Bool) at {}: Bool =
   js "${x} === ${y}"
-  chez "(equal? ${x} ${y})"
+  chez "(eq? ${x} ${y})"
   llvm """
     %slim_x = extractvalue %Pos ${x}, 0
     %slim_y = extractvalue %Pos ${y}, 0
@@ -302,7 +302,7 @@ extern def infixEq(x: Bool, y: Bool) at {}: Bool =
 
 extern def infixNeq(x: Bool, y: Bool) at {}: Bool =
   js "${x} !== ${y}"
-  chez "(not (equal? ${x} ${y}))"
+  chez "(not (eq? ${x} ${y}))"
   llvm """
     %slim_x = extractvalue %Pos ${x}, 0
     %slim_y = extractvalue %Pos ${y}, 0
