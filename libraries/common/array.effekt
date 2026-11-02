@@ -580,36 +580,36 @@ def binarySearch[A](arr: Array[A], toFind: A) { ord: (A, A) => Ordering }: Optio
 ///
 /// O(N log N)
 def sort[A](arr: Array[A]) { ord: (A, A) => Ordering }: Unit = {
-  val n = arr.size
-  if (n > 1) {
-    val tmp = array(n / 2, arr.get(0))
+  val size = arr.size
+  if (size > 1) {
+    val buffer = array(size / 2, arr.get(0))
 
-    def merge(lo: Int, mid: Int, hi: Int): Unit = {
-      val leftLength = mid - lo
-      def loop(i: Int, j: Int, k: Int): Unit =
-        if (i < leftLength) {
-          if (j < hi) {
-            val x = tmp.get(i)
-            val y = arr.get(j)
-            ord(y, x) match {
-              case Less() => arr.set(k, y); loop(i, j + 1, k + 1)
-              case _ => arr.set(k, x); loop(i + 1, j, k + 1)
+    def merge(start: Int, middle: Int, end: Int): Unit = {
+      val leftLength = middle - start
+      def loop(left: Int, right: Int, target: Int): Unit =
+        if (left < leftLength) {
+          if (right < end) {
+            val leftElement = buffer.get(left)
+            val rightElement = arr.get(right)
+            ord(rightElement, leftElement) match {
+              case Less() => arr.set(target, rightElement); loop(left, right + 1, target + 1)
+              case _ => arr.set(target, leftElement); loop(left + 1, right, target + 1)
             }
-          } else copy(tmp, i, arr, k, leftLength - i)
+          } else copy(buffer, left, arr, target, leftLength - left)
         }
-      copy(arr, lo, tmp, 0, leftLength)
-      loop(0, mid, lo)
+      copy(arr, start, buffer, 0, leftLength)
+      loop(0, middle, start)
     }
 
-    def mergeSort(lo: Int, hi: Int): Unit =
-      if (hi - lo > 1) {
-        val mid = lo + (hi - lo) / 2
-        mergeSort(lo, mid)
-        mergeSort(mid, hi)
-        merge(lo, mid, hi)
+    def mergeSort(start: Int, end: Int): Unit =
+      if (end - start > 1) {
+        val middle = start + (end - start) / 2
+        mergeSort(start, middle)
+        mergeSort(middle, end)
+        merge(start, middle, end)
       }
 
-    mergeSort(0, n)
+    mergeSort(0, size)
   }
 }
 
@@ -630,11 +630,11 @@ def sorted[A](arr: Array[A]) { ord: (A, A) => Ordering }: Array[A] = {
 // TODO: These can eventually be replaced if we ever figure out monomorphization on extern types
 
 def showBuiltin[A](arr: Array[A]) { showA: A => String }: String = {
-  def go(lo: Int, hi: Int): String =
-    if (hi - lo == 1) showA(arr.get(lo))
+  def go(start: Int, end: Int): String =
+    if (end - start == 1) showA(arr.get(start))
     else {
-      val mid = lo + (hi - lo) / 2
-      go(lo, mid) ++ ", " ++ go(mid, hi)
+      val middle = start + (end - start) / 2
+      go(start, middle) ++ ", " ++ go(middle, end)
     }
 
   if (arr.size == 0) "Array()" else "Array(" ++ go(0, arr.size) ++ ")"
