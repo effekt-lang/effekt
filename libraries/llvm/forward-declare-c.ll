@@ -29,6 +29,7 @@ declare %Pos @c_bytearray_set(%Pos, %Int, %Byte)
 declare %Pos @c_bytearray_copy(%Pos, %Int, %Pos, %Int, %Int)
 declare ptr @c_bytearray_data(%Pos)
 declare %Pos @c_bytearray_construct(i64, ptr)
+declare %Pos @c_bytearray_unique(%Pos)
 
 declare %Pos @c_bytearray_from_nullterminated_string(ptr)
 declare ptr @c_bytearray_into_nullterminated_string(%Pos)

@@ -49,7 +49,7 @@ def empty[A](): Dictionary[A] = ref(Empty())
 
 /// Insert a value with a String key.
 def insert[A](dictionary: Dictionary[A], key: String, value: A): Unit =
-  insert(dictionary, key.fromString, value)
+  insert(dictionary, key.unsafeFromString, value)
 
 /// Insert a key-value pair into the dictionary with a ByteArray key.
 def insert[A](dictionary: Dictionary[A], key: ByteArray, value: A): Unit = {
@@ -158,7 +158,7 @@ def insert[A](dictionary: Dictionary[A], key: ByteArray, value: A): Unit = {
 
 /// Look up a value in the dictionary by string key.
 def lookup[A](dictionary: Dictionary[A], key: String): Option[A] =
-  lookup(dictionary, key.fromString)
+  lookup(dictionary, key.unsafeFromString)
 
 /// Look up a value in the dictionary by bytearray key.
 def lookup[A](dictionary: Dictionary[A], key: ByteArray): Option[A] = {

@@ -41,7 +41,7 @@ def writeFile(path: String, contents: String): Unit / Exception[IOError] = {
   with on[IOError].finalize { close(file) }
 
   val chunkSize = 1048576 // 1MB
-  val buffer = contents.fromString
+  val buffer = contents.unsafeFromString
   var offset = 0;
 
   def go(): Unit = {
@@ -59,7 +59,7 @@ def appendFile(path: String, contents: String): Unit / Exception[IOError] = {
   with on[IOError].finalize { close(file) }
 
   val chunkSize = 1048576 // 1MB
-  val buffer = contents.fromString
+  val buffer = contents.unsafeFromString
   var offset = 0;
 
   def go(): Unit = {

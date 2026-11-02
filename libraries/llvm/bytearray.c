@@ -73,6 +73,17 @@ struct Pos c_bytearray_construct(const uint64_t n, const uint8_t *data) {
     return arr;
 }
 
+// Strings are immutable but bytearrays are not, so when converting between them, we must not share.
+struct Pos c_bytearray_unique(const struct Pos arr) {
+    // if it's unique, we return it
+    if (arr.obj == NULL || ((struct Header*) arr.obj)->rc == 0) return arr;
+
+    // otherwise we make a copy
+    struct Pos copy = c_bytearray_construct(arr.tag, c_bytearray_data(arr));
+    erasePositive(arr);
+    return copy;
+}
+
 // Complex Operations
 
 struct Pos c_bytearray_from_nullterminated_string(const char *data) {
