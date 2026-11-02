@@ -575,40 +575,49 @@ def binarySearch[A](arr: Array[A], toFind: A) { ord: (A, A) => Ordering }: Optio
 }
 
 /// Sort an array in-place using provided comparison function.
-/// Note: `sort` is unstable since it uses QuickSort (unlike `list::sortBy`)
+/// Note: `sort` is stable since it uses MergeSort (like `list::sortBy`)
+/// and allocates a temporary array of half the size.
 ///
-/// O(N log N) average case
+/// O(N log N)
 def sort[A](arr: Array[A]) { ord: (A, A) => Ordering }: Unit = {
-  def partition(low: Int, high: Int): Int = {
-    val pivot = arr.get(high)
-    var i = low - 1
+  val size = arr.size
+  if (size > 1) {
+    val buffer = array(size / 2, arr.get(0))
 
-    each(low, high) { j =>
-      if (ord(arr.get(j), pivot) is Less()) {
-        i = i + 1
-        swap(arr, i, j)
+    def merge(start: Int, middle: Int, end: Int): Unit = {
+      val leftLength = middle - start
+      def loop(left: Int, right: Int, target: Int): Unit =
+        if (left < leftLength) {
+          if (right < end) {
+            val leftElement = buffer.get(left)
+            val rightElement = arr.get(right)
+            ord(rightElement, leftElement) match {
+              case Less() => arr.set(target, rightElement); loop(left, right + 1, target + 1)
+              case _ => arr.set(target, leftElement); loop(left + 1, right, target + 1)
+            }
+          } else copy(buffer, left, arr, target, leftLength - left)
+        }
+      copy(arr, start, buffer, 0, leftLength)
+      loop(0, middle, start)
+    }
+
+    def mergeSort(start: Int, end: Int): Unit =
+      if (end - start > 1) {
+        val middle = start + (end - start) / 2
+        mergeSort(start, middle)
+        mergeSort(middle, end)
+        merge(start, middle, end)
       }
-    }
-    swap(arr, i + 1, high)
-    i + 1
-  }
 
-  def quickSort(low: Int, high: Int): Unit = {
-    if (low < high) {
-      val par = partition(low, high)
-      quickSort(low, par - 1)
-      quickSort(par + 1, high)
-    }
+    mergeSort(0, size)
   }
-
-  quickSort(0, arr.size - 1)
 }
 
 /// Sort an array using provided comparison function.
 /// A newly allocated sorted array is returned as result, i.e., the sorting is not in-place.
-/// Note: `sorted` is unstable since it uses QuickSort (unlike `list::sortBy`)
+/// Note: `sorted` is stable since it uses MergeSort (like `list::sortBy`)
 ///
-/// O(N log N) average case
+/// O(N log N)
 def sorted[A](arr: Array[A]) { ord: (A, A) => Ordering }: Array[A] = {
   val res = arr.copy()
   res.sort { ord }
@@ -621,16 +630,14 @@ def sorted[A](arr: Array[A]) { ord: (A, A) => Ordering }: Array[A] = {
 // TODO: These can eventually be replaced if we ever figure out monomorphization on extern types
 
 def showBuiltin[A](arr: Array[A]) { showA: A => String }: String = {
-  var output = "Array("
-  val lastIndex = arr.size - 1
+  def go(start: Int, end: Int): String =
+    if (end - start == 1) showA(arr.get(start))
+    else {
+      val middle = start + (end - start) / 2
+      go(start, middle) ++ ", " ++ go(middle, end)
+    }
 
-  arr.foreachIndex { (index, a) =>
-    if (index == lastIndex) output = output ++ showA(a)
-    else output = output ++ showA(a) ++ ", "
-  }
-  output = output ++ ")"
-
-  output
+  if (arr.size == 0) "Array()" else "Array(" ++ go(0, arr.size) ++ ")"
 }
 
 def showBuiltin(l: Array[Int]): String = showBuiltin(l) { e => show(e) }

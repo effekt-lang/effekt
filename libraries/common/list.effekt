@@ -266,10 +266,9 @@ def collectWithIndex[A, B](l: List[A]) { f: (Int, A) => Option[B] }: List[B] = {
 def flatMap[A, B](l: List[A]) { f : A => List[B] }: List[B] = {
   var acc = Nil[B]()
   l.foreach { a =>
-    val bs = f(a)
-    acc = acc.append(bs)
+    acc = f(a).reverseOnto(acc)
   }
-  acc
+  acc.reverse
 }
 
 /// Check if predicate is true for all elements of the given list.
@@ -446,9 +445,9 @@ def infixPlusPlus[A](l: List[A], other: List[A]): List[A] =
 def join[A](lists: List[List[A]]): List[A] = {
   var acc: List[A] = Nil()
   lists.foreach { list =>
-    acc = acc.append(list)
+    acc = list.reverseOnto(acc)
   }
-  acc
+  acc.reverse
 }
 
 /// Flatten a list of lists into a single list,

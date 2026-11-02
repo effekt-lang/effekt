@@ -9,6 +9,7 @@ import partial
 import result
 import char
 import bytearray
+import stringbuffer
 
 // TODO
 // - [ ] handle unicode codepoints (that can span two indices) correctly
@@ -61,14 +62,16 @@ def endsWith(str: String, suffix: String): Bool =
   isSubstringAt(str, suffix, str.length - suffix.length)
 
 /// Repeats the given string n-times.
+/// Returns the empty string if `n` is not positive.
 ///
-/// TODO use a more efficient way of appending strings like a buffer
+/// O(N * M) where M is the length of the string
 def repeat(str: String, n: Int): String = {
-  def go(n: Int, result: String): String = {
+  def go(n: Int, chunk: String, result: String): String =
     if (n <= 0) result
-    else go(n - 1, result ++ str)
-  }
-  go(n, "")
+    else if (n == 1) result ++ chunk
+    else if (mod(n, 2) == 1) go(n / 2, chunk ++ chunk, result ++ chunk)
+    else go(n / 2, chunk ++ chunk, result)
+  go(n, str, "")
 }
 
 /// Left-pad the given string with spaces
@@ -103,14 +106,10 @@ def split(str: String, sep: String): List[String] = {
   else go(0, Nil())
 }
 
-def join(strings: List[String], sep: String): String = {
-  def go(strings: List[String], result: String): String = strings match {
-    case Nil() => result
-    case Cons(s, rest) => go(rest, result ++ sep ++ s)
-  }
-  strings match {
-    case Nil() => ""
-    case Cons(first, rest) => go(rest, first)
+def join(strings: List[String], sep: String): String = stringBuffer {
+  strings.foreachIndex { (i, s) =>
+    if (i > 0) do write(sep)
+    do write(s)
   }
 }
 
