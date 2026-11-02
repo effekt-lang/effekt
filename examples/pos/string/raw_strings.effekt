@@ -1,0 +1,16 @@
+def main() = {
+  val foo = #|Hello World!
+            #|Second line \n #1 // doo de
+            #| #| #|
+  println(foo)
+
+  val bar = s#|Even with ${"interpolation"}
+             #| still nice
+  println(bar)
+
+  val neststr2 = s"""${
+    #| foo
+    #| bar
+  }"""
+  println(neststr2)
+}

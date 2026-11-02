@@ -1,0 +1,6 @@
+def main() = {
+  val foo = #| Hallo ${
+            $| "Welt" } // ERROR
+            #| !
+  println(foo)
+}
