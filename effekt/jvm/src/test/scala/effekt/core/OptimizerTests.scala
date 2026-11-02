@@ -682,4 +682,128 @@ class OptimizerTests extends CoreTests {
 
     removeUnused(input, expected)
   }
+
+  def dropBindings(input: String, expected: String)(using munit.Location) =
+    assertTransformsTo(input, expected) { tree => DropBindings(Set(mainSymbol), tree) }
+
+  test("a value used once is dropped into its use") {
+    val input =
+      """ def main = { (x: Int) =>
+        |   let y = (add : (Int, Int) => Int @ {})(x: Int, 1)
+        |   return y:Int
+        | }
+        |""".stripMargin
+
+    val expected =
+      """ def main = { (x: Int) => return (add : (Int, Int) => Int @ {})(x: Int, 1) }
+        |""".stripMargin
+
+    dropBindings(input, expected)
+  }
+
+  test("a value used once inside a function is kept, since the function may run many times") {
+    val input =
+      """ def main = { (x: Int) =>
+        |   let n = (add : (Int, Int) => Int @ {})(x: Int, 1)
+        |   def go = { (i: Int) => return n:Int }
+        |   (go : (Int) => Int @ {})(0)
+        | }
+        |""".stripMargin
+
+    dropBindings(input, input)
+  }
+
+  test("a value used once inside a reset is dropped, since its body runs in place") {
+    val input =
+      """ def main = { (x: Int) =>
+        |   let n = (add : (Int, Int) => Int @ {})(x: Int, 1)
+        |   reset { (){p: Prompt[Int]} => return n:Int }
+        | }
+        |""".stripMargin
+
+    val expected =
+      """ def main = { (x: Int) =>
+        |   reset { (){p: Prompt[Int]} => return (add : (Int, Int) => Int @ {})(x: Int, 1) }
+        | }
+        |""".stripMargin
+
+    dropBindings(input, expected)
+  }
+
+  test("a value used once inside a region is dropped, since its body runs in place") {
+    val input =
+      """ def main = { (x: Int) =>
+        |   let n = (add : (Int, Int) => Int @ {})(x: Int, 1)
+        |   region { (){r: Region} => return n:Int }
+        | }
+        |""".stripMargin
+
+    val expected =
+      """ def main = { (x: Int) =>
+        |   region { (){r: Region} => return (add : (Int, Int) => Int @ {})(x: Int, 1) }
+        | }
+        |""".stripMargin
+
+    dropBindings(input, expected)
+  }
+
+  test("a value used once inside an applied literal is dropped, since it runs in place") {
+    val input =
+      """ def main = { (x: Int) =>
+        |   let n = (add : (Int, Int) => Int @ {})(x: Int, 1)
+        |   ({ (y: Int) => return n:Int })(1)
+        | }
+        |""".stripMargin
+
+    val expected =
+      """ def main = { (x: Int) =>
+        |   ({ (y: Int) => return (add : (Int, Int) => Int @ {})(x: Int, 1) })(1)
+        | }
+        |""".stripMargin
+
+    dropBindings(input, expected)
+  }
+
+  test("a value used once inside a block argument is kept") {
+    val input =
+      """ def main = { (x: Int) =>
+        |   let n = (add : (Int, Int) => Int @ {})(x: Int, 1)
+        |   (each : (){f: () => Int} => Int @ {})(){ () => return n:Int }
+        | }
+        |""".stripMargin
+
+    dropBindings(input, input)
+  }
+
+  test("a value used once inside an operation is kept") {
+    val input =
+      """ interface Foo { op: () => Int }
+        | def main = { (x: Int) =>
+        |   let n = (add : (Int, Int) => Int @ {})(x: Int, 1)
+        |   def f = new Foo { def op() = return n:Int }
+        |   (f : Foo @ {}).op : () => Int ()
+        | }
+        |""".stripMargin
+
+    dropBindings(input, input)
+  }
+
+  test("a value used once in a match clause is dropped, since the clause runs at most once") {
+    val input =
+      """ type Data { A() B() }
+        | def main = { (d: Data, x: Int) =>
+        |   let y = (add : (Int, Int) => Int @ {})(x: Int, 1)
+        |   d:Data match [Int] { A: { () => return y:Int } B: { () => return 2 } }
+        | }
+        |""".stripMargin
+
+    val expected =
+      """ type Data { A() B() }
+        | def main = { (d: Data, x: Int) =>
+        |   d:Data match [Int] { A: { () => return (add : (Int, Int) => Int @ {})(x: Int, 1) } B: { () => return 2 } }
+        | }
+        |""".stripMargin
+
+    dropBindings(input, expected)
+  }
 }

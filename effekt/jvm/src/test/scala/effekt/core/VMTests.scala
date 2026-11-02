@@ -1316,7 +1316,7 @@ class VMTests extends munit.FunSuite {
       branches = 1450252,
       pushedFrames = 676269,
       poppedFrames = 676269,
-      allocations = 690272,
+      allocations = 688326,
       closures = 4,
       variableReads = 896183,
       variableWrites = 226310,
