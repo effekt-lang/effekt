@@ -404,7 +404,7 @@ object Transformer {
         val header = ConstantStruct(headerType, List(ConstantInt(0), ConstantGlobal("c_bytearray_erase_noop")))
         val bytes = ConstantArray(IntegerType8(), utf8.map { b => ConstantInteger8(b) }.toList)
         val literalType = StructureType(List(headerType, ArrayType(utf8.size, IntegerType8())))
-        emit(GlobalVariable(s"$bind.lit", ConstantStruct(literalType, List(header, bytes)), 8)) // needs alignment because it's packed
+        emit(GlobalVariable(s"${bind}.lit", ConstantStruct(literalType, List(header, bytes)), 8)) // needs alignment because it's packed
 
         val temporaryName = freshName(bind + "_tmp")
         emit(InsertValue(temporaryName, ConstantAggregateZero(positiveType), ConstantInt(utf8.size), 0))
