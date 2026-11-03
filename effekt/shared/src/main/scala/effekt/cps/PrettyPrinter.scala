@@ -68,16 +68,9 @@ object PrettyPrinter extends ParenPrettyPrinter {
         toDoc(rest)
 
     case Stmt.Call(callee, args, ReturnPoint.Bind(ids, returnedKs, ks, rest)) =>
-      val returnDoc: Doc = "return"
-      val binding = ids match {
-        case List(one) => toDoc(one)
-        case _ => parens(ids.map(toDoc))
-      }
-      val result =
-        if rest.free.contains(returnedKs) then binding <+> "|" <+> toDoc(returnedKs)
-        else binding
-      "let" <+> result <+> "=" <+> toDoc(callee) <> "!" <>
-        parens(args.map(toDoc) ++ List(toDoc(ks), returnDoc)) <> ";" <> line <> toDoc(rest)
+      toDoc(callee) <> parens(args.map(toDoc)) <+> "@" <+> toDoc(ks) <+>
+        braces(space <> parens((ids :+ returnedKs).map(toDoc)) <+> "=>" <>
+          nest(line <> toDoc(rest)) <> line)
 
     case Stmt.Call(callee, args, ReturnPoint.Direct(ids, rest)) =>
       val binding = ids match {
@@ -88,7 +81,7 @@ object PrettyPrinter extends ParenPrettyPrinter {
         parens(args.map(toDoc)) <> ";" <> line <> toDoc(rest)
 
     case Stmt.Call(callee, args, ReturnPoint.Tail(ks, k)) =>
-      toDoc(callee) <> "!" <> parens(args.map(toDoc)) <+>
+      toDoc(callee) <> parens(args.map(toDoc)) <+>
         "@" <+> toDoc(ks) <> "," <+> toDoc(k)
 
     case Stmt.Call(callee, args, ReturnPoint.Jump) =>

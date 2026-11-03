@@ -57,8 +57,9 @@ class TransformerTests extends CoreTests {
         |  k(x, ks)
         |}
         |def f(x, ks, k) {
-        |  let result = g!(x, ks, return);
-        |  k(result, ks)
+        |  g(x) @ ks { (result, ks_1) =>
+        |    k(result, ks)
+        |  }
         |}
         |""".stripMargin)
   }
@@ -72,7 +73,7 @@ class TransformerTests extends CoreTests {
         |  k(x, ks)
         |}
         |def f(x, ks, k) {
-        |  g!(x) @ ks, k
+        |  g(x) @ ks, k
         |}
         |""".stripMargin)
   }
@@ -89,10 +90,10 @@ class TransformerTests extends CoreTests {
         |  def k_1(y, ks_1) {
         |    k(y, ks_1)
         |  }
-        |  h!(1) @ ks, k_1
+        |  h(1) @ ks, k_1
         |}
         |def g(h, ks, k) {
-        |  h!(2) @ ks, k
+        |  h(2) @ ks, k
         |}
         |""".stripMargin)
   }
@@ -106,8 +107,9 @@ class TransformerTests extends CoreTests {
         |}
         |""".stripMargin,
       """def f(reader, ks, k) {
-        |  let result | ks_1 = reader.read!(ks, return);
-        |  k(result, ks_1)
+        |  reader.read() @ ks { (result, ks_1) =>
+        |    k(result, ks_1)
+        |  }
         |}
         |""".stripMargin)
   }

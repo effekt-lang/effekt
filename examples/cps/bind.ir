@@ -4,8 +4,9 @@ def inc(x, ks, k) {
   k(y, ks)
 }
 def main(ks, k) {
-  let r = inc!(1, ks, return);
-  k(r, ks)
+  inc(1) @ ks { (r, ks1) =>
+    k(r, ks)
+  }
 }
 
 /// JAVASCRIPT
@@ -27,4 +28,4 @@ function main_0(ks_1, k_1) {
 
 
 (define (main_1 ks_6 k_7)
-  (inc_0 1  ks_6  (lambda (r_8 ks_9) (k_7 r_8  ks_6))))
+  (inc_0 1  ks_6  (lambda (r_8 ks1_9) (k_7 r_8  ks_6))))

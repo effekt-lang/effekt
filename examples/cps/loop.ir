@@ -3,7 +3,7 @@ def countdown(n, ks, k) {
   run done = eq(n, 0);
   if (done) { k(n, ks) } else {
     run m = sub(n, 1);
-    countdown!(m) @ ks, k
+    countdown(m) @ ks, k
   }
 }
 def main(ks, k) {
@@ -11,10 +11,10 @@ def main(ks, k) {
     run done = eq(i, 0);
     if (done) { k1(i, ks1) } else {
       run j = sub(i, 1);
-      loop!(j) @ ks1, k1
+      loop(j) @ ks1, k1
     }
   }
-  loop!(10) @ ks, k
+  loop(10) @ ks, k
 }
 
 /// JAVASCRIPT

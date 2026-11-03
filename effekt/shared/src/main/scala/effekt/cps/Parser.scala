@@ -32,7 +32,6 @@ class Parser(names: Names) extends Parsers {
   lazy val `,` = literal(",")
   lazy val `.` = literal(".")
   lazy val `=>` = literal("=>")
-  lazy val `!` = literal("!")
   lazy val `|` = literal("|")
   lazy val `;` = literal(";")
   lazy val `:` = literal(":")
@@ -193,7 +192,6 @@ class Parser(names: Names) extends Parsers {
     | newStmt
     | getStmt
     | putStmt
-    | callStmt
     | directCallStmt
     | letStmt
     | runStmt
@@ -208,6 +206,7 @@ class Parser(names: Names) extends Parsers {
     | resumeStmt
     | returnStmt
     | holeStmt
+    | bindCall
     | tailCall
     | invokeOrApp
     | braces(stmt)
@@ -247,13 +246,6 @@ class Parser(names: Names) extends Parsers {
       case ref ~ value ~ rest => Stmt.Put(ref, value, rest)
     }
 
-  // let id = expr;
-  private lazy val callArguments: P[(List[Expr], Expr)] =
-    parens(rep1sep(expr, `,`) <~ `,` <~ `return`) ^^ { values =>
-        val expressions = values.toList
-        expressions.init -> expressions.last
-      }
-
   private lazy val callCallee: P[Callee] =
     id ~ (`.` ~> id).? ^^ {
       case receiver ~ Some(method) => Callee.Method(receiver, method)
@@ -266,13 +258,6 @@ class Parser(names: Names) extends Parsers {
     | id ^^ { List(_) }
     )
 
-  lazy val callStmt: P[Stmt] =
-    `let` ~> resultBinding ~ (`|` ~> id).? ~ (`=` ~> callCallee <~ `!`) ~ callArguments ~ (`;` ~> stmt) ^^ {
-      case names ~ returnedKs ~ callee ~ (args, ks) ~ rest =>
-        Stmt.Call(callee, args,
-          ReturnPoint.Bind(names, returnedKs.getOrElse(Id("ks")), ks, rest))
-    }
-
   // let results = callee(args);
   lazy val directCallStmt: P[Stmt] =
     `let` ~> resultBinding ~ (`=` ~> callCallee) ~ parens(commaList(expr)) ~ (`;` ~> stmt) ^^ {
@@ -280,9 +265,17 @@ class Parser(names: Names) extends Parsers {
         Stmt.Call(callee, args, ReturnPoint.Direct(names, rest))
     }
 
-  // callee!(args) @ ks, k
+  // callee(args) @ ks { (results, returnedKs) => rest }
+  lazy val bindCall: P[Stmt] =
+    callCallee ~ parens(commaList(expr)) ~ (`@` ~> expr) ~
+      (`{` ~> parens(rep1sep(id, `,`)) ~ (`=>` ~> stmt) <~ `}`) ^^ {
+      case callee ~ args ~ ks ~ (params ~ rest) =>
+        Stmt.Call(callee, args, ReturnPoint.Bind(params.toList.init, params.toList.last, ks, rest))
+    }
+
+  // callee(args) @ ks, k
   lazy val tailCall: P[Stmt] =
-    (callCallee <~ `!`) ~ parens(commaList(expr)) ~
+    callCallee ~ parens(commaList(expr)) ~
       (`@` ~> expr <~ `,`) ~ expr ^^ {
       case callee ~ args ~ ks ~ k =>
         Stmt.Call(callee, args, ReturnPoint.Tail(ks, k))

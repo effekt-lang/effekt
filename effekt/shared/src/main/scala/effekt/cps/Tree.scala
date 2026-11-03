@@ -91,13 +91,13 @@ enum Callee {
 export Callee.*
 
 enum ReturnPoint extends Tree {
-  /** A CPS call supplies both control arguments explicitly. */
+  // f(42) @ ks, k
   case Tail(ks: MetaCont, k: Cont)
-  /** A CPS call reifies its lexical remainder as the continuation argument. */
+  // f(42) @ ks { (x, ks2) => ... }
   case Bind(results: List[Id], returnedKs: Id, ks: MetaCont, rest: Stmt)
-  /** A direct call returns ordinary values to its lexical remainder. */
+  // let x = f(42); rest
   case Direct(results: List[Id], rest: Stmt)
-  /** A tail transfer where all arguments (including control arguments, if any) are explicit. */
+  // jump f(42)
   case Jump
 }
 
@@ -502,14 +502,14 @@ object freeVariables {
  *        k(0, ks)
  *      } else {
  *        run tmp = sub(x, 1);
- *        outer!(tmp) @ ks, k
+ *        outer(tmp) @ ks, k
  *      }
  *     }
  *     def main(ks, k) {
  *       def k1(res, ks) {
- *         outer!(res) @ ks, k
+ *         outer(res) @ ks, k
  *       }
- *       outer!(10) @ ks, k1
+ *       outer(10) @ ks, k1
  *     }
  *
  * results in
