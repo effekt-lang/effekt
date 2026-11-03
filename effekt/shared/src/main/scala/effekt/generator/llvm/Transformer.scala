@@ -400,12 +400,16 @@ object Transformer {
 
       case machine.LiteralUTF8String(v@machine.Variable(bind, _), utf8, rest) =>
         emit(Comment(s"literalUTF8String $bind, ${utf8.length} bytes"))
-        emit(GlobalConstant(s"$bind.lit", ConstantArray(IntegerType8(), utf8.map { b => ConstantInteger8(b) }.toList)))
+        // Singleton object for the whole string literal, every instantiation shares it (never freed, never reused in place).
+        val header = ConstantStruct(headerType, List(ConstantInt(0), ConstantGlobal("c_bytearray_erase_noop")))
+        val bytes = ConstantArray(IntegerType8(), utf8.map { b => ConstantInteger8(b) }.toList)
+        val literalType = StructureType(List(headerType, ArrayType(utf8.size, IntegerType8())))
+        emit(GlobalVariable(s"$bind.lit", ConstantStruct(literalType, List(header, bytes)), 8)) // needs alignment because it's packed
 
-        val res = positiveType
-        val args = List(ConstantInt(utf8.size), ConstantGlobal(s"$bind.lit"))
-        val argsT = List(IntegerType64(), PointerType())
-        emit(Call(bind, Ccc(), res, ConstantGlobal("c_bytearray_construct"), args))
+        val temporaryName = freshName(bind + "_tmp")
+        emit(InsertValue(temporaryName, ConstantAggregateZero(positiveType), ConstantInt(utf8.size), 0))
+        emit(InsertValue(bind, LocalReference(positiveType, temporaryName), ConstantGlobal(s"$bind.lit"), 1))
+        shareValue(v)
 
         eraseValues(List(v), freeVariables(rest));
         transform(rest)
@@ -508,6 +512,7 @@ object Transformer {
   val frameHeaderType = NamedType("FrameHeader");
   val environmentType = NamedType("Environment");
   val objectType = NamedType("Object");
+  val headerType = NamedType("Header");
   val CObjectType = NamedType("CObject");
   val stackPointerType = NamedType("StackPointer");
   val stackType = NamedType("Stack");
