@@ -75,12 +75,12 @@ def solveHard(position: Position, grid: Array[Array[Field]]): Int = {
   beams.sum
 }
 
-def generate(): String = stringBuffer {
+def generate(n: Int): String = stringBuffer {
   with minstd(42)
-  val width = 141
+  val width = n
   each(0, width) { i => if (i == width / 2) { do write("S") } else { do write(".") } }
   do write("\n")
-  each(1, 141) { row =>
+  each(1, n) { row =>
     each(0, width) { i =>
       if (row.mod(2) == 0 && i > 0 && i < width - 1 && randomInt(0, 2) == 0) {
         do write("^")
@@ -93,19 +93,14 @@ def generate(): String = stringBuffer {
 }
 
 def run(n: Int): Int = {
-  val input = generate()
-  var result = 0
-  repeat(n) {
-    val manifold = {
-      with feed(input)
-      with returning::peeking[Char, (Position, Array[Array[Field]])]
-      with crash("malformed input")
-      parseManifold()
-    }
-    val (position, grid) = manifold
-    result = result + solveEasy(position, grid) + solveHard(position, grid)
+  val manifold = {
+    with feed(generate(n))
+    with returning::peeking[Char, (Position, Array[Array[Field]])]
+    with crash("malformed input")
+    parseManifold()
   }
-  result
+  val (position, grid) = manifold
+  solveEasy(position, grid) + solveHard(position, grid)
 }
 
-def main() = benchmark(1) { run }
+def main() = benchmark(5) { run }

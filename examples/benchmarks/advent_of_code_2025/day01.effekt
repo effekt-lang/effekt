@@ -50,9 +50,9 @@ def solveHard(rotations: Array[Rotation]): Int = countZeros {
   }
 }
 
-def generate(): String = stringBuffer {
+def generate(n: Int): String = stringBuffer {
   with minstd(42)
-  repeat(4000) {
+  repeat(n) {
     if (randomBool()) { do write("L") } else { do write("R") }
     do write(show(randomInt(1, 999)))
     do write("\n")
@@ -60,18 +60,13 @@ def generate(): String = stringBuffer {
 }
 
 def run(n: Int): Int = {
-  val input = generate()
-  var result = 0
-  repeat(n) {
-    val rotations = {
-      with feed(input)
-      with returning::peeking[Char, Array[Rotation]]
-      with crash("malformed input")
-      parseRotations()
-    }
-    result = result + solveEasy(rotations) + solveHard(rotations)
+  val rotations = {
+    with feed(generate(n))
+    with returning::peeking[Char, Array[Rotation]]
+    with crash("malformed input")
+    parseRotations()
   }
-  result
+  solveEasy(rotations) + solveHard(rotations)
 }
 
-def main() = benchmark(1) { run }
+def main() = benchmark(5) { run }

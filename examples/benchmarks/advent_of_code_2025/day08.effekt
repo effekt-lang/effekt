@@ -131,9 +131,9 @@ def solveHard(points: Array[Point]): Int = {
   result
 }
 
-def generate(): String = stringBuffer {
+def generate(n: Int): String = stringBuffer {
   with minstd(42)
-  repeat(200) {
+  repeat(n) {
     do write(show(randomInt(0, 99999)))
     do write(",")
     do write(show(randomInt(0, 99999)))
@@ -144,21 +144,16 @@ def generate(): String = stringBuffer {
 }
 
 def run(n: Int): Int = {
-  val input = generate()
-  var result = 0
-  repeat(n) {
-    val points = {
-      with feed(input)
-      with returning::peeking[Char, Array[Point]]
-      with crash("malformed input")
-      parsePoints()
-    }
-    result = result + solveEasy(points) + solveHard(points)
+  val points = {
+    with feed(generate(n))
+    with returning::peeking[Char, Array[Point]]
+    with crash("malformed input")
+    parsePoints()
   }
-  result
+  solveEasy(points) + solveHard(points)
 }
 
-def main() = benchmark(1) { run }
+def main() = benchmark(5) { run }
 
 def meld[A](left: Heap[A], right: Heap[A]): Heap[A] =
   (left, right) match {

@@ -72,10 +72,10 @@ def solveHard(rolls: Set[Point]): Int = {
   rolls.size - grid.size
 }
 
-def generate(): String = stringBuffer {
+def generate(n: Int): String = stringBuffer {
   with minstd(42)
-  repeat(25) {
-    repeat(25) {
+  repeat(n) {
+    repeat(n) {
       if (randomInt(0, 3) == 0) { do write(".") } else { do write("@") }
     }
     do write("\n")
@@ -83,18 +83,13 @@ def generate(): String = stringBuffer {
 }
 
 def run(n: Int): Int = {
-  val input = generate()
-  var result = 0
-  repeat(n) {
-    val rolls = {
-      with feed(input)
-      with returning::peeking[Char, Set[Point]]
-      with crash("malformed input")
-      parseRolls()
-    }
-    result = result + solveEasy(rolls) + solveHard(rolls)
+  val rolls = {
+    with feed(generate(n))
+    with returning::peeking[Char, Set[Point]]
+    with crash("malformed input")
+    parseRolls()
   }
-  result
+  solveEasy(rolls) + solveHard(rolls)
 }
 
-def main() = benchmark(1) { run }
+def main() = benchmark(5) { run }

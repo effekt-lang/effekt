@@ -115,7 +115,7 @@ def solveHard(grid: Array[Array[Char]]): Int =
 
 record Problem(width: Int, left: Bool, numbers: Array[Int], operator: String)
 
-def generate(): String = stringBuffer {
+def generate(n: Int): String = stringBuffer {
   with minstd(42)
   def number(length: Int): Int = {
     var result = 0
@@ -123,7 +123,7 @@ def generate(): String = stringBuffer {
     result
   }
   val problems = array::collect[Problem] {
-    repeat(1000) {
+    repeat(n) {
       val width = randomInt(1, 3)
       val lengths = [randomInt(1, width), randomInt(1, width), randomInt(1, width), width].sort
       val numbers = array::fromList(lengths.map { length => number(length) })
@@ -151,24 +151,20 @@ def generate(): String = stringBuffer {
 }
 
 def run(n: Int): Int = {
-  val input = generate()
-  var result = 0
-  repeat(n) {
-    val worksheet = {
-      with feed(input)
-      with returning::peeking[Char, (Array[Array[Int]], Array[Char])]
-      with crash("malformed input")
-      parseWorksheet()
-    }
-    val (matrix, operators) = worksheet
-    val grid = {
-      with feed(input)
-      with returning::peeking[Char, Array[Array[Char]]]
-      parseGrid()
-    }
-    result = result + solveEasy(matrix, operators) + solveHard(grid)
+  val input = generate(n)
+  val worksheet = {
+    with feed(input)
+    with returning::peeking[Char, (Array[Array[Int]], Array[Char])]
+    with crash("malformed input")
+    parseWorksheet()
   }
-  result
+  val (matrix, operators) = worksheet
+  val grid = {
+    with feed(input)
+    with returning::peeking[Char, Array[Array[Char]]]
+    parseGrid()
+  }
+  solveEasy(matrix, operators) + solveHard(grid)
 }
 
-def main() = benchmark(1) { run }
+def main() = benchmark(5) { run }

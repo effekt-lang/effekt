@@ -83,9 +83,9 @@ def solveHard(ranges: List[Range]): Int =
     }
   }
 
-def generate(): String = stringBuffer {
+def generate(n: Int): String = stringBuffer {
   with minstd(42)
-  repeat(180) {
+  repeat(n) {
     val from = randomInt(0, 499999999999)
     do write(show(from))
     do write("-")
@@ -93,26 +93,21 @@ def generate(): String = stringBuffer {
     do write("\n")
   }
   do write("\n")
-  repeat(1000) {
+  repeat(5 * n) {
     do write(show(randomInt(0, 499999999999)))
     do write("\n")
   }
 }
 
 def run(n: Int): Int = {
-  val input = generate()
-  var result = 0
-  repeat(n) {
-    val database = {
-      with feed(input)
-      with returning::peeking[Char, (List[Range], List[ID])]
-      with crash("malformed input")
-      parseDatabase()
-    }
-    val (ranges, ids) = database
-    result = result + solveEasy(ranges, ids) + solveHard(ranges)
+  val database = {
+    with feed(generate(n))
+    with returning::peeking[Char, (List[Range], List[ID])]
+    with crash("malformed input")
+    parseDatabase()
   }
-  result
+  val (ranges, ids) = database
+  solveEasy(ranges, ids) + solveHard(ranges)
 }
 
-def main() = benchmark(1) { run }
+def main() = benchmark(5) { run }

@@ -135,9 +135,9 @@ def solveHard(machines: Array[Machine]): Int =
     }
   }
 
-def generate(machines: Int): String = stringBuffer {
+def generate(n: Int): String = stringBuffer {
   with minstd(42)
-  repeat(machines) {
+  repeat(n) {
     val size = randomInt(4, 6)
     val buttons = list::collect[Array[Bool]] {
       repeat(randomInt(4, 6)) {
@@ -192,7 +192,7 @@ def run(n: Int): Int = {
   solveEasy(machines) + solveHard(machines)
 }
 
-def main() = benchmark(1) { run }
+def main() = benchmark(5) { run }
 
 def meld[A](left: Heap[A], right: Heap[A]): Heap[A] =
   (left, right) match {

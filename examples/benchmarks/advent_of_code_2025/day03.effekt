@@ -55,9 +55,9 @@ def solveEasy(banks: Array[List[Int]]): Int = totalJoltage(2, banks)
 
 def solveHard(banks: Array[List[Int]]): Int = totalJoltage(12, banks)
 
-def generate(): String = stringBuffer {
+def generate(n: Int): String = stringBuffer {
   with minstd(42)
-  repeat(100) {
+  repeat(n) {
     repeat(100) {
       val digit = if (randomInt(0, 9) == 0) { randomInt(1, 9) } else { randomInt(1, 5) }
       do write(show(digit))
@@ -67,18 +67,13 @@ def generate(): String = stringBuffer {
 }
 
 def run(n: Int): Int = {
-  val input = generate()
-  var result = 0
-  repeat(n) {
-    val banks = {
-      with feed(input)
-      with returning::peeking[Char, Array[List[Int]]]
-      with crash("malformed input")
-      parseBanks()
-    }
-    result = result + solveEasy(banks) + solveHard(banks)
+  val banks = {
+    with feed(generate(n))
+    with returning::peeking[Char, Array[List[Int]]]
+    with crash("malformed input")
+    parseBanks()
   }
-  result
+  solveEasy(banks) + solveHard(banks)
 }
 
-def main() = benchmark(1) { run }
+def main() = benchmark(5) { run }

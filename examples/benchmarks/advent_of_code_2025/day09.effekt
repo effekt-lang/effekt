@@ -126,7 +126,7 @@ def solveHard(points: Array[Point]): Int = {
   result.getOrElse { 0 }
 }
 
-def generate(): String = stringBuffer {
+def generate(n: Int): String = stringBuffer {
   with minstd(42)
   def point(c1: Int, c2: Int): Unit / write = {
     do write(show(c1))
@@ -138,7 +138,7 @@ def generate(): String = stringBuffer {
   point(start, 1)
   var c1 = start
   var height = 0
-  repeat(40) {
+  repeat(n) {
     var next = randomInt(2, 100001)
     if (next == height) { next = next + 1 }
     height = next
@@ -150,18 +150,13 @@ def generate(): String = stringBuffer {
 }
 
 def run(n: Int): Int = {
-  val input = generate()
-  var result = 0
-  repeat(n) {
-    val points = {
-      with feed(input)
-      with returning::peeking[Char, Array[Point]]
-      with crash("malformed input")
-      parsePoints()
-    }
-    result = result + solveEasy(points) + solveHard(points)
+  val points = {
+    with feed(generate(n))
+    with returning::peeking[Char, Array[Point]]
+    with crash("malformed input")
+    parsePoints()
   }
-  result
+  solveEasy(points) + solveHard(points)
 }
 
-def main() = benchmark(1) { run }
+def main() = benchmark(5) { run }

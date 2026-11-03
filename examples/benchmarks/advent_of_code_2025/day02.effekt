@@ -42,7 +42,7 @@ def sumInvalid(ranges: Array[Range]) { isInvalid: Int => Bool }: Int = sum {
 
 def solveEasy(ranges: Array[Range]): Int = {
   val repeatedTwice = set::collect(box compareInt) {
-    with takeWhile { n => n < 10000000000 }
+    with takeWhile { n => n < 10000000 }
 
     for { rangeFrom(1) } { n =>
       do emit(repeated(2, n))
@@ -55,7 +55,7 @@ def solveEasy(ranges: Array[Range]): Int = {
 def solveHard(ranges: Array[Range]): Int = {
   val repeatedManyTimes = set::collect(box compareInt) {
     for { range(2, 12) } { k =>
-      with takeWhile { n => n < 10000000000 }
+      with takeWhile { n => n < 10000000 }
       for { rangeFrom(1) } { n =>
         do emit(repeated(k, n))
       }
@@ -65,11 +65,11 @@ def solveHard(ranges: Array[Range]): Int = {
   sumInvalid(ranges) { n => repeatedManyTimes.contains(n) }
 }
 
-def generate(): String = stringBuffer {
+def generate(n: Int): String = stringBuffer {
   with minstd(42)
-  each(0, 20) { i =>
+  each(0, n) { i =>
     if (i > 0) { do write(",") }
-    val digits = randomInt(2, 10)
+    val digits = randomInt(2, 6)
     var from = 1
     (digits - 1).repeat { from = from * 10 }
     val start = from + randomInt(0, from * 9 - 1)
@@ -80,18 +80,13 @@ def generate(): String = stringBuffer {
 }
 
 def run(n: Int): Int = {
-  val input = generate()
-  var result = 0
-  repeat(n) {
-    val ranges = {
-      with feed(input)
-      with returning::peeking[Char, Array[Range]]
-      with crash("malformed input")
-      parseRanges()
-    }
-    result = result + solveEasy(ranges) + solveHard(ranges)
+  val ranges = {
+    with feed(generate(n))
+    with returning::peeking[Char, Array[Range]]
+    with crash("malformed input")
+    parseRanges()
   }
-  result
+  solveEasy(ranges) + solveHard(ranges)
 }
 
-def main() = benchmark(1) { run }
+def main() = benchmark(5) { run }

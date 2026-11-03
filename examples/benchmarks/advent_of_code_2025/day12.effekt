@@ -68,7 +68,7 @@ def solveEasy(regions: List[Region]): Int =
     }
   }
 
-def generate(): String = stringBuffer {
+def generate(n: Int): String = stringBuffer {
   with minstd(42)
   each(0, 6) { shape =>
     do write(show(shape))
@@ -81,7 +81,7 @@ def generate(): String = stringBuffer {
     }
     do write("\n")
   }
-  repeat(1000) {
+  repeat(n) {
     val size0 = randomInt(4, 50)
     val size1 = randomInt(4, 50)
     val target = (size0 / 3) * (size1 / 3)
@@ -98,19 +98,14 @@ def generate(): String = stringBuffer {
 }
 
 def run(n: Int): Int = {
-  val input = generate()
-  var result = 0
-  repeat(n) {
-    val problem = {
-      with feed(input)
-      with returning::peeking[Char, (Array[Array2[Bool]], List[Region])]
-      with crash("malformed input")
-      parseProblem()
-    }
-    val (_, regions) = problem
-    result = result + solveEasy(regions)
+  val problem = {
+    with feed(generate(n))
+    with returning::peeking[Char, (Array[Array2[Bool]], List[Region])]
+    with crash("malformed input")
+    parseProblem()
   }
-  result
+  val (_, regions) = problem
+  solveEasy(regions)
 }
 
-def main() = benchmark(1) { run }
+def main() = benchmark(5) { run }

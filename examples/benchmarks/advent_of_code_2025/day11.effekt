@@ -59,9 +59,9 @@ def solveHard(graph: Dictionary[Array[String]]): Int = {
   (svrDac * dacFft * fftOut) + (svrFft * fftDac * dacOut)
 }
 
-def generate(): String = stringBuffer {
+def generate(n: Int): String = stringBuffer {
   with minstd(42)
-  val size = 500
+  val size = n + 10
   val special = ["svr", "you", "dac", "fft", "out"]
   var counter = 0
   def fresh(): String = {
@@ -97,18 +97,13 @@ def generate(): String = stringBuffer {
 }
 
 def run(n: Int): Int = {
-  val input = generate()
-  var result = 0
-  repeat(n) {
-    val graph = {
-      with feed(input)
-      with returning::peeking[Char, Dictionary[Array[String]]]
-      with crash("malformed input")
-      parseGraph()
-    }
-    result = result + solveEasy(graph) + solveHard(graph)
+  val graph = {
+    with feed(generate(n))
+    with returning::peeking[Char, Dictionary[Array[String]]]
+    with crash("malformed input")
+    parseGraph()
   }
-  result
+  solveEasy(graph) + solveHard(graph)
 }
 
-def main() = benchmark(1) { run }
+def main() = benchmark(5) { run }
