@@ -1,0 +1,42 @@
+// Fields of other data types are flattened too.
+
+type Pt {
+  MkPt(x: Int, y: Int)
+}
+type OptPt {
+  NoPt()
+  SomePt(p: Pt)
+}
+
+def second(o: OptPt) = {
+  o: OptPt match [Int] {
+    NoPt: { () => return 0 }
+    SomePt: { (p: Pt) =>
+      p: Pt match [Int] {
+        MkPt: { (x: Int, y: Int) => return y: Int }
+      }
+    }
+  }
+}
+
+// Fields of all data types are translated, not only those of flat records.
+/// ARITY_RAISE
+
+type Pt {
+  MkPt(x: Int, y: Int)
+}
+type OptPt {
+  NoPt()
+  SomePt(p_0: Int, p_1: Int)
+}
+
+def second(o: OptPt) = {
+  o: OptPt match [Int] {
+    NoPt: { () => return 0 }
+    SomePt: { (p_0: Int, p_1: Int) =>
+      let x = p_0: Int
+      let y = p_1: Int
+      return y: Int
+    }
+  }
+}

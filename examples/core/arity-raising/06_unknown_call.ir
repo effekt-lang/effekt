@@ -1,0 +1,39 @@
+// Function types are translated, so calls through block parameters need no conversion.
+
+type Pt {
+  MkPt(x: Int, y: Int)
+}
+
+def apply(p: Pt){f: (Pt) => Int} = {
+  (f: (Pt) => Int @ {f})(p: Pt)
+}
+
+def main() = {
+  let p = make Pt MkPt(1, 2)
+  (apply: (Pt){f: (Pt) => Int} => Int @ {})(p: Pt){ (q: Pt) =>
+    q: Pt match [Int] {
+      MkPt: { (x: Int, y: Int) => return x: Int }
+    }
+  }
+}
+
+// Function types are translated as well, so unknown calls need no coercion.
+/// ARITY_RAISE
+
+type Pt {
+  MkPt(x: Int, y: Int)
+}
+
+def apply(p_0: Int, p_1: Int){f: (Int, Int) => Int} = {
+  (f: (Int, Int) => Int @ {f})(p_0: Int, p_1: Int)
+}
+
+def main() = {
+  let p_0 = 1
+  let p_1 = 2
+  (apply: (Int, Int){f: (Int, Int) => Int} => Int @ {})(p_0: Int, p_1: Int){ (q_0: Int, q_1: Int) =>
+    let x = q_0: Int
+    let y = q_1: Int
+    return x: Int
+  }
+}

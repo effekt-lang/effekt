@@ -1,0 +1,44 @@
+// Records are rebuilt for extern arguments and matched apart from extern results.
+
+type Pt {
+  MkPt(x: Int, y: Int)
+}
+
+extern {} def show(p: Pt): String = js ""
+extern {io} def origin(): Pt = js ""
+
+def main() = {
+  let ! o = (origin: () => Pt @ {io})()
+  o: Pt match [String] {
+    MkPt: { (x: Int, y: Int) =>
+      let q = make Pt MkPt(y: Int, x: Int)
+      let s = (show: (Pt) => String @ {})(q: Pt)
+      return s: String
+    }
+  }
+}
+
+// Externs see the original representation: arguments are packed, results opened.
+/// ARITY_RAISE
+
+type Pt {
+  MkPt(x: Int, y: Int)
+}
+
+extern {} def show(p: Pt): String = js ""
+extern {io} def origin(): Pt = js ""
+
+def main() = {
+  let ! tmp = (origin: () => Pt @ {io})()
+  val r_0, r_1 = tmp: Pt match [Int, Int] {
+    MkPt: { (x_0: Int, y_0: Int) => return x_0: Int, y_0: Int }
+  };
+  let o_0 = r_0: Int
+  let o_1 = r_1: Int
+  let x = o_0: Int
+  let y = o_1: Int
+  let q_0 = y: Int
+  let q_1 = x: Int
+  let s = (show: (Pt) => String @ {})(make Pt MkPt(q_0: Int, q_1: Int))
+  return s: String
+}

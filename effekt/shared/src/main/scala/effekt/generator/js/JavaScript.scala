@@ -45,7 +45,7 @@ class JavaScript(additionalFeatureFlags: List[String] = Nil) extends Compiler[St
   }
 
   lazy val Optimized = allToCore(Core) `andThen` Aggregate `andThen` Deadcode `andThen`
-    core.Show `andThen` core.Mono `andThen` core.LambdaSets `andThen`
+    core.Show `andThen` core.Mono `andThen` core.LambdaSets `andThen` core.ArityRaising `andThen`
     Optimizer `andThen` DropBindings map {
     case input @ CoreTransformed(source, tree, mod, core) =>
       val mainSymbol = Context.ensureMainExists(mod)
