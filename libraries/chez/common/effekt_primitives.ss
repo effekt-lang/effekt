@@ -133,6 +133,15 @@
 (define (int-quotient x y)
   (if (fx= y 0) (quotient x y) (fxquotient x y)))
 
+(define (int-remainder x y)
+  (if (fx= y 0) (remainder x y) (fxremainder x y)))
+
+(define (int-div x y)
+  (if (fx= y 0) (div x y) (fxdiv x y)))
+
+(define (int-mod x y)
+  (if (fx= y 0) (mod x y) (fxmod x y)))
+
 (define (relative-timestamp)
   (let ([t (current-time 'time-monotonic)])
     (+ (* (time-second t) 1000000000) (time-nanosecond t))))
