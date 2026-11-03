@@ -217,6 +217,26 @@ define void @eraseNegative(%Neg %val) alwaysinline {
     ret void
 }
 
+; Make sure the given bytearray is unique (if rc=0 then keep it, otherwise copy it because it's shared).
+; Note that we do the check here as opposed to in C since LTO does not inline C functions on `%Pos` on MacOS.
+define %Pos @uniqueByteArray(%Pos %array) alwaysinline {
+    %object = extractvalue %Pos %array, 1
+    %isNull = icmp eq %Object %object, null
+    br i1 %isNull, label %done, label %next
+
+    next:
+    %objectReferenceCount = getelementptr %Header, ptr %object, i64 0, i32 0
+    %referenceCount = load %ReferenceCount, ptr %objectReferenceCount, !alias.scope !14, !noalias !24, !range !41
+    switch %ReferenceCount %referenceCount, label %copy [%ReferenceCount 0, label %done]
+
+    copy:
+    %copied = call %Pos @c_bytearray_copy_shared(%Pos %array)
+    ret %Pos %copied
+
+    done:
+    ret %Pos %array
+}
+
 
 ; User-facing C-helpers for GC
 
