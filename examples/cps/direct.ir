@@ -1,0 +1,31 @@
+// Direct calls receive (multiple) values returned by direct-style definitions
+def swap(x, y) {
+  return(y, x)
+}
+def main(ks, k) {
+  let (a, b) = swap(1, 2);
+  k(a, ks)
+}
+
+/// JAVASCRIPT
+
+function swap_0(x_0, y_0) {
+  return [y_0, x_0];
+}
+
+function main_0(ks_0, k_0) {
+  const [a_0, b_0] = swap_0(1, 2);
+  return () => k_0(a_0, ks_0);
+}
+
+/// CHEZ
+
+(define (swap_0 x_2 y_3)
+  (values y_3  x_2))
+
+
+(define (main_1 ks_4 k_5)
+  (call-with-values (lambda ()
+                      (swap_0 1  2))
+                     (lambda (a_6 b_7)
+                      (k_5 a_6  ks_4))))

@@ -46,8 +46,9 @@ class ChezSchemeCPS extends Compiler[String] {
 
   lazy val CPSTransformed = Optimized map {
     case (mainSymbol, mainFile, core) =>
-      val cpsTransformed = effekt.cps.Transformer.transform(core)
-      (mainSymbol, mainFile, core, cpsTransformed)
+      // establish unique names
+      val renamed = new effekt.core.Renamer().apply(core)
+      (mainSymbol, mainFile, core, effekt.cps.transform(renamed))
   }
 
   lazy val Chez = CPSTransformed map {

@@ -4,6 +4,7 @@ package js
 
 import effekt.PhaseResult.CoreTransformed
 import effekt.context.Context
+import effekt.core.Renamer
 import effekt.core.optimizer.{ Deadcode, DropBindings, Optimizer }
 import kiama.output.PrettyPrinterTypes.Document
 import kiama.util.Source
@@ -55,9 +56,9 @@ class JavaScript(additionalFeatureFlags: List[String] = Nil) extends Compiler[St
 
   lazy val CPSTransformed = Optimized map {
     case (mainSymbol, mainFile, core) =>
-      val cpsTransformed = effekt.cps.Transformer.transform(core)
-      val contified = cps.Contify.rewrite(cpsTransformed)
-      (mainSymbol, mainFile, core, contified)
+      // establish unique names
+      val renamed = new Renamer().apply(core)
+      (mainSymbol, mainFile, core, effekt.cps.transform(renamed))
   }
 
   lazy val Compile = CPSTransformed map {

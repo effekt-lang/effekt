@@ -1,0 +1,30 @@
+// The remainder of a binding call is reified as the continuation
+def inc(x, ks, k) {
+  run y = add(x, 1);
+  k(y, ks)
+}
+def main(ks, k) {
+  let r = inc!(1, ks, return);
+  k(r, ks)
+}
+
+/// JAVASCRIPT
+
+function inc_0(x_0, ks_0, k_0) {
+  const y_0 = add_0(x_0, 1);
+  return () => k_0(y_0, ks_0);
+}
+
+function main_0(ks_1, k_1) {
+  return inc_0(1, ks_1, (r_0, ks_2) => () => k_1(r_0, ks_1));
+}
+
+/// CHEZ
+
+(define (inc_0 x_2 ks_3 k_4)
+  (define y_5 (add_-2 x_2  1))
+  (k_4 y_5  ks_3))
+
+
+(define (main_1 ks_6 k_7)
+  (inc_0 1  ks_6  (lambda (r_8 ks_9) (k_7 r_8  ks_6))))
