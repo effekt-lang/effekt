@@ -582,13 +582,19 @@ object Normalizer { normal =>
   /** The local definitions in [[m]] that are only tail called. */
   private def joinPoints(m: ModuleDecl): mutable.Set[Id] = {
     val found = mutable.Set.empty[Id]
+    var changed = true
     def go(tree: Any): Unit = Tree.visit(tree) {
       case Stmt.Def(id, BlockLit(Nil, Nil, _, Nil, body), rest) =>
-        if tailCalledOnly(id, rest) && tailCalledOnly(id, body) then found += id
+        if !found.contains(id) && tailCalledOnly(id, rest, found) && tailCalledOnly(id, body, found) then
+          found += id
+          changed = true
         go(body)
         go(rest)
     }
-    go(m.definitions)
+    while (changed) {
+      changed = false
+      go(m.definitions)
+    }
     found
   }
 
@@ -596,22 +602,24 @@ object Normalizer { normal =>
    * Is every use of [[k]] in [[s]] a call in tail position?
    *
    * A `var` or `region` pushes a frame, so a call below one is not a tail call,
-   * neither is a call in the binding of a `val` or in another definition.
+   * neither is a call in the binding of a `val` or in another definition, unless that is one of the [[joinPoints]].
    */
-  private def tailCalledOnly(k: Id, s: Stmt): Boolean = s match {
+  private def tailCalledOnly(k: Id, s: Stmt, joinPoints: collection.Set[Id]): Boolean = s match {
     case Stmt.App(BlockVar(id, _, _), Nil, vargs, Nil) if id == k => !vargs.exists(_.free.contains(k))
 
-    case Stmt.Def(id, block, body) => !block.free.contains(k) && tailCalledOnly(k, body)
-    case Stmt.Let(id, binding, body) => !binding.free.contains(k) && tailCalledOnly(k, body)
+    case Stmt.Def(id, BlockLit(Nil, Nil, _, Nil, inner), body) if joinPoints.contains(id) =>
+      tailCalledOnly(k, inner, joinPoints) && tailCalledOnly(k, body, joinPoints)
+    case Stmt.Def(id, block, body) => !block.free.contains(k) && tailCalledOnly(k, body, joinPoints)
+    case Stmt.Let(id, binding, body) => !binding.free.contains(k) && tailCalledOnly(k, body, joinPoints)
     case Stmt.ImpureApp(id, callee, targs, vargs, bargs, body) =>
-      !vargs.exists(_.free.contains(k)) && !bargs.exists(_.free.contains(k)) && tailCalledOnly(k, body)
-    case Stmt.Val(ids, binding, body) => !binding.free.contains(k) && tailCalledOnly(k, body)
-    case Stmt.If(cond, thn, els) => tailCalledOnly(k, thn) && tailCalledOnly(k, els)
+      !vargs.exists(_.free.contains(k)) && !bargs.exists(_.free.contains(k)) && tailCalledOnly(k, body, joinPoints)
+    case Stmt.Val(ids, binding, body) => !binding.free.contains(k) && tailCalledOnly(k, body, joinPoints)
+    case Stmt.If(cond, thn, els) => tailCalledOnly(k, thn, joinPoints) && tailCalledOnly(k, els, joinPoints)
     case Stmt.Match(scrutinee, tpe, clauses, default) =>
-      clauses.forall { case (id, clause) => tailCalledOnly(k, clause.body) } && default.forall(tailCalledOnly(k, _))
-    case Stmt.Alloc(id, init, region, body) => !init.free.contains(k) && tailCalledOnly(k, body)
-    case Stmt.Get(id, tpe, ref, capt, body) => tailCalledOnly(k, body)
-    case Stmt.Put(ref, capt, value, body) => tailCalledOnly(k, body)
+      clauses.forall { case (id, clause) => tailCalledOnly(k, clause.body, joinPoints) } && default.forall(tailCalledOnly(k, _, joinPoints))
+    case Stmt.Alloc(id, init, region, body) => !init.free.contains(k) && tailCalledOnly(k, body, joinPoints)
+    case Stmt.Get(id, tpe, ref, capt, body) => tailCalledOnly(k, body, joinPoints)
+    case Stmt.Put(ref, capt, value, body) => tailCalledOnly(k, body, joinPoints)
 
     case other => !other.free.contains(k)
   }
