@@ -40,6 +40,7 @@ object DirectStyle extends Tree.Rewrite {
     case Region(_) => false
     case Resume(_, _) => false
     case Shift(_, _, _) => false
+    case Var(_, _, _, _) => false
 
     // Congruences
     case Def(id, block, body) => canBeDirect(body)
@@ -51,7 +52,6 @@ object DirectStyle extends Tree.Rewrite {
       clauses.forall { case (id, bl) => canBeDirect(bl.body) } && default.forall(canBeDirect)
 
     case Alloc(id, init, region, body) => canBeDirect(body)
-    case Var(ref, init, capture, body) => canBeDirect(body)
     case Get(id, tpe, ref, capt, body) => canBeDirect(body)
     case Put(ref, capt, value, body) => canBeDirect(body)
   }
