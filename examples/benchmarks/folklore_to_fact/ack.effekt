@@ -7,8 +7,7 @@ def ack(m: Int, n: Int): Int = {
 }
 
 def run(n: Int): Int =
-  // we only have one input to the benchmark program
-  ack(n / 2, n)
+  ack(3, n)
 
 def main() =
   benchmark(4){run}

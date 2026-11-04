@@ -11,11 +11,11 @@ def tak(x: Int, y: Int, z: Int): Int =
     z
   }
 
-def run(x: Int): Int = {
-  // only one argument
-  val y = x - 2
-  val z = x - 6
+def run(n: Int): Int = {
+  val x = n
+  val y = (2 * n) / 3
+  val z = n / 3
   tak(x, y, z)
 }
 
-def main() = benchmark(14){run}
+def main() = benchmark(18){run}
