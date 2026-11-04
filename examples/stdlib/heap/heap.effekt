@@ -1,26 +1,57 @@
 import heap
+import stream
 import test
+
+def drain(heap: Heap[Int]): String = {
+  var out = ""
+  for[Weighted[Int]] { each(heap) } { case Weighted(x, _) => out = out ++ show(x) ++ " " }
+  out
+}
 
 def main() = {
   suite("HeapTests", false) {
     test("simple heap sort on integers") {
-      with on[OutOfBounds].default { assertTrue(false); <> };
-      val h = heap[Int](box { (x: Int, y: Int) =>
-        if (x < y) {
-          Less()
-        } else Greater()  // hacky, should sometimes be Equal()
-      })
-      h.insert(12)
-      h.insert(10)
-      h.insert(7)
-      h.insert(11)
-      h.insert(14)
-      assert(h.deleteMin(), 7)
-      assert(h.deleteMin(), 10)
-      assert(h.deleteMin(), 11)
-      assert(h.deleteMin(), 12)
-      assert(h.deleteMin(), 14)
-      assert(h.size, 0)
+      val h = heap::empty[Int]().insert(12, 12.0).insert(10, 10.0).insert(7, 7.0).insert(11, 11.0).insert(14, 14.0)
+      assert(drain(h), "7 10 11 12 14 ")
+    }
+    test("persistence") {
+      val h = heap::empty[Int]().insert(3, 3.0).insert(1, 1.0).insert(2, 2.0)
+      val h2 = h.insert(0, 0.0)
+      assert(drain(h), "1 2 3 ")
+      assert(drain(h2), "0 1 2 3 ")
+    }
+    test("extract from empty heap") {
+      assertTrue(extract(heap::empty[Int]()).isEmpty)
+      assertTrue(heap::empty[Int]().isEmpty)
+    }
+    test("meld") {
+      val h1 = heap::empty[Int]().insert(5, 5.0).insert(1, 1.0)
+      val h2 = heap::empty[Int]().insert(4, 4.0).insert(2, 2.0).insert(3, 3.0)
+      assert(drain(meld(h1, h2)), "1 2 3 4 5 ")
+    }
+    test("findMinimum") {
+      val h = heap::empty[Int]().insert(2, 2.0).insert(1, 1.0).insert(3, 3.0)
+      assert(findMinimum(h).map { case Weighted(x, _) => x }.getOrElse { 0 }, 1)
+      assert(drain(h), "1 2 3 ")
+      assertTrue(findMinimum(heap::empty[Int]()).isEmpty)
+    }
+    test("exchange") {
+      val h = heap::empty[Int]().insert(1, 1.0).insert(3, 3.0)
+      val (Weighted(x, _), rest) = exchange(h, 2, 2.0)
+      assert(x, 1)
+      assert(drain(rest), "2 3 ")
+      val (Weighted(y, _), same) = exchange(h, 0, 0.0)
+      assert(y, 0)
+      assert(drain(same), "1 3 ")
+      val (Weighted(z, _), none) = exchange(heap::empty[Int](), 5, 5.0)
+      assert(z, 5)
+      assertTrue(none.isEmpty)
+    }
+    test("collectHeap") {
+      val h = collectHeap[Int] {
+        for[Int] { [5, 3, 8, 1, 9, 2].each } { x => do emit(Weighted(x, x.toDouble)) }
+      }
+      assert(drain(h), "1 2 3 5 8 9 ")
     }
   };
   ()
