@@ -39,6 +39,7 @@ object Normalizer { normal =>
     policy: InliningPolicy,        // whether to inline a call (see [[InliningPolicy]])
     facts: Map[Expr, Expr],        // maps a pure expression to something simpler it is known to equal
     prompts: List[Id],             // the enclosing `Reset`s' prompts, innermost first
+    joinPoints: mutable.Set[Id],   // local definitions that are only tail called
   ) {
     def enterPrompt(prompt: Id): Context = copy(prompts = prompt :: prompts)
 
@@ -142,7 +143,7 @@ object Normalizer { normal =>
     val defs = m.definitions.collect {
       case Toplevel.Def(id, block) => id -> block
     }.toMap
-    val context = Context(defs, Map.empty, DeclarationContext(m.declarations, m.externs), mutable.Map.from(usage), policy, Map.empty, Nil)
+    val context = Context(defs, Map.empty, DeclarationContext(m.declarations, m.externs), mutable.Map.from(usage), policy, Map.empty, Nil, joinPoints(m))
 
     val (normalizedDefs, _) = normalizeToplevel(m.definitions)(using context)
     m.copy(definitions = normalizedDefs)
@@ -342,6 +343,7 @@ object Normalizer { normal =>
         case _ =>
           val k = Id("k")
           C.usage.put(k, Usage.Many)
+          C.joinPoints.add(k)
           val kDef = Block.BlockLit(Nil, Nil, (ids zip tpes).map(ValueParam.apply), Nil, body)
           Stmt.Def(k, kDef, f(Block.BlockVar(k, kDef.tpe, kDef.capt))(using C.bind(k, kDef)))
       }
@@ -351,6 +353,12 @@ object Normalizer { normal =>
         Stmt.App(k, Nil, (ids zip tpes).map(ValueVar.apply), Nil)
 
       def fresh(ids: List[Id]): List[Id] = ids.map(id => Id(id.name))
+
+      // a jump to a join point is normal already, so we do not inline the join point into every exit
+      def normalizeBody(body: Stmt)(using C: Context): Stmt = body match {
+        case Stmt.App(BlockVar(j, _, _), Nil, vargs, Nil) if C.joinPoints.contains(j) && vargs.forall(_.isInstanceOf[ValueVar]) => body
+        case _ => normalize(body)
+      }
 
       /**
        * [[ val ids = binding; body ]]  where `binding` is already in normal form.
@@ -375,7 +383,7 @@ object Normalizer { normal =>
         case Stmt.If(cond, thn, els) =>
           val tpe = thn.tpe
           util.assert(Type.equals(thn.tpe, els.tpe))
-          joinpoint(ids, tpe, normalize(body)) { k => (C: Context) ?=>
+          joinpoint(ids, tpe, normalizeBody(body)) { k => (C: Context) ?=>
             val x1 = fresh(ids)
             val x2 = fresh(ids)
             Stmt.If(cond,
@@ -388,7 +396,7 @@ object Normalizer { normal =>
           Stmt.Match(sc, body.tpe, Nil, None)
 
         case Stmt.Match(sc, tpe, clauses, default) =>
-          val res = normalize(body)
+          val res = normalizeBody(body)
           // [[ val id: A = sc match[A] { ... }; body : B ]] =
           //   def k(id: A): B  = [[ body ]]
           //   sc match [B] { ... k() ... }
@@ -407,6 +415,17 @@ object Normalizer { normal =>
 
         // [[ val x = return e; s ]] = let x = [[ e ]]; [[ s ]]
         case Stmt.Return(exprs2) => normalizeLet(ids zip exprs2, body)
+
+        // [[ val x = { def k(y) = s; STMT }; body ]] =
+        //   def j(x) = [[ body ]]; def k(y) = [[ val x = s; j(x) ]]; [[ val x = STMT; j(x) ]]
+        case Stmt.Def(id2, BlockLit(Nil, Nil, vparams2, Nil, body2k), body2) if C.joinPoints.contains(id2) =>
+          val tpes = body2.tpe
+          joinpoint(ids, tpes, normalizeBody(body)) { j => (C: Context) ?=>
+            val x1 = fresh(ids)
+            val x2 = fresh(ids)
+            val pushed = Block.BlockLit(Nil, Nil, vparams2, Nil, normalizeVal(x1, body2k, jump(j, x1, tpes)))
+            Stmt.Def(id2, pushed, normalizeVal(x2, body2, jump(j, x2, tpes))(using C.bind(id2, pushed)))
+          }
 
         // Commute val and bindings
         // [[ val x = { def f = ...; STMT }; STMT ]] = def f = ...; val x = STMT; STMT
@@ -438,7 +457,11 @@ object Normalizer { normal =>
         case Stmt.Put(ref2, capt2, value2, body2) =>
           Stmt.Put(ref2, capt2, value2, normalizeVal(ids, body2, body))
 
-        case other => normalize(body) match {
+        // [[ val x = k(...); body ]] = k(...)   if k is a join point
+        case Stmt.App(BlockVar(k, BlockType.Function(tparams, cparams, vparams, bparams, _), capt), Nil, vargs, Nil) if C.joinPoints.contains(k) =>
+          Stmt.App(BlockVar(k, BlockType.Function(tparams, cparams, vparams, bparams, body.tpe), capt ++ body.capt), Nil, vargs, Nil)
+
+        case other => normalizeBody(body) match {
           // [[ val x = stmt; return x ]]   =   [[ stmt ]]
           case Stmt.Return(xs) if xs.size == ids.size && (xs zip ids).forall {
             case (x: ValueVar, id) => x.id == id
@@ -522,6 +545,7 @@ object Normalizer { normal =>
       case Some(info) => usage.update(to, info)
       case None => ()
     }
+    def copyJoinPoint(to: Id, from: Id) = if C.joinPoints.contains(from) then C.joinPoints.add(to)
 
     // Only bind if not already a variable!!!
     var ids: Set[Id] = Set.empty
@@ -546,12 +570,50 @@ object Normalizer { normal =>
     val (renamedLit: BlockLit, renamedIds) = Renamer.rename(b)
 
     renamedIds.foreach(copyUsage)
+    renamedIds.foreach(copyJoinPoint)
 
 
     // (2) substitute
     val body = substitutions.substitute(renamedLit, targs, vargs, bvars)
 
     normalize(Binding(bindings, body))
+  }
+
+  /** The local definitions in [[m]] that are only tail called. */
+  private def joinPoints(m: ModuleDecl): mutable.Set[Id] = {
+    val found = mutable.Set.empty[Id]
+    def go(tree: Any): Unit = Tree.visit(tree) {
+      case Stmt.Def(id, BlockLit(Nil, Nil, _, Nil, body), rest) =>
+        if tailCalledOnly(id, rest) && tailCalledOnly(id, body) then found += id
+        go(body)
+        go(rest)
+    }
+    go(m.definitions)
+    found
+  }
+
+  /**
+   * Is every use of [[k]] in [[s]] a call in tail position?
+   *
+   * A `var` or `region` pushes a frame, so a call below one is not a tail call,
+   * neither is a call in the binding of a `val` or in another definition.
+   */
+  private def tailCalledOnly(k: Id, s: Stmt): Boolean = s match {
+    case Stmt.App(BlockVar(id, _, _), Nil, vargs, Nil) if id == k => !vargs.exists(_.free.contains(k))
+
+    case Stmt.Def(id, block, body) => !block.free.contains(k) && tailCalledOnly(k, body)
+    case Stmt.Let(id, binding, body) => !binding.free.contains(k) && tailCalledOnly(k, body)
+    case Stmt.ImpureApp(id, callee, targs, vargs, bargs, body) =>
+      !vargs.exists(_.free.contains(k)) && !bargs.exists(_.free.contains(k)) && tailCalledOnly(k, body)
+    case Stmt.Val(ids, binding, body) => !binding.free.contains(k) && tailCalledOnly(k, body)
+    case Stmt.If(cond, thn, els) => tailCalledOnly(k, thn) && tailCalledOnly(k, els)
+    case Stmt.Match(scrutinee, tpe, clauses, default) =>
+      clauses.forall { case (id, clause) => tailCalledOnly(k, clause.body) } && default.forall(tailCalledOnly(k, _))
+    case Stmt.Alloc(id, init, region, body) => !init.free.contains(k) && tailCalledOnly(k, body)
+    case Stmt.Get(id, tpe, ref, capt, body) => tailCalledOnly(k, body)
+    case Stmt.Put(ref, capt, value, body) => tailCalledOnly(k, body)
+
+    case other => !other.free.contains(k)
   }
 
   private def selectOperation(impl: Implementation, method: Id): Block.BlockLit =
