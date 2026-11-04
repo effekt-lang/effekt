@@ -58,3 +58,15 @@ folklore_to_fact/tak 25
 folklore_to_fact/tak_goto 23
 folklore_to_fact/takl 24
 folklore_to_fact/deriv 32280
+advent_of_code_2025/day01 3900
+advent_of_code_2025/day02 1500
+advent_of_code_2025/day03 86
+advent_of_code_2025/day04 39
+advent_of_code_2025/day05 1100
+advent_of_code_2025/day06 1200
+advent_of_code_2025/day07 260
+advent_of_code_2025/day08 260
+advent_of_code_2025/day09 67
+advent_of_code_2025/day10 100
+advent_of_code_2025/day11 2300
+advent_of_code_2025/day12 3400
