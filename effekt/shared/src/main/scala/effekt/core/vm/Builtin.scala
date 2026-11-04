@@ -136,8 +136,30 @@ lazy val integers: Builtins = Map(
   builtin("effekt::infixStar(Int, Int)") {
     case As.Int(x) :: As.Int(y) :: Nil => Value.Int(x * y)
   },
-  builtin("effekt::mod(Int, Int)") {
+  builtin("effekt::rem(Int, Int)") {
     case As.Int(x) :: As.Int(y) :: Nil => Value.Int(x % y)
+  },
+  builtin("effekt::quot(Int, Int)") {
+    case As.Int(x) :: As.Int(y) :: Nil => Value.Int(x / y)
+  },
+  builtin("effekt::div(Int, Int)") {
+    case As.Int(x) :: As.Int(y) :: Nil =>
+      val q = x / y
+      val r = x - y * (x / y)
+      if (r < 0) {
+        Value.Int(q - y.sign)
+      } else {
+        Value.Int(q)
+      }
+  },
+  builtin("effekt::mod(Int, Int)") {
+    case As.Int(x) :: As.Int(y) :: Nil =>
+      val r = x - y * (x / y)
+      if (r < 0) {
+        Value.Int(r + y.abs)
+      } else {
+        Value.Int(r)
+      }
   },
   builtin("effekt::infixSlash(Int, Int)") {
     case As.Int(x) :: As.Int(y) :: Nil => Value.Int(x / y)

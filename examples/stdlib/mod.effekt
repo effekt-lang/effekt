@@ -1,0 +1,14 @@
+def main() = {
+  [8, 8.neg, 6, 6.neg, 5000000002, 5000000002.neg].foreach { x =>
+    [3, 3.neg].foreach { y =>
+      println(s"${x.show} `divmod` ${y.show} = ${x.div(y).show}, ${x.mod(y).show} (${(x == y * x.div(y) + x.mod(y)).show})")
+    }
+  }
+  println("")
+  [8, 8.neg, 6, 6.neg, 5000000002, 5000000002.neg].foreach { x =>
+    [3, 3.neg].foreach { y =>
+      println(s"${x.show} `quotrem` ${y.show} = ${x.quot(y).show}, ${x.rem(y).show} (${(x == y * x.quot(y) + x.rem(y)).show})")
+    }
+  }
+  println("")
+}
