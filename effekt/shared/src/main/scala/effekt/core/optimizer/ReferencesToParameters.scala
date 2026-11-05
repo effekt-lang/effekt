@@ -4,6 +4,11 @@ package optimizer
 
 import scala.annotation.tailrec
 
+/**
+ * Turns a local mutable reference that does not escape into an ordinary value:
+ * the local definitions that use it take its current value as an extra parameter
+ * and return its new value as an extra result.
+ */
 object ReferencesToParameters extends Tree.Rewrite {
 
   def transform(m: ModuleDecl): ModuleDecl = rewrite(m)
@@ -12,31 +17,74 @@ object ReferencesToParameters extends Tree.Rewrite {
     case Stmt.Var(ref, init, capture, body) =>
       val rewrittenInit = rewrite(init)
       val rewrittenBody = rewrite(body)
-      eliminate(ref, rewrittenInit, capture, rewrittenBody)
-        .getOrElse(Stmt.Var(ref, rewrittenInit, capture, rewrittenBody))
+      uses(ref, rewrittenBody) match {
+        case uses if escapes(ref, uses, rewrittenBody) => Stmt.Var(ref, rewrittenInit, capture, rewrittenBody)
+        case uses => eliminate(ref, rewrittenInit, capture, uses, rewrittenBody)
+      }
     case other => super.rewrite(other)
   }
 
-  private def eliminate(ref: Id, init: Expr, capture: Id, body: Stmt): Option[Stmt] = {
+  /** The local definitions in [[body]] that use the reference, directly or by calling one that does. */
+  private def uses(ref: Id, body: Stmt): Set[Id] = {
     val definitions = localDefinitions(body)
 
-    @tailrec def leastFixedPoint(touching: Set[Id]): Set[Id] = {
+    @tailrec def leastFixedPoint(uses: Set[Id]): Set[Id] = {
       val next = definitions.collect {
-        case (id, lit) if lit.free.contains(ref) || touching.exists(lit.free.contains) => id
+        case (id, lit) if mentions(ref, uses, lit.free) => id
       }.toSet
-      if next == touching then touching else leastFixedPoint(next)
+      if next == uses then uses else leastFixedPoint(next)
     }
 
-    val touching = leastFixedPoint(Set.empty)
-    if !Escape(ref, touching).direct(body) then return None
-
-    val stateType = init.tpe
-    val initial = Id(ref)
-    val transformed = Stmt.Let(initial, init,
-      Transformation(ref, stateType, touching).go(body, ValueVar(initial, stateType), false))
-    Some(RemoveCapture(capture).rewrite(transformed))
+    leastFixedPoint(Set.empty)
   }
 
+  /**
+   * Whether the reference escapes from [[body]]: it, or one of the definitions that use it,
+   * occurs other than in `get` and `put`, as the callee of a call, or as a definition.
+   * For example as an argument, in a closure, or under a `reset`.
+   */
+  private def escapes(ref: Id, uses: Set[Id], body: Stmt): Boolean = {
+    def mentioned(free: Free): Boolean = mentions(ref, uses, free)
+
+    def escaping(s: Stmt): Boolean = s match {
+      case Stmt.Def(id, lit: BlockLit, rest) if uses.contains(id) => escaping(lit.body) || escaping(rest)
+      case Stmt.Def(id, block, rest) => mentioned(block.free) || escaping(rest)
+      case Stmt.Let(id, binding, rest) => mentioned(binding.free) || escaping(rest)
+      case Stmt.ImpureApp(id, callee, targs, vargs, bargs, rest) =>
+        mentioned(callee.free) || vargs.exists(v => mentioned(v.free)) || bargs.exists(b => mentioned(b.free)) || escaping(rest)
+      case Stmt.Return(exprs) => exprs.exists(e => mentioned(e.free))
+      case Stmt.Val(ids, binding, rest) => escaping(binding) || escaping(rest)
+      case Stmt.App(BlockVar(id, _, _), targs, vargs, bargs) if uses.contains(id) =>
+        vargs.exists(v => mentioned(v.free)) || bargs.exists(b => mentioned(b.free))
+      case Stmt.If(cond, thn, els) => mentioned(cond.free) || escaping(thn) || escaping(els)
+      case Stmt.Match(scrutinee, tpe, clauses, default) =>
+        mentioned(scrutinee.free) || clauses.exists { case (_, lit) => escaping(lit.body) } || default.exists(escaping)
+      case Stmt.Var(other, init, capture, rest) => mentioned(init.free) || escaping(rest)
+      case Stmt.Alloc(id, init, region, rest) => mentioned(init.free) || escaping(rest)
+      case Stmt.Get(id, tpe, other, capt, rest) => escaping(rest)
+      case Stmt.Put(other, capt, value, rest) => mentioned(value.free) || escaping(rest)
+      case Stmt.Hole(_, _) => false
+      case other => mentioned(other.free)
+    }
+
+    escaping(body)
+  }
+
+  /** Replaces `var ref = init; body` by passing the current value of the reference to the definitions that use it. */
+  private def eliminate(ref: Id, init: Expr, capture: Id, uses: Set[Id], body: Stmt): Stmt = {
+    val stateType = init.tpe
+    val initial = Id(ref)
+    val transformation = Transformation(ref, stateType, uses)
+    val transformed = Stmt.Let(initial, init,
+      transformation.dropState(transformation.go(body, ValueVar(initial, stateType)), body.tpe))
+    RemoveCapture(capture).rewrite(transformed)
+  }
+
+  /** Whether [[free]] contains the reference or one of the definitions that use it. */
+  private def mentions(ref: Id, uses: Set[Id], free: Free): Boolean =
+    free.contains(ref) || uses.exists(free.contains)
+
+  /** All local definitions of block literals in [[s]], including nested ones. */
   private def localDefinitions(s: Stmt): Map[Id, BlockLit] = {
     object collector extends Tree.Query[Unit, Map[Id, BlockLit]] {
       def empty = Map.empty
@@ -48,95 +96,65 @@ object ReferencesToParameters extends Tree.Rewrite {
     collector.query(s)(using ())
   }
 
+  /** Removes the capture of the eliminated reference from all capture sets. */
   private class RemoveCapture(capture: Id) extends Tree.Rewrite {
     override def rewrite(capt: Captures): Captures = capt - capture
   }
 
-  private case class Escape(ref: Id, touching: Set[Id]) {
+  /** Passes the current value of the reference explicitly; every transformed statement returns it as an extra result. */
+  private case class Transformation(ref: Id, stateType: ValueType, uses: Set[Id]) {
 
-    def mentions(free: Free): Boolean = free.contains(ref) || touching.exists(free.contains)
-    def mentions(s: Stmt): Boolean = mentions(s.free)
-    def mentions(e: Expr): Boolean = mentions(e.free)
-    def mentions(b: Block): Boolean = mentions(b.free)
-
-    def clean(vargs: List[Expr], bargs: List[Block]): Boolean =
-      !vargs.exists(mentions) && !bargs.exists(mentions)
-
-    def direct(s: Stmt): Boolean = s match {
-      case Stmt.Def(id, lit: BlockLit, rest) if touching.contains(id) => direct(lit.body) && direct(rest)
-      case Stmt.Def(id, block, rest) => !mentions(block) && direct(rest)
-      case Stmt.Let(id, binding, rest) => !mentions(binding) && direct(rest)
-      case Stmt.ImpureApp(id, callee, targs, vargs, bargs, rest) =>
-        !mentions(callee) && clean(vargs, bargs) && direct(rest)
-      case Stmt.Return(exprs) => !exprs.exists(mentions)
-      case Stmt.Val(ids, binding, rest) => direct(binding) && direct(rest)
-      case Stmt.App(BlockVar(id, _, _), targs, vargs, bargs) if touching.contains(id) => clean(vargs, bargs)
-      case Stmt.If(cond, thn, els) => !mentions(cond) && direct(thn) && direct(els)
-      case Stmt.Match(scrutinee, tpe, clauses, default) =>
-        !mentions(scrutinee) && clauses.forall { case (_, lit) => direct(lit.body) } && default.forall(direct)
-      case Stmt.Var(other, init, capture, rest) => !mentions(init) && direct(rest)
-      case Stmt.Alloc(id, init, region, rest) => !mentions(init) && direct(rest)
-      case Stmt.Get(id, tpe, other, capt, rest) => direct(rest)
-      case Stmt.Put(other, capt, value, rest) => !mentions(value) && direct(rest)
-      case Stmt.Hole(_, _) => true
-      case other => !mentions(other)
-    }
-  }
-
-  private case class Transformation(ref: Id, stateType: ValueType, touching: Set[Id]) {
-
-    def mentions(s: Stmt): Boolean = s.free.contains(ref) || touching.exists(s.free.contains)
-
+    /** The type of a definition that uses the reference, with the state as extra parameter and extra result. */
     def extended(callee: BlockVar): BlockVar = callee match {
       case BlockVar(id, BlockType.Function(tparams, cparams, vparams, bparams, result), capt) =>
         BlockVar(id, BlockType.Function(tparams, cparams, vparams :+ stateType, bparams, result :+ stateType), capt)
       case _ => sys error "Local definition without function type"
     }
 
-    def results(s: Stmt): List[Id] = s.tpe.map { _ => Id("r") }
-
+    /** `val r = s; return r, current` for a statement that does not return the state itself. */
     def andReturn(s: Stmt, current: Expr): Stmt = {
-      val ids = results(s)
-      Stmt.Val(ids, s, Stmt.Return((ids zip s.tpe).map(ValueVar.apply) :+ current))
+      val results = s.tpe.map { _ => Id("r") }
+      Stmt.Val(results, s, Stmt.Return((results zip s.tpe).map(ValueVar.apply) :+ current))
     }
 
-    def dropState(call: Stmt, tpe: List[ValueType]): Stmt = {
-      val ids = tpe.map { _ => Id("r") }
-      Stmt.Val(ids :+ Id(ref), call, Stmt.Return((ids zip tpe).map(ValueVar.apply)))
+    /** `val r, state = s; return r` where [[tpe]] are the types of `r`. */
+    def dropState(s: Stmt, tpe: List[ValueType]): Stmt = {
+      val results = tpe.map { _ => Id("r") }
+      Stmt.Val(results :+ Id(ref), s, Stmt.Return((results zip tpe).map(ValueVar.apply)))
     }
 
-    def go(s: Stmt, current: Expr, returning: Boolean): Stmt = s match {
-      case Stmt.Def(id, BlockLit(tparams, cparams, vparams, bparams, body), rest) if touching.contains(id) =>
+    /** Transforms [[s]] where [[current]] holds the current value of the reference. */
+    def go(s: Stmt, current: Expr): Stmt = s match {
+      case Stmt.Def(id, BlockLit(tparams, cparams, vparams, bparams, body), rest) if uses.contains(id) =>
         val param = ValueParam(Id(ref), stateType)
-        val lit = BlockLit(tparams, cparams, vparams :+ param, bparams, go(body, ValueVar(param.id, stateType), true))
-        Stmt.Def(id, lit, go(rest, current, returning))
-      case Stmt.Def(id, block, rest) => Stmt.Def(id, block, go(rest, current, returning))
-      case Stmt.Let(id, binding, rest) => Stmt.Let(id, binding, go(rest, current, returning))
+        val lit = BlockLit(tparams, cparams, vparams :+ param, bparams, go(body, ValueVar(param.id, stateType)))
+        Stmt.Def(id, lit, go(rest, current))
+      case Stmt.Def(id, block, rest) => Stmt.Def(id, block, go(rest, current))
+      case Stmt.Let(id, binding, rest) => Stmt.Let(id, binding, go(rest, current))
       case Stmt.ImpureApp(id, callee, targs, vargs, bargs, rest) =>
-        Stmt.ImpureApp(id, callee, targs, vargs, bargs, go(rest, current, returning))
-      case Stmt.Return(exprs) => if returning then Stmt.Return(exprs :+ current) else s
-      case Stmt.Val(ids, binding, rest) if mentions(binding) =>
+        Stmt.ImpureApp(id, callee, targs, vargs, bargs, go(rest, current))
+      case Stmt.Return(exprs) => Stmt.Return(exprs :+ current)
+      case Stmt.Val(ids, binding, rest) if mentions(ref, uses, binding.free) =>
         val next = Id(ref)
-        Stmt.Val(ids :+ next, go(binding, current, true), go(rest, ValueVar(next, stateType), returning))
-      case Stmt.Val(ids, binding, rest) => Stmt.Val(ids, binding, go(rest, current, returning))
-      case Stmt.App(callee @ BlockVar(id, _, _), targs, vargs, bargs) if touching.contains(id) =>
-        val call = Stmt.App(extended(callee), targs, vargs :+ current, bargs)
-        if returning then call else dropState(call, s.tpe)
-      case Stmt.If(cond, thn, els) => Stmt.If(cond, go(thn, current, returning), go(els, current, returning))
+        Stmt.Val(ids :+ next, go(binding, current), go(rest, ValueVar(next, stateType)))
+      case Stmt.Val(ids, binding, rest) => Stmt.Val(ids, binding, go(rest, current))
+      case Stmt.App(callee @ BlockVar(id, _, _), targs, vargs, bargs) if uses.contains(id) =>
+        Stmt.App(extended(callee), targs, vargs :+ current, bargs)
+      case Stmt.If(cond, thn, els) => Stmt.If(cond, go(thn, current), go(els, current))
       case Stmt.Match(scrutinee, tpe, clauses, default) =>
-        Stmt.Match(scrutinee, if returning then tpe :+ stateType else tpe,
-          clauses.map { case (id, lit) => (id, lit.copy(body = go(lit.body, current, returning))) },
-          default.map(go(_, current, returning)))
-      case Stmt.Var(other, init, capture, rest) => Stmt.Var(other, init, capture, go(rest, current, returning))
-      case Stmt.Alloc(id, init, region, rest) => Stmt.Alloc(id, init, region, go(rest, current, returning))
-      case Stmt.Get(id, tpe, other, capt, rest) if other == ref => Stmt.Let(id, current, go(rest, current, returning))
-      case Stmt.Get(id, tpe, other, capt, rest) => Stmt.Get(id, tpe, other, capt, go(rest, current, returning))
+        Stmt.Match(scrutinee, tpe :+ stateType,
+          clauses.map { case (id, lit) => (id, lit.copy(body = go(lit.body, current))) },
+          default.map(go(_, current)))
+      case Stmt.Var(other, init, capture, rest) => Stmt.Var(other, init, capture, go(rest, current))
+      case Stmt.Alloc(id, init, region, rest) => Stmt.Alloc(id, init, region, go(rest, current))
+      case Stmt.Get(id, tpe, other, capt, rest) if other == ref => Stmt.Let(id, current, go(rest, current))
+      case Stmt.Get(id, tpe, other, capt, rest) => Stmt.Get(id, tpe, other, capt, go(rest, current))
       case Stmt.Put(other, capt, value, rest) if other == ref =>
         val next = Id(ref)
-        Stmt.Let(next, value, go(rest, ValueVar(next, stateType), returning))
-      case Stmt.Put(other, capt, value, rest) => Stmt.Put(other, capt, value, go(rest, current, returning))
-      case Stmt.Hole(tpe, span) => if returning then Stmt.Hole(tpe :+ stateType, span) else s
-      case other => if returning then andReturn(other, current) else other
+        Stmt.Let(next, value, go(rest, ValueVar(next, stateType)))
+      case Stmt.Put(other, capt, value, rest) => Stmt.Put(other, capt, value, go(rest, current))
+      case Stmt.Hole(tpe, span) => Stmt.Hole(tpe :+ stateType, span)
+      case other => andReturn(other, current)
     }
   }
 }

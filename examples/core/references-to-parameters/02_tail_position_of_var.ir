@@ -1,4 +1,4 @@
-// A definition always returns the state; the body of the var drops it again.
+// The body of the var returns the state like every definition and drops it at the end.
 
 def main = { (n: Bool) =>
   var x @ c = 0;
@@ -18,15 +18,17 @@ def main = { (n: Bool) =>
 
 def main = { (n: Bool) =>
   let x0 = 0
-  def loop(b: Bool, x1: Int) = {
-    if (b: Bool) {
-      let x2 = 1
-      (loop : (Bool, Int) => (Int, Int) @ {})(false, x2: Int)
-    } else {
-      let r = x1: Int
-      return r: Int, x1: Int
+  val y, x3 = {
+    def loop(b: Bool, x1: Int) = {
+      if (b: Bool) {
+        let x2 = 1
+        (loop : (Bool, Int) => (Int, Int) @ {})(false, x2: Int)
+      } else {
+        let r = x1: Int
+        return r: Int, x1: Int
+      }
     }
-  }
-  val y, x3 = (loop : (Bool, Int) => (Int, Int) @ {})(n: Bool, x0: Int);
+    (loop : (Bool, Int) => (Int, Int) @ {})(n: Bool, x0: Int)
+  };
   return y: Int
 }
