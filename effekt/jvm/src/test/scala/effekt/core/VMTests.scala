@@ -967,7 +967,7 @@ class VMTests extends munit.FunSuite {
       shifts = 4348,
       resumes = 0
     )),
-    examplesDir / "benchmarks" / "folklore_to_fact" / "nqueens.effekt" -> Some(Summary(
+    examplesDir / "benchmarks" / "folklore_to_fact" / "queens.effekt" -> Some(Summary(
       staticDispatches = 770,
       dynamicDispatches = 0,
       patternMatches = 734,
