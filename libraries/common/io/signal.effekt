@@ -82,7 +82,7 @@ extern def fire[A, B](signal: Signal[A, B], value: A) at async: B =
     store i64 3, ptr %statePtr
     notail call void @erasePositive(%Pos ${signal})
     notail call void @resume_Pos(%Stack %otherStack, %Pos ${value})
-    notail call void @resume_Pos(%Stack %stack, %Pos %otherValue)
+    musttail call tailcc void @return_Pos(%Stack %stack, %Pos %otherValue) "no_callee_saved_registers"
     ret void
   panic:
     notail call void @exit(i32 1)
@@ -110,7 +110,7 @@ extern def wait[A, B](signal: Signal[A, B], value: B) at async: A =
     store i64 3, ptr %statePtr
     notail call void @erasePositive(%Pos ${signal})
     notail call void @resume_Pos(%Stack %otherStack, %Pos ${value})
-    notail call void @resume_Pos(%Stack %stack, %Pos %otherValue)
+    musttail call tailcc void @return_Pos(%Stack %stack, %Pos %otherValue) "no_callee_saved_registers"
     ret void
   panic:
     notail call void @exit(i32 1)

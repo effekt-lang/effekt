@@ -721,6 +721,17 @@ define private %Stack @withEmptyStack() {
     ret %Stack %stack
 }
 
+; `return_Pos` returns a value to an Effekt stack from Effekt code as a tail call.
+; Unlike `resume_Pos` below, it leaves no C native frame behind (like `$effekt.run` on JS)
+
+define private tailcc void @return_Pos(%Stack %stack, %Pos %argument) "no_callee_saved_registers" {
+    %stackPointer = call ccc %StackPointer @stackDeallocate(%Stack %stack, i64 24)
+    %returnAddressPointer = getelementptr %FrameHeader, %StackPointer %stackPointer, i64 0, i32 0
+    %returnAddress = load %ReturnAddress, ptr %returnAddressPointer, !alias.scope !12, !noalias !22
+    musttail call tailcc void %returnAddress(%Pos %argument, %Stack %stack) "no_callee_saved_registers"
+    ret void
+}
+
 ; Entry points: C enters Effekt code only through these functions:
 
 define ccc void @runTopLevel(ptr %entry) noinline {
