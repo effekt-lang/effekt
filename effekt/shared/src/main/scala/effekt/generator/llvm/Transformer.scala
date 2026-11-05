@@ -64,7 +64,7 @@ object Transformer {
       case machine.Extern(functionName, parameters, returnType, async, body) =>
         val transformedParameters = parameters.map { case machine.Variable(name, tpe) => Parameter(transform(tpe), name) }
         if (async) {
-          emit(VerbatimFunction(Tailcc(true), VoidType(), functionName, transformedParameters :+ Parameter(stackType, "stack"), transform(body)))
+          emit(VerbatimFunction(Tailcc(true), VoidType(), functionName, Parameter(stackType, "stack") :: transformedParameters, transform(body)))
         } else {
           emit(VerbatimFunction(Ccc(), transform(returnType), functionName, transformedParameters, transform(body)))
         }
@@ -604,16 +604,16 @@ object Transformer {
     val instructions = BC.instructions; BC.instructions = null;
 
     val entryBlock = BasicBlock("entry", instructions, terminator);
-    val function = Function(Private(), Tailcc(true), VoidType(), name, parameters :+ Parameter(stackType, "stack"), entryBlock :: basicBlocks);
+    val function = Function(Private(), Tailcc(true), VoidType(), name, Parameter(stackType, "stack") :: parameters, entryBlock :: basicBlocks);
 
     emit(function)
   }
 
   def callLabel(name: Operand, arguments: List[Operand])(using BlockContext): Instruction =
-    Call("_", Tailcc(true), VoidType(), name, arguments :+ getStack())
+    Call("_", Tailcc(true), VoidType(), name, getStack() :: arguments)
 
   def callLabelTransition(name: Operand, arguments: List[Operand])(using BlockContext): Instruction =
-    Call("_", Tailcc(false), VoidType(), name, arguments :+ getStack())
+    Call("_", Tailcc(false), VoidType(), name, getStack() :: arguments)
 
   def initialEnvironmentPointer = LocalReference(environmentType, "environment")
 

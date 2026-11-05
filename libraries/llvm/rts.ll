@@ -688,7 +688,7 @@ define private void @freeStack(%StackPointer %stackPointer) alwaysinline {
 
 ; RTS initialization
 
-define private tailcc void @topLevel(%Pos %val, %Stack %stack) "no_callee_saved_registers" {
+define private tailcc void @topLevel(%Stack %stack, %Pos %val) "no_callee_saved_registers" {
     call %Stack @underflowStack(%Stack %stack)
     ret void
 }
@@ -728,7 +728,7 @@ define private tailcc void @return_Pos(%Stack %stack, %Pos %argument) "no_callee
     %stackPointer = call ccc %StackPointer @stackDeallocate(%Stack %stack, i64 24)
     %returnAddressPointer = getelementptr %FrameHeader, %StackPointer %stackPointer, i64 0, i32 0
     %returnAddress = load %ReturnAddress, ptr %returnAddressPointer, !alias.scope !12, !noalias !22
-    musttail call tailcc void %returnAddress(%Pos %argument, %Stack %stack) "no_callee_saved_registers"
+    musttail call tailcc void %returnAddress(%Stack %stack, %Pos %argument) "no_callee_saved_registers"
     ret void
 }
 
@@ -744,7 +744,7 @@ define ccc void @resume_Int(%Stack %stack, %Int %argument) noinline {
     %stackPointer = call ccc %StackPointer @stackDeallocate(%Stack %stack, i64 24)
     %returnAddressPointer = getelementptr %FrameHeader, %StackPointer %stackPointer, i64 0, i32 0
     %returnAddress = load %ReturnAddress, ptr %returnAddressPointer, !alias.scope !12, !noalias !22
-    tail call tailcc void %returnAddress(%Int %argument, %Stack %stack) "no_callee_saved_registers"
+    tail call tailcc void %returnAddress(%Stack %stack, %Int %argument) "no_callee_saved_registers"
     ret void
 }
 
@@ -752,7 +752,7 @@ define ccc void @resume_Pos(%Stack %stack, %Pos %argument) noinline {
     %stackPointer = call ccc %StackPointer @stackDeallocate(%Stack %stack, i64 24)
     %returnAddressPointer = getelementptr %FrameHeader, %StackPointer %stackPointer, i64 0, i32 0
     %returnAddress = load %ReturnAddress, ptr %returnAddressPointer, !alias.scope !12, !noalias !22
-    tail call tailcc void %returnAddress(%Pos %argument, %Stack %stack) "no_callee_saved_registers"
+    tail call tailcc void %returnAddress(%Stack %stack, %Pos %argument) "no_callee_saved_registers"
     ret void
 }
 
@@ -764,7 +764,7 @@ define ccc void @run(%Neg %function) noinline {
     %functionPointerPointer = getelementptr ptr, ptr %arrayPointer, i64 0
     %functionPointer = load ptr, ptr %functionPointerPointer, !alias.scope !15, !noalias !25
 
-    tail call tailcc %Pos %functionPointer(%Object %object, %Stack %stack) "no_callee_saved_registers"
+    tail call tailcc %Pos %functionPointer(%Stack %stack, %Object %object) "no_callee_saved_registers"
     ret void
 }
 
@@ -776,7 +776,7 @@ define ccc void @run_Int(%Neg %function, %Int %argument) noinline {
     %functionPointerPointer = getelementptr ptr, ptr %arrayPointer, i64 0
     %functionPointer = load ptr, ptr %functionPointerPointer, !alias.scope !15, !noalias !25
 
-    tail call tailcc %Pos %functionPointer(%Object %object, %Int %argument, %Stack %stack) "no_callee_saved_registers"
+    tail call tailcc %Pos %functionPointer(%Stack %stack, %Object %object, %Int %argument) "no_callee_saved_registers"
     ret void
 }
 
@@ -788,7 +788,7 @@ define ccc void @run_Pos(%Neg %function, %Pos %argument) noinline {
     %functionPointerPointer = getelementptr ptr, ptr %arrayPointer, i64 0
     %functionPointer = load ptr, ptr %functionPointerPointer, !alias.scope !15, !noalias !25
 
-    tail call tailcc %Pos %functionPointer(%Object %object, %Pos %argument, %Stack %stack) "no_callee_saved_registers"
+    tail call tailcc %Pos %functionPointer(%Stack %stack, %Object %object, %Pos %argument) "no_callee_saved_registers"
     ret void
 }
 
