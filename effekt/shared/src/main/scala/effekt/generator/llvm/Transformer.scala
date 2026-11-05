@@ -369,7 +369,7 @@ object Transformer {
 
       case machine.Shift(variable, prompt, rest) =>
         emit(Comment(s"Shift ${variable.name}, prompt=${prompt.name}"))
-        val pair = LocalReference(StructureType(List(resumptionType, stackType)), freshName("pair"));
+        val pair = LocalReference(StructureType(List(resumptionType, stackType), packed = false), freshName("pair"));
         emit(Call(pair.name, Ccc(), pair.tpe, shift, List(getStack(), transform(prompt))));
 
         emit(ExtractValue(variable.name, pair, 0))
@@ -766,7 +766,7 @@ object Transformer {
   def environmentType(environment: machine.Environment): Type =
     StructureType(environment.map {
       case machine.Variable(_, tpe) => transform(tpe)
-    })
+    }, packed = true)
 
   def storeEnvironmentAt(pointer: Operand, environment: machine.Environment, alias: AliasInfo)(using ModuleContext, FunctionContext, BlockContext): Unit = {
     val `type` = environmentType(environment)

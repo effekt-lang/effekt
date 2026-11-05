@@ -131,7 +131,7 @@ enum Type {
   case DoubleType()
   case PointerType()
   case ArrayType(size: Int, of: Type)
-  case StructureType(elementTypes: List[Type])
+  case StructureType(elementTypes: List[Type], packed: Boolean)
   case FunctionType(resultType: Type, argumentTypes: List[Type])
   case NamedType(name: String)
 }
