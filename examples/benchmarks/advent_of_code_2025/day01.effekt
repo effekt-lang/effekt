@@ -15,22 +15,17 @@ def parseRotations(): Array[Rotation] / { Scan[Char], fail } =
     }
   } } }
 
-def rem(n: Int, m: Int): Int = {
-  val r = n.mod(m)
-  if (r < 0) r + m else r
-}
-
 def countZeros { positions: () => Unit / emit[Int] }: Int =
-  countIf { position => position.rem(100) == 0 } {positions}
+  countIf { position => position.mod(100) == 0 } {positions}
 
 def solveEasy(rotations: Array[Rotation]): Int = countZeros {
   var current = 50
   rotations.foreach { rotation =>
     rotation match {
       case Left(delta) =>
-        current = (current - delta).rem(100)
+        current = (current - delta).mod(100)
       case Right(delta) =>
-        current = (current + delta).rem(100)
+        current = (current + delta).mod(100)
     }
     do emit(current)
   }
@@ -42,10 +37,10 @@ def solveHard(rotations: Array[Rotation]): Int = countZeros {
     rotation match {
       case Left(delta) =>
         stream::range(current - delta, current)
-        current = (current - delta).rem(100)
+        current = (current - delta).mod(100)
       case Right(delta) =>
         stream::range(current + 1, current + delta + 1)
-        current = (current + delta).rem(100)
+        current = (current + delta).mod(100)
     }
   }
 }
