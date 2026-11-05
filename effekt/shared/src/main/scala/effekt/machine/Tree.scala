@@ -97,6 +97,7 @@ case class Definition(label: Label, body: Statement)
  *     │─ [[ Resume ]]
  *     │─ [[ Shift ]]
  *     │─ [[ ForeignCall ]]
+ *     │─ [[ ForeignJump ]]
  *     │─ [[ LiteralInt ]]
  *     │─ [[ LiteralDouble ]]
  *     │─ [[ LiteralUTF8String ]]
@@ -172,9 +173,16 @@ enum Statement {
   case Shift(name: Variable, prompt: Variable, rest: Statement)
 
   /**
-   * let x = #infix_add(v1, ...); s
+   * let! x = infix_add(v1, ...); s
    */
   case ForeignCall(name: Variable, builtin: String, arguments: Environment, rest: Statement)
+
+  /**
+   * Async foreign call: the foreign code recieves the stack and returns to it later through the top-most frame.
+   * 
+   * jump! readln(v1, ...)
+   */
+  case ForeignJump(builtin: String, arguments: Environment)
 
   /**
    * let x = 42; s

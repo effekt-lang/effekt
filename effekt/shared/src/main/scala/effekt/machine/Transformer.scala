@@ -261,13 +261,12 @@ object Transformer {
 
                 // Extern Async
                 case BlockInfo.Definition(freeParams, blockParams, true) =>
-                  // TODO better way to deal with extern async functions
                   annotatedTpe match {
                     case core.BlockType.Function(_, _, vparamTypes, _, resultType) =>
                       val returnType = transformExtern(core.Type.single(resultType))
                       val expectedType = transform(core.Type.single(stmt.tpe))
                       coerce(values, vparamTypes map transformExtern).run { coerced =>
-                        val jump = Jump(Label(transform(id), blockParams ++ freeParams), coerced ++ blocks ++ freeParams)
+                        val jump = ForeignJump(transform(id), coerced ++ blocks ++ freeParams)
                         if returnType == expectedType then Trampoline.Done(jump)
                         else
                           val returned = Variable(freshName("returned"), returnType)
