@@ -1,0 +1,19 @@
+// A reference that is only read and written becomes a sequence of value bindings.
+
+def main = { () =>
+  var x @ c = 0;
+  get a: Int = !x @ c;
+  put x @ c = 1;
+  get b: Int = !x @ c;
+  return b: Int
+}
+
+/// REFERENCES_TO_PARAMETERS
+
+def main = { () =>
+  let x0 = 0
+  let a = x0: Int
+  let x1 = 1
+  let b = x1: Int
+  return b: Int
+}

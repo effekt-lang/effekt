@@ -1,0 +1,31 @@
+// State that is not read after a non-tail call is not returned.
+
+def main = { (n: Bool) =>
+  var x @ c = 0;
+  def loop(b: Bool) = {
+    if (b: Bool) {
+      put x @ c = 1;
+      (loop : (Bool) => Unit @ {c})(false)
+    } else {
+      return ()
+    }
+  }
+  val u = (loop : (Bool) => Unit @ {c})(n: Bool);
+  return 42
+}
+
+/// REFERENCES_TO_PARAMETERS
+
+def main = { (n: Bool) =>
+  let x0 = 0
+  def loop(b: Bool, x1: Int) = {
+    if (b: Bool) {
+      let x2 = 1
+      (loop : (Bool, Int) => Unit @ {})(false, x2: Int)
+    } else {
+      return ()
+    }
+  }
+  val u = (loop : (Bool, Int) => Unit @ {})(n: Bool, x0: Int);
+  return 42
+}
