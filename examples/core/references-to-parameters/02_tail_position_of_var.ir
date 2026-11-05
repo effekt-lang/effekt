@@ -1,4 +1,4 @@
-// A loop that is only tail called takes the state as a parameter but does not return it.
+// A definition always returns the state; the body of the var drops it again.
 
 def main = { (n: Bool) =>
   var x @ c = 0;
@@ -21,11 +21,12 @@ def main = { (n: Bool) =>
   def loop(b: Bool, x1: Int) = {
     if (b: Bool) {
       let x2 = 1
-      (loop : (Bool, Int) => Int @ {})(false, x2: Int)
+      (loop : (Bool, Int) => (Int, Int) @ {})(false, x2: Int)
     } else {
       let r = x1: Int
-      return r: Int
+      return r: Int, x1: Int
     }
   }
-  (loop : (Bool, Int) => Int @ {})(n: Bool, x0: Int)
+  val y, x3 = (loop : (Bool, Int) => (Int, Int) @ {})(n: Bool, x0: Int);
+  return y: Int
 }

@@ -1,4 +1,4 @@
-// State that is not read after a non-tail call is not returned.
+// The state is returned even when nothing reads it afterwards.
 
 def main = { (n: Bool) =>
   var x @ c = 0;
@@ -21,11 +21,11 @@ def main = { (n: Bool) =>
   def loop(b: Bool, x1: Int) = {
     if (b: Bool) {
       let x2 = 1
-      (loop : (Bool, Int) => Unit @ {})(false, x2: Int)
+      (loop : (Bool, Int) => (Unit, Int) @ {})(false, x2: Int)
     } else {
-      return ()
+      return (), x1: Int
     }
   }
-  val u = (loop : (Bool, Int) => Unit @ {})(n: Bool, x0: Int);
+  val u, x3 = (loop : (Bool, Int) => (Unit, Int) @ {})(n: Bool, x0: Int);
   return 42
 }
