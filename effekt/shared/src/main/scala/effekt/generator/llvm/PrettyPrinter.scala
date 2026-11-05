@@ -167,7 +167,8 @@ ${indentedLines(instructions.map(show).mkString("\n"))}
     case DoubleType() => "double"
     case PointerType() => "ptr"
     case ArrayType(size, of) => s"[$size x ${show(of)}]"
-    case StructureType(elementTypes) => s"<{${commaSeparated(elementTypes.map(show))}}>"
+    case StructureType(elementTypes, true) => s"<{${commaSeparated(elementTypes.map(show))}}>"
+    case StructureType(elementTypes, false) => s"{${commaSeparated(elementTypes.map(show))}}"
     case FunctionType(returnType, argumentTypes) => s"${show(returnType)} (${commaSeparated(argumentTypes.map(show))})"
     case NamedType(name) => localName(name)
   }
