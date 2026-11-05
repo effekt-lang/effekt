@@ -49,7 +49,7 @@ folklore_to_fact/perm 33
 folklore_to_fact/motzkin 20
 folklore_to_fact/ack_goto 8
 folklore_to_fact/life 860
-folklore_to_fact/nqueens 11
+folklore_to_fact/queens 11
 folklore_to_fact/motzkin_goto 17
 folklore_to_fact/even_odd_goto 464699154
 folklore_to_fact/even_odd 538632389
