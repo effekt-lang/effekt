@@ -356,7 +356,7 @@ object Normalizer { normal =>
 
       // a jump to a join point is normal already, so we do not inline the join point into every exit
       def normalizeBody(body: Stmt)(using C: Context): Stmt = body match {
-        case Stmt.App(BlockVar(j, _, _), Nil, vargs, Nil) if C.joinPoints.contains(j) && vargs.forall(_.isInstanceOf[ValueVar]) => body
+        case Stmt.App(BlockVar(j, _, _), Nil, vargs, Nil) if C.joinPoints.contains(j) && !isOnce(j) && vargs.forall(_.isInstanceOf[ValueVar]) => body
         case _ => normalize(body)
       }
 
