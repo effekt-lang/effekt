@@ -21,7 +21,9 @@ enum Linkage {
 export Linkage.*
 
 enum CallingConvention {
+  /** Extern / native FFI functions. **/
   case Ccc()
+  /** Effekt functions: entered only by tailcalls, no native caller regains control inbetween, so no callee-saved registers */
   case Tailcc(musttail: Boolean)
 }
 export CallingConvention.*

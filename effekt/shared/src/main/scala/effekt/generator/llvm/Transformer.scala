@@ -26,9 +26,7 @@ object Transformer {
 
       val globals = MC.definitions; MC.definitions = null;
 
-      val entryInstructions = List(
-        Call("stack", Ccc(), stackType, withEmptyStack, List()),
-        Call("_", Tailcc(false), VoidType(), transform(entry), List(LocalReference(stackType, "stack"))))
+      val entryInstructions = List(Call("_", Ccc(), VoidType(), runTopLevel, List(transform(entry))))
       val entryBlock = BasicBlock("entry", entryInstructions, RetVoid())
       val entryFunction = Function(External(), Ccc(), VoidType(), "effektMain", List(), List(entryBlock))
       
@@ -876,7 +874,7 @@ object Transformer {
   val shift = ConstantGlobal("shift");
   val currentPrompt = ConstantGlobal("currentPrompt");
   val underflowStack = ConstantGlobal("underflowStack");
-  val withEmptyStack = ConstantGlobal("withEmptyStack");
+  val runTopLevel = ConstantGlobal("runTopLevel");
   val checkLimit = ConstantGlobal("checkLimit")
   val stackAllocate = ConstantGlobal("stackAllocate");
   val stackDeallocate = ConstantGlobal("stackDeallocate");

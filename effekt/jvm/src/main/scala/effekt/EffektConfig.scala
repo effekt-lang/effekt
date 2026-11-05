@@ -88,6 +88,13 @@ class EffektConfig(args: Seq[String]) extends REPLConfig(args.takeWhile(_ != "--
     group = advanced
   )
 
+  val clangTarget: ScallopOption[String] = opt[String](
+    "clang-target",
+    descr = "Target triple to compile for with clang, for example for cross-compilation",
+    noshort = true,
+    group = advanced
+  )
+
   val native: ScallopOption[Boolean] = toggle(
     "native",
     descrYes = "Optimize the executable for the native CPU. May break executable on other Devices. Only works for the LLVM backend",

@@ -14,13 +14,13 @@ object PrettyPrinter {
   def show(definition: Definition)(using C: Context): LLVMString = definition match {
     case Function(linkage, callingConvention, returnType, name, parameters, basicBlocks) =>
       s"""
-define ${show(linkage)} ${show(callingConvention)} ${show(returnType)} ${globalName(name)}(${commaSeparated(parameters.map(show))}) {
+define ${show(linkage)} ${show(callingConvention)} ${show(returnType)} ${globalName(name)}(${commaSeparated(parameters.map(show))})${attributes(callingConvention)} {
     ${indentedLines(basicBlocks.map(show).mkString)}
 }
 """
     case VerbatimFunction(callingConvention, returnType, name, parameters, body) =>
       s"""
-define ${show(callingConvention)} ${show(returnType)} ${globalName(name)}(${commaSeparated(parameters.map(show))}) {
+define ${show(callingConvention)} ${show(returnType)} ${globalName(name)}(${commaSeparated(parameters.map(show))})${attributes(callingConvention)} {
     $body
 }
 """
@@ -41,6 +41,11 @@ define ${show(callingConvention)} ${show(returnType)} ${globalName(name)}(${comm
   def show(linkage: Linkage): LLVMString = linkage match {
     case External() => "external"
     case Private() => "private"
+  }
+
+  def attributes(callingConvention: CallingConvention): LLVMString = callingConvention match {
+    case Ccc() => ""
+    case Tailcc(_) => " \"no_callee_saved_registers\"" // x64 only, other targets ignore it
   }
 
   def show(callingConvention: CallingConvention): LLVMString = callingConvention match {
@@ -68,9 +73,9 @@ ${indentedLines(instructions.map(show).mkString("\n"))}
     case Call(_, Ccc(), _, nonglobal, _) =>
       C.abort(s"cannot call non-global operand: $nonglobal") // why not?
     case Call(_, Tailcc(false), VoidType(), ConstantGlobal(name), arguments) =>
-      s"call tailcc void ${globalName(name)}(${commaSeparated(arguments.map(show))})"
+      s"call tailcc void ${globalName(name)}(${commaSeparated(arguments.map(show))})${attributes(Tailcc(false))}"
     case Call(_, Tailcc(false), VoidType(), LocalReference(_, name), arguments) =>
-      s"call tailcc void ${localName(name)}(${commaSeparated(arguments.map(show))})"
+      s"call tailcc void ${localName(name)}(${commaSeparated(arguments.map(show))})${attributes(Tailcc(false))}"
     case Call(result, Tailcc(true), resultType, function, arguments) =>
       s"musttail ${show(Call(result, Tailcc(false), resultType, function, arguments))}"
     case Call(_, Tailcc(_), tpe, _, _) =>
