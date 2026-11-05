@@ -19,15 +19,18 @@ def main = { (n: Bool) =>
 
 def main = { (n: Bool) =>
   let x0 = 0
-  def loop(b: Bool, x1: Int) = {
-    if (b: Bool) {
-      let x2 = 1
-      (loop : (Bool, Int) => (Unit, Int) @ {})(false, x2: Int)
-    } else {
-      return (), x1: Int
+  val y, x4 = {
+    def loop(b: Bool, x1: Int) = {
+      if (b: Bool) {
+        let x2 = 1
+        (loop : (Bool, Int) => (Unit, Int) @ {})(false, x2: Int)
+      } else {
+        return (), x1: Int
+      }
     }
-  }
-  val u, x3 = (loop : (Bool, Int) => (Unit, Int) @ {})(n: Bool, x0: Int);
-  let r = x3: Int
-  return r: Int
+    val u, x3 = (loop : (Bool, Int) => (Unit, Int) @ {})(n: Bool, x0: Int);
+    let r = x3: Int
+    return r: Int, x3: Int
+  };
+  return y: Int
 }

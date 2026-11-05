@@ -12,8 +12,11 @@ def main = { () =>
 
 def main = { () =>
   let x0 = 0
-  let a = x0: Int
-  let x1 = 1
-  let b = x1: Int
-  return b: Int
+  val y, x2 = {
+    let a = x0: Int
+    let x1 = 1
+    let b = x1: Int
+    return b: Int, x1: Int
+  };
+  return y: Int
 }
