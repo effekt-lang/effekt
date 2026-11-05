@@ -688,7 +688,7 @@ define private void @freeStack(%StackPointer %stackPointer) alwaysinline {
 
 ; RTS initialization
 
-define private tailcc void @topLevel(%Pos %val, %Stack %stack) {
+define private tailcc void @topLevel(%Pos %val, %Stack %stack) "no_callee_saved_registers" {
     call %Stack @underflowStack(%Stack %stack)
     ret void
 }
@@ -721,23 +721,31 @@ define private %Stack @withEmptyStack() {
     ret %Stack %stack
 }
 
-define ccc void @resume_Int(%Stack %stack, %Int %argument) {
+; Entry points: C enters Effekt code only through these functions:
+
+define ccc void @runTopLevel(ptr %entry) noinline {
+    %stack = call %Stack @withEmptyStack()
+    tail call tailcc void %entry(%Stack %stack) "no_callee_saved_registers"
+    ret void
+}
+
+define ccc void @resume_Int(%Stack %stack, %Int %argument) noinline {
     %stackPointer = call ccc %StackPointer @stackDeallocate(%Stack %stack, i64 24)
     %returnAddressPointer = getelementptr %FrameHeader, %StackPointer %stackPointer, i64 0, i32 0
     %returnAddress = load %ReturnAddress, ptr %returnAddressPointer, !alias.scope !12, !noalias !22
-    tail call tailcc void %returnAddress(%Int %argument, %Stack %stack)
+    tail call tailcc void %returnAddress(%Int %argument, %Stack %stack) "no_callee_saved_registers"
     ret void
 }
 
-define ccc void @resume_Pos(%Stack %stack, %Pos %argument) {
+define ccc void @resume_Pos(%Stack %stack, %Pos %argument) noinline {
     %stackPointer = call ccc %StackPointer @stackDeallocate(%Stack %stack, i64 24)
     %returnAddressPointer = getelementptr %FrameHeader, %StackPointer %stackPointer, i64 0, i32 0
     %returnAddress = load %ReturnAddress, ptr %returnAddressPointer, !alias.scope !12, !noalias !22
-    tail call tailcc void %returnAddress(%Pos %argument, %Stack %stack)
+    tail call tailcc void %returnAddress(%Pos %argument, %Stack %stack) "no_callee_saved_registers"
     ret void
 }
 
-define ccc void @run(%Neg %function) {
+define ccc void @run(%Neg %function) noinline {
     %stack = call %Stack @withEmptyStack()
 
     %arrayPointer = extractvalue %Neg %function, 0
@@ -745,11 +753,11 @@ define ccc void @run(%Neg %function) {
     %functionPointerPointer = getelementptr ptr, ptr %arrayPointer, i64 0
     %functionPointer = load ptr, ptr %functionPointerPointer, !alias.scope !15, !noalias !25
 
-    tail call tailcc %Pos %functionPointer(%Object %object, %Stack %stack)
+    tail call tailcc %Pos %functionPointer(%Object %object, %Stack %stack) "no_callee_saved_registers"
     ret void
 }
 
-define ccc void @run_Int(%Neg %function, %Int %argument) {
+define ccc void @run_Int(%Neg %function, %Int %argument) noinline {
     %stack = call %Stack @withEmptyStack()
 
     %arrayPointer = extractvalue %Neg %function, 0
@@ -757,11 +765,11 @@ define ccc void @run_Int(%Neg %function, %Int %argument) {
     %functionPointerPointer = getelementptr ptr, ptr %arrayPointer, i64 0
     %functionPointer = load ptr, ptr %functionPointerPointer, !alias.scope !15, !noalias !25
 
-    tail call tailcc %Pos %functionPointer(%Object %object, %Int %argument, %Stack %stack)
+    tail call tailcc %Pos %functionPointer(%Object %object, %Int %argument, %Stack %stack) "no_callee_saved_registers"
     ret void
 }
 
-define ccc void @run_Pos(%Neg %function, %Pos %argument) {
+define ccc void @run_Pos(%Neg %function, %Pos %argument) noinline {
     %stack = call %Stack @withEmptyStack()
 
     %arrayPointer = extractvalue %Neg %function, 0
@@ -769,7 +777,7 @@ define ccc void @run_Pos(%Neg %function, %Pos %argument) {
     %functionPointerPointer = getelementptr ptr, ptr %arrayPointer, i64 0
     %functionPointer = load ptr, ptr %functionPointerPointer, !alias.scope !15, !noalias !25
 
-    tail call tailcc %Pos %functionPointer(%Object %object, %Pos %argument, %Stack %stack)
+    tail call tailcc %Pos %functionPointer(%Object %object, %Pos %argument, %Stack %stack) "no_callee_saved_registers"
     ret void
 }
 
