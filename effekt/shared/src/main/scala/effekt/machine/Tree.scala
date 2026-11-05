@@ -172,7 +172,7 @@ enum Statement {
   case Shift(name: Variable, prompt: Variable, rest: Statement)
 
   /**
-   * let x = #infix_add(v1, ...); s
+   * let! x = infix_add(v1, ...); s
    */
   case ForeignCall(name: Variable, builtin: String, arguments: Environment, rest: Statement)
 

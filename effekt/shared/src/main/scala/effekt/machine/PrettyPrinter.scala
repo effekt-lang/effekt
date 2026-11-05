@@ -97,7 +97,7 @@ object PrettyPrinter extends ParenPrettyPrinter {
       "shift" <+> prompt <+> braces(name <+> "=>" <+> nest(line <> toDocStmts(rest)))
 
     case ForeignCall(name, builtin, arguments, rest) =>
-      "let" <+> name <+> "=" <+> builtin <> parens(arguments map toDoc) <> ";" <> line <> toDocStmts(rest)
+      "let!" <+> name <+> "=" <+> builtin <> parens(arguments map toDoc) <> ";" <> line <> toDocStmts(rest)
 
     case LiteralInt(name, value, rest) =>
       "let" <+> name <+> "=" <+> value.toString <> ";" <> line <> toDocStmts(rest)
