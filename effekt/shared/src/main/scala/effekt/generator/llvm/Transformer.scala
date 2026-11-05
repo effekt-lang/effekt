@@ -408,6 +408,12 @@ object Transformer {
         eraseValues(List(v), freeVariables(rest));
         transform(rest)
 
+      case machine.ForeignJump(foreign, values) =>
+        emit(Comment(s"foreignJump $foreign, ${values.length} values"))
+        shareValues(values, Set())
+        emit(callLabel(ConstantGlobal(foreign), values.map(transform)))
+        RetVoid()
+
       case machine.ForeignCall(variable @ machine.Variable(resultName, resultType), foreign, values, rest) =>
         emit(Comment(s"foreignCall $resultName : $resultType, foreign $foreign, ${values.length} values"))
         shareValues(values, freeVariables(rest));

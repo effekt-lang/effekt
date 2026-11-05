@@ -99,6 +99,9 @@ object PrettyPrinter extends ParenPrettyPrinter {
     case ForeignCall(name, builtin, arguments, rest) =>
       "let!" <+> name <+> "=" <+> builtin <> parens(arguments map toDoc) <> ";" <> line <> toDocStmts(rest)
 
+    case ForeignJump(builtin, arguments) =>
+      "jump!" <+> builtin <> parens(arguments map toDoc)
+
     case LiteralInt(name, value, rest) =>
       "let" <+> name <+> "=" <+> value.toString <> ";" <> line <> toDocStmts(rest)
 
