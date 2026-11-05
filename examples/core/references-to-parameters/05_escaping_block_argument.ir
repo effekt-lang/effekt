@@ -1,0 +1,19 @@
+// A reference used in a block argument escapes and is kept.
+
+def main = { () =>
+  var x @ c = 0;
+  (foo : () {f: () => Unit} => Unit @ {})() { () =>
+    put x @ c = 1;
+    return ()
+  }
+}
+
+/// REFERENCES_TO_PARAMETERS
+
+def main = { () =>
+  var x @ c = 0;
+  (foo : () {f: () => Unit} => Unit @ {})() { () =>
+    put x @ c = 1;
+    return ()
+  }
+}

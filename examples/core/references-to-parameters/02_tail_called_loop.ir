@@ -1,0 +1,31 @@
+// A loop that is only tail called takes the state as a parameter but does not return it.
+
+def main = { (n: Bool) =>
+  var x @ c = 0;
+  def loop(b: Bool) = {
+    if (b: Bool) {
+      put x @ c = 1;
+      (loop : (Bool) => Int @ {c})(false)
+    } else {
+      get r: Int = !x @ c;
+      return r: Int
+    }
+  }
+  (loop : (Bool) => Int @ {c})(n: Bool)
+}
+
+/// REFERENCES_TO_PARAMETERS
+
+def main = { (n: Bool) =>
+  let x0 = 0
+  def loop(b: Bool, x1: Int) = {
+    if (b: Bool) {
+      let x2 = 1
+      (loop : (Bool, Int) => Int @ {})(false, x2: Int)
+    } else {
+      let r = x1: Int
+      return r: Int
+    }
+  }
+  (loop : (Bool, Int) => Int @ {})(n: Bool, x0: Int)
+}
