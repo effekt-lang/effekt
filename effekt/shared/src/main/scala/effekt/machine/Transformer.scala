@@ -162,24 +162,24 @@ object Transformer {
         val freeBlockParams = block.free.blocks.iterator.flatMap {
 
           // Function itself
-          case (pid, (tpe, capt)) if pid == id => Set.empty
+          case (pid, (tpe, capt)) if pid == id => Nil
 
           case (pid, (tpe, capt)) =>
             BPC.info.get(pid) match {
               // For each known free block we have to add its free variables to this one (flat closure)
               case Some(BlockInfo.Definition(freeParams, blockParams, _)) =>
-                freeParams.toSet
+                freeParams
               // Unknown free blocks stay free variables
               case Some(BlockInfo.Parameter(tpe)) =>
-                Set(Variable(transform(pid), transform(tpe)))
+                List(Variable(transform(pid), transform(tpe)))
               // Everything else is considered bound or global
               case None =>
                 ErrorReporter.panic(s"Could not find info for free variable $pid")
             }
         }
-        val freeParams = (freeValueParams ++ freeBlockParams).toSet
+        val freeParams = (freeValueParams ++ freeBlockParams).toList.distinct
 
-        noteDefinition(id, vparams.map(transform) ++ bparams.map(transform), freeParams.toList)
+        noteDefinition(id, vparams.map(transform) ++ bparams.map(transform), freeParams)
 
         // (2) Actually translate the definitions
         emitDefinition(transformLabel(id), transform(body).run())
