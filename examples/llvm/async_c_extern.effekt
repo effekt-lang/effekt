@@ -1,0 +1,7 @@
+// see PR #1522
+extern def nap(millis: C::Int) at async: C::Int = c "c_nap"
+
+def main() = {
+  nap(C::Int(5))
+  println("unreachable")
+}
