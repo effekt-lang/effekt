@@ -1,0 +1,125 @@
+// A loop whose body calls a definition from outside: that definition moves into the loop, after the continuation.
+
+def main = { (n: Bool) =>
+  def f(x: Bool) = {
+    if (x: Bool) {
+      return false
+    } else {
+      return true
+    }
+  }
+  def loop(b: Bool) = {
+    if (b: Bool) {
+      val r = (f : (Bool) => Bool @ {})(b: Bool);
+      (loop : (Bool) => Int @ {})(r: Bool)
+    } else {
+      return 0
+    }
+  }
+  (loop : (Bool) => Int @ {})(n: Bool)
+}
+
+/// IDENTIFY
+
+def main(n: Bool) = {
+  def f(x: Bool) = {
+    if (x: Bool) {
+      return false
+    } else {
+      return true
+    }
+  }
+  def loop(b: Bool) = {
+    if (b: Bool) {
+      val r = f: (Bool) => Bool @ {}(b: Bool);
+      loop: (Bool) => Int @ {}(r: Bool)
+    } else {
+      return 0
+    }
+  }
+  loop: (Bool) => Int @ {}(n: Bool)
+}
+
+/// PLACE
+
+def main(n: Bool) = {
+  def loop(b: Bool) = {
+    def f(x: Bool) = {
+      if (x: Bool) {
+        return false
+      } else {
+        return true
+      }
+    }
+    if (b: Bool) {
+      val r = f: (Bool) => Bool @ {}(b: Bool);
+      loop: (Bool) => Int @ {}(r: Bool)
+    } else {
+      return 0
+    }
+  }
+  loop: (Bool) => Int @ {}(n: Bool)
+}
+
+/// RETURNS_TO
+
+f ↦ loop
+loop ↦ ?
+
+/// CONTIFY
+
+def main(n: Bool) = {
+  def loop(b: Bool) = {
+    def f(x: Bool) = {
+      if (x: Bool) {
+        loop: (Bool) => Int @ {}(false)
+      } else {
+        loop: (Bool) => Int @ {}(true)
+      }
+    }
+    if (b: Bool) {
+      f: (Bool) => Int @ {}(b: Bool)
+    } else {
+      return 0
+    }
+  }
+  loop: (Bool) => Int @ {}(n: Bool)
+}
+
+/// PARAMETRIZE
+
+def main(n: Bool) = {
+  def loop(b: Bool) = {
+    def f(x: Bool) = {
+      if (x: Bool) {
+        loop: (Bool) => Int @ {}(false)
+      } else {
+        loop: (Bool) => Int @ {}(true)
+      }
+    }
+    if (b: Bool) {
+      f: (Bool) => Int @ {}(b: Bool)
+    } else {
+      return 0
+    }
+  }
+  loop: (Bool) => Int @ {}(n: Bool)
+}
+
+/// CLEANUP
+
+def main(n: Bool) = {
+  def loop(b: Bool) = {
+    if (b: Bool) {
+      let x = b: Bool
+      if (x: Bool) {
+        loop: (Bool) => Int @ {}(false)
+      } else {
+        loop: (Bool) => Int @ {}(true)
+      }
+    } else {
+      return 0
+    }
+  }
+  loop: (Bool) => Int @ {}(n: Bool)
+}

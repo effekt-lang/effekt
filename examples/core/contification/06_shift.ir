@@ -13,28 +13,30 @@ def main(b: Bool){p: Prompt[Int]} = {
 
 /// IDENTIFY
 
-def main(b: Bool){p: Prompt[Int]} = {
+def main(b: Bool){p @ p: Prompt[Int]} = {
   def k(x: Int) = {
     return x: Int
   }
-  shift (p: Prompt[Int] @ {p}) {{r: (Int) ~> Int} =>
+  shift(p: Prompt[Int] @ {p}) {{r: (Int) ~> Int} => 
     if (b: Bool) {
-      resume (r: (Int) ~> Int @ {r}) { k: (Int) => Int @ {}(1) }
+      resume(r: (Int) ~> Int @ {r}) {
+        k: (Int) => Int @ {}(1)
+      }
     } else {
       return 0
     }
   }
 }
 
-/// SINK
+/// PLACE
 
-def main(b: Bool){p: Prompt[Int]} = {
-  shift (p: Prompt[Int] @ {p}) {{r: (Int) ~> Int} =>
+def main(b: Bool){p @ p: Prompt[Int]} = {
+  def k(x: Int) = {
+    return x: Int
+  }
+  shift(p: Prompt[Int] @ {p}) {{r: (Int) ~> Int} => 
     if (b: Bool) {
-      resume (r: (Int) ~> Int @ {r}) {
-        def k(x: Int) = {
-          return x: Int
-        }
+      resume(r: (Int) ~> Int @ {r}) {
         k: (Int) => Int @ {}(1)
       }
     } else {
@@ -49,13 +51,30 @@ k ↦ ?
 
 /// CONTIFY
 
-def main(b: Bool){p: Prompt[Int]} = {
-  shift (p: Prompt[Int] @ {p}) {{r: (Int) ~> Int} =>
+def main(b: Bool){p @ p: Prompt[Int]} = {
+  def k(x: Int) = {
+    return x: Int
+  }
+  shift(p: Prompt[Int] @ {p}) {{r: (Int) ~> Int} => 
     if (b: Bool) {
-      resume (r: (Int) ~> Int @ {r}) {
-        def k(x: Int) = {
-          return x: Int
-        }
+      resume(r: (Int) ~> Int @ {r}) {
+        k: (Int) => Int @ {}(1)
+      }
+    } else {
+      return 0
+    }
+  }
+}
+
+/// PARAMETRIZE
+
+def main(b: Bool){p @ p: Prompt[Int]} = {
+  def k(x: Int) = {
+    return x: Int
+  }
+  shift(p: Prompt[Int] @ {p}) {{r: (Int) ~> Int} => 
+    if (b: Bool) {
+      resume(r: (Int) ~> Int @ {r}) {
         k: (Int) => Int @ {}(1)
       }
     } else {
@@ -66,10 +85,10 @@ def main(b: Bool){p: Prompt[Int]} = {
 
 /// CLEANUP
 
-def main(b: Bool){p: Prompt[Int]} = {
-  shift (p: Prompt[Int] @ {p}) {{r: (Int) ~> Int} =>
+def main(b: Bool){p @ p: Prompt[Int]} = {
+  shift(p: Prompt[Int] @ {p}) {{r: (Int) ~> Int} => 
     if (b: Bool) {
-      resume (r: (Int) ~> Int @ {r}) {
+      resume(r: (Int) ~> Int @ {r}) {
         let x = 1
         return x: Int
       }

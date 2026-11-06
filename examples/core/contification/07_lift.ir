@@ -1,0 +1,105 @@
+// A continuation moves up to the definition returning to it; what it uses from below becomes a parameter.
+
+def main = { (b: Bool, c: Int) =>
+  def f(x: Bool) = {
+    if (b: Bool) {
+      return 1
+    } else {
+      return c: Int
+    }
+  }
+  let i = 9
+  val y = (f : (Bool) => Int @ {})(b: Bool);
+  return i: Int
+}
+
+/// IDENTIFY
+
+def main(b: Bool, c: Int) = {
+  def f(x: Bool) = {
+    if (b: Bool) {
+      return 1
+    } else {
+      return c: Int
+    }
+  }
+  let i = 9
+  def k(y: Int) = {
+    return i: Int
+  }
+  val r = f: (Bool) => Int @ {}(b: Bool);
+  k: (Int) => Int @ {}(r: Int)
+}
+
+/// PLACE
+
+def main(b: Bool, c: Int) = {
+  def k(y: Int) = {
+    return i: Int
+  }
+  def f(x: Bool) = {
+    if (b: Bool) {
+      return 1
+    } else {
+      return c: Int
+    }
+  }
+  let i = 9
+  val r = f: (Bool) => Int @ {}(b: Bool);
+  k: (Int) => Int @ {}(r: Int)
+}
+
+/// RETURNS_TO
+
+f ↦ k
+k ↦ ?
+
+/// CONTIFY
+
+def main(b: Bool, c: Int) = {
+  def k(y: Int) = {
+    return i: Int
+  }
+  def f(x: Bool) = {
+    if (b: Bool) {
+      k: (Int) => Int @ {}(1)
+    } else {
+      k: (Int) => Int @ {}(c: Int)
+    }
+  }
+  let i = 9
+  f: (Bool) => Int @ {}(b: Bool)
+}
+
+/// PARAMETRIZE
+
+def main(b: Bool, c: Int) = {
+  def k(y: Int, i: Int) = {
+    return i: Int
+  }
+  def f(x: Bool, i: Int) = {
+    if (b: Bool) {
+      k: (Int, Int) => Int @ {}(1, i: Int)
+    } else {
+      k: (Int, Int) => Int @ {}(c: Int, i: Int)
+    }
+  }
+  let i = 9
+  f: (Bool, Int) => Int @ {}(b: Bool, i: Int)
+}
+
+/// CLEANUP
+
+def main(b: Bool, c: Int) = {
+  def k(y: Int, i: Int) = {
+    return i: Int
+  }
+  let i = 9
+  let x = b: Bool
+  let i = i: Int
+  if (b: Bool) {
+    k: (Int, Int) => Int @ {}(1, i: Int)
+  } else {
+    k: (Int, Int) => Int @ {}(c: Int, i: Int)
+  }
+}

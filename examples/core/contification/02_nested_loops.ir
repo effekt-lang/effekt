@@ -43,29 +43,27 @@ def main(n: Bool) = {
   k: (Int) => Int @ {}(r: Int)
 }
 
-/// SINK
+/// PLACE
 
 def main(n: Bool) = {
   def k(x: Int) = {
     return x: Int
   }
-  val r = {
-    def outer(a: Bool) = {
-      if (a: Bool) {
-        def inner(b: Bool) = {
-          if (b: Bool) {
-            inner: (Bool) => Int @ {}(false)
-          } else {
-            outer: (Bool) => Int @ {}(false)
-          }
-        }
-        inner: (Bool) => Int @ {}(true)
+  def outer(a: Bool) = {
+    def inner(b: Bool) = {
+      if (b: Bool) {
+        inner: (Bool) => Int @ {}(false)
       } else {
-        return 0
+        outer: (Bool) => Int @ {}(false)
       }
     }
-    outer: (Bool) => Int @ {}(n: Bool)
-  };
+    if (a: Bool) {
+      inner: (Bool) => Int @ {}(true)
+    } else {
+      return 0
+    }
+  }
+  val r = outer: (Bool) => Int @ {}(n: Bool);
   k: (Int) => Int @ {}(r: Int)
 }
 
@@ -82,14 +80,37 @@ def main(n: Bool) = {
     return x: Int
   }
   def outer(a: Bool) = {
-    if (a: Bool) {
-      def inner(b: Bool) = {
-        if (b: Bool) {
-          inner: (Bool) => Int @ {}(false)
-        } else {
-          outer: (Bool) => Int @ {}(false)
-        }
+    def inner(b: Bool) = {
+      if (b: Bool) {
+        inner: (Bool) => Int @ {}(false)
+      } else {
+        outer: (Bool) => Int @ {}(false)
       }
+    }
+    if (a: Bool) {
+      inner: (Bool) => Int @ {}(true)
+    } else {
+      k: (Int) => Int @ {}(0)
+    }
+  }
+  outer: (Bool) => Int @ {}(n: Bool)
+}
+
+/// PARAMETRIZE
+
+def main(n: Bool) = {
+  def k(x: Int) = {
+    return x: Int
+  }
+  def outer(a: Bool) = {
+    def inner(b: Bool) = {
+      if (b: Bool) {
+        inner: (Bool) => Int @ {}(false)
+      } else {
+        outer: (Bool) => Int @ {}(false)
+      }
+    }
+    if (a: Bool) {
       inner: (Bool) => Int @ {}(true)
     } else {
       k: (Int) => Int @ {}(0)
@@ -102,14 +123,14 @@ def main(n: Bool) = {
 
 def main(n: Bool) = {
   def outer(a: Bool) = {
-    if (a: Bool) {
-      def inner(b: Bool) = {
-        if (b: Bool) {
-          inner: (Bool) => Int @ {}(false)
-        } else {
-          outer: (Bool) => Int @ {}(false)
-        }
+    def inner(b: Bool) = {
+      if (b: Bool) {
+        inner: (Bool) => Int @ {}(false)
+      } else {
+        outer: (Bool) => Int @ {}(false)
       }
+    }
+    if (a: Bool) {
       inner: (Bool) => Int @ {}(true)
     } else {
       let x = 0

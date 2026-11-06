@@ -16,28 +16,28 @@ def main(n: Bool) = {
     return 1
   }
   def k(x: Int) = {
-    def k2(y: Int) = {
+    def k(y: Int) = {
       return y: Int
     }
-    val r2 = f: (Bool) => Int @ {}(n: Bool);
-    k2: (Int) => Int @ {}(r2: Int)
+    val r = f: (Bool) => Int @ {}(n: Bool);
+    k: (Int) => Int @ {}(r: Int)
   }
   val r = f: (Bool) => Int @ {}(n: Bool);
   k: (Int) => Int @ {}(r: Int)
 }
 
-/// SINK
+/// PLACE
 
 def main(n: Bool) = {
   def f(b: Bool) = {
     return 1
   }
   def k(x: Int) = {
-    def k2(y: Int) = {
+    def k(y: Int) = {
       return y: Int
     }
-    val r2 = f: (Bool) => Int @ {}(n: Bool);
-    k2: (Int) => Int @ {}(r2: Int)
+    val r = f: (Bool) => Int @ {}(n: Bool);
+    k: (Int) => Int @ {}(r: Int)
   }
   val r = f: (Bool) => Int @ {}(n: Bool);
   k: (Int) => Int @ {}(r: Int)
@@ -56,11 +56,28 @@ def main(n: Bool) = {
     return 1
   }
   def k(x: Int) = {
-    def k2(y: Int) = {
+    def k(y: Int) = {
       return y: Int
     }
-    val r2 = f: (Bool) => Int @ {}(n: Bool);
-    k2: (Int) => Int @ {}(r2: Int)
+    val r = f: (Bool) => Int @ {}(n: Bool);
+    k: (Int) => Int @ {}(r: Int)
+  }
+  val r = f: (Bool) => Int @ {}(n: Bool);
+  k: (Int) => Int @ {}(r: Int)
+}
+
+/// PARAMETRIZE
+
+def main(n: Bool) = {
+  def f(b: Bool) = {
+    return 1
+  }
+  def k(x: Int) = {
+    def k(y: Int) = {
+      return y: Int
+    }
+    val r = f: (Bool) => Int @ {}(n: Bool);
+    k: (Int) => Int @ {}(r: Int)
   }
   val r = f: (Bool) => Int @ {}(n: Bool);
   k: (Int) => Int @ {}(r: Int)
@@ -74,7 +91,7 @@ def main(n: Bool) = {
   }
   val r = f: (Bool) => Int @ {}(n: Bool);
   let x = r: Int
-  val r2 = f: (Bool) => Int @ {}(n: Bool);
-  let y = r2: Int
+  val r = f: (Bool) => Int @ {}(n: Bool);
+  let y = r: Int
   return y: Int
 }

@@ -3,7 +3,7 @@ package core
 
 import java.io.File
 
-import effekt.core.optimizer.{ cleanup, contify, identify, returnsTo, sink }
+import effekt.core.optimizer.{ cleanup, contify, identify, parametrize, place, returnsTo }
 
 class ContificationTests extends CoreTests {
 
@@ -16,9 +16,10 @@ class ContificationTests extends CoreTests {
   registerCoreIRTests(
     new File("examples/core/contification"),
     CoreIRTransform("IDENTIFY", checked(identify)),
-    CoreIRTransform("SINK", checked(sink)),
+    CoreIRTransform("PLACE", place),
     CoreIRAnalysis("RETURNS_TO", input => returnsTo(input).show),
-    CoreIRTransform("CONTIFY", checked(contify)),
+    CoreIRTransform("CONTIFY", contify),
+    CoreIRTransform("PARAMETRIZE", checked(parametrize)),
     CoreIRTransform("CLEANUP", checked(cleanup))
   )
 }

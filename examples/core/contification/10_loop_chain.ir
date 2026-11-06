@@ -1,0 +1,142 @@
+// A loop through two definitions from outside, one tail-calling the other: both move into the loop.
+
+def main = { (n: Bool) =>
+  def g(y: Bool) = {
+    if (y: Bool) {
+      return false
+    } else {
+      return true
+    }
+  }
+  def f(x: Bool) = {
+    (g : (Bool) => Bool @ {})(x: Bool)
+  }
+  def loop(b: Bool) = {
+    if (b: Bool) {
+      val r = (f : (Bool) => Bool @ {})(b: Bool);
+      (loop : (Bool) => Int @ {})(r: Bool)
+    } else {
+      return 0
+    }
+  }
+  (loop : (Bool) => Int @ {})(n: Bool)
+}
+
+/// IDENTIFY
+
+def main(n: Bool) = {
+  def g(y: Bool) = {
+    if (y: Bool) {
+      return false
+    } else {
+      return true
+    }
+  }
+  def f(x: Bool) = {
+    g: (Bool) => Bool @ {}(x: Bool)
+  }
+  def loop(b: Bool) = {
+    if (b: Bool) {
+      val r = f: (Bool) => Bool @ {}(b: Bool);
+      loop: (Bool) => Int @ {}(r: Bool)
+    } else {
+      return 0
+    }
+  }
+  loop: (Bool) => Int @ {}(n: Bool)
+}
+
+/// PLACE
+
+def main(n: Bool) = {
+  def loop(b: Bool) = {
+    def g(y: Bool) = {
+      if (y: Bool) {
+        return false
+      } else {
+        return true
+      }
+    }
+    def f(x: Bool) = {
+      g: (Bool) => Bool @ {}(x: Bool)
+    }
+    if (b: Bool) {
+      val r = f: (Bool) => Bool @ {}(b: Bool);
+      loop: (Bool) => Int @ {}(r: Bool)
+    } else {
+      return 0
+    }
+  }
+  loop: (Bool) => Int @ {}(n: Bool)
+}
+
+/// RETURNS_TO
+
+f ↦ loop
+g ↦ loop
+loop ↦ ?
+
+/// CONTIFY
+
+def main(n: Bool) = {
+  def loop(b: Bool) = {
+    def g(y: Bool) = {
+      if (y: Bool) {
+        loop: (Bool) => Int @ {}(false)
+      } else {
+        loop: (Bool) => Int @ {}(true)
+      }
+    }
+    def f(x: Bool) = {
+      g: (Bool) => Int @ {}(x: Bool)
+    }
+    if (b: Bool) {
+      f: (Bool) => Int @ {}(b: Bool)
+    } else {
+      return 0
+    }
+  }
+  loop: (Bool) => Int @ {}(n: Bool)
+}
+
+/// PARAMETRIZE
+
+def main(n: Bool) = {
+  def loop(b: Bool) = {
+    def g(y: Bool) = {
+      if (y: Bool) {
+        loop: (Bool) => Int @ {}(false)
+      } else {
+        loop: (Bool) => Int @ {}(true)
+      }
+    }
+    def f(x: Bool) = {
+      g: (Bool) => Int @ {}(x: Bool)
+    }
+    if (b: Bool) {
+      f: (Bool) => Int @ {}(b: Bool)
+    } else {
+      return 0
+    }
+  }
+  loop: (Bool) => Int @ {}(n: Bool)
+}
+
+/// CLEANUP
+
+def main(n: Bool) = {
+  def loop(b: Bool) = {
+    if (b: Bool) {
+      let x = b: Bool
+      let y = x: Bool
+      if (y: Bool) {
+        loop: (Bool) => Int @ {}(false)
+      } else {
+        loop: (Bool) => Int @ {}(true)
+      }
+    } else {
+      return 0
+    }
+  }
+  loop: (Bool) => Int @ {}(n: Bool)
+}

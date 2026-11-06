@@ -20,27 +20,27 @@ def main(n: Bool) = {
   def k(x: Int) = {
     return x: Int
   }
-  val y = {
+  val r = {
     var r @ c = 0;
     f: (Bool) => Int @ {}(n: Bool)
   };
-  k: (Int) => Int @ {}(y: Int)
+  k: (Int) => Int @ {}(r: Int)
 }
 
-/// SINK
+/// PLACE
 
 def main(n: Bool) = {
+  def f(b: Bool) = {
+    return 1
+  }
   def k(x: Int) = {
     return x: Int
   }
-  val y = {
+  val r = {
     var r @ c = 0;
-    def f(b: Bool) = {
-      return 1
-    }
     f: (Bool) => Int @ {}(n: Bool)
   };
-  k: (Int) => Int @ {}(y: Int)
+  k: (Int) => Int @ {}(r: Int)
 }
 
 /// RETURNS_TO
@@ -51,27 +51,43 @@ k ↦ ?
 /// CONTIFY
 
 def main(n: Bool) = {
+  def f(b: Bool) = {
+    return 1
+  }
   def k(x: Int) = {
     return x: Int
   }
-  val y = {
+  val r = {
     var r @ c = 0;
-    def f(b: Bool) = {
-      return 1
-    }
     f: (Bool) => Int @ {}(n: Bool)
   };
-  k: (Int) => Int @ {}(y: Int)
+  k: (Int) => Int @ {}(r: Int)
+}
+
+/// PARAMETRIZE
+
+def main(n: Bool) = {
+  def f(b: Bool) = {
+    return 1
+  }
+  def k(x: Int) = {
+    return x: Int
+  }
+  val r = {
+    var r @ c = 0;
+    f: (Bool) => Int @ {}(n: Bool)
+  };
+  k: (Int) => Int @ {}(r: Int)
 }
 
 /// CLEANUP
 
 def main(n: Bool) = {
-  val y = {
+  val r = {
     var r @ c = 0;
     let b = n: Bool
     return 1
   };
-  let x = y: Int
+  let x = r: Int
   return x: Int
 }

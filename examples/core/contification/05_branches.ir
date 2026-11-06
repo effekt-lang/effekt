@@ -18,7 +18,7 @@ def main(b: Bool) = {
   }
 }
 
-/// SINK
+/// PLACE
 
 def main(b: Bool) = {
   def k(x: Int) = {
@@ -36,6 +36,19 @@ def main(b: Bool) = {
 k ↦ ?
 
 /// CONTIFY
+
+def main(b: Bool) = {
+  def k(x: Int) = {
+    return x: Int
+  }
+  if (b: Bool) {
+    k: (Int) => Int @ {}(1)
+  } else {
+    k: (Int) => Int @ {}(2)
+  }
+}
+
+/// PARAMETRIZE
 
 def main(b: Bool) = {
   def k(x: Int) = {

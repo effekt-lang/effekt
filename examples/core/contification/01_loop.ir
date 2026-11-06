@@ -29,22 +29,20 @@ def main(n: Bool) = {
   k: (Int) => Int @ {}(r: Int)
 }
 
-/// SINK
+/// PLACE
 
 def main(n: Bool) = {
   def k(x: Int) = {
     return x: Int
   }
-  val r = {
-    def loop(b: Bool) = {
-      if (b: Bool) {
-        loop: (Bool) => Int @ {}(false)
-      } else {
-        return 1
-      }
+  def loop(b: Bool) = {
+    if (b: Bool) {
+      loop: (Bool) => Int @ {}(false)
+    } else {
+      return 1
     }
-    loop: (Bool) => Int @ {}(n: Bool)
-  };
+  }
+  val r = loop: (Bool) => Int @ {}(n: Bool);
   k: (Int) => Int @ {}(r: Int)
 }
 
@@ -54,6 +52,22 @@ k ↦ ?
 loop ↦ k
 
 /// CONTIFY
+
+def main(n: Bool) = {
+  def k(x: Int) = {
+    return x: Int
+  }
+  def loop(b: Bool) = {
+    if (b: Bool) {
+      loop: (Bool) => Int @ {}(false)
+    } else {
+      k: (Int) => Int @ {}(1)
+    }
+  }
+  loop: (Bool) => Int @ {}(n: Bool)
+}
+
+/// PARAMETRIZE
 
 def main(n: Bool) = {
   def k(x: Int) = {
