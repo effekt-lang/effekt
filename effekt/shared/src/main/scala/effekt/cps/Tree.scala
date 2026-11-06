@@ -3,7 +3,6 @@ package cps
 
 import core.{ Id, ValueType, BlockType, Captures }
 import effekt.source.FeatureFlag
-import effekt.util.messages.ErrorReporter
 import effekt.util.messages.INTERNAL_ERROR
 
 sealed trait Tree extends Product {
@@ -56,9 +55,7 @@ enum Extern extends Tree {
 sealed trait ExternBody[+T] extends Tree
 object ExternBody {
   case class StringExternBody[+T](featureFlag: FeatureFlag, contents: Template[T]) extends ExternBody[T]
-  case class Unsupported(err: util.messages.EffektError) extends ExternBody[Nothing] {
-    def report(using E: ErrorReporter): Unit = E.report(err)
-  }
+  case class Unsupported(missing: source.MissingExternBody) extends ExternBody[Nothing]
 }
 
 case class Def(id: Id, block: Block) extends Tree

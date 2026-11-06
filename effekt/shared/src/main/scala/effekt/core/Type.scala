@@ -249,7 +249,7 @@ object Type {
         case Extern.Def(id, qualifiedSignature, tparams, cparams, vparams, bparams, ret, annotatedCapture, body) =>
           val splices = body match {
             case ExternBody.StringExternBody(featureFlag, contents) => contents.args
-            case ExternBody.Unsupported(err) => Nil
+            case ExternBody.Unsupported(_) => Nil
           }
           all(splices, splice => splice.typing).check()
 

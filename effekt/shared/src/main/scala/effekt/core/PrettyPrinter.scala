@@ -79,7 +79,7 @@ class PrettyPrinter(printDetails: Boolean, printInternalIds: Boolean = true) ext
       "extern" <+> toDoc(capt) <+> "def" <+> toDoc(id) <> paramsToDoc(tps, cps, vps, bps) <> ":" <+> toDoc(ret) <+> "=" <+> (bodies match {
         case ExternBody.StringExternBody(ff, body) => toDoc(ff) <+> toDoc(body)
         // The unsupported case is not currently supported by the core parser
-        case ExternBody.Unsupported(err) => ???
+        case ExternBody.Unsupported(_) => ???
       })
     case Extern.Include(ff, contents) => "extern" <+> toDoc(ff) <+> stringLiteral(contents)
     case Extern.Data(id, tps, ExternBody.Unsupported(_)) => "extern type" <+> toDoc(id) <> typeParamsDoc(tps)

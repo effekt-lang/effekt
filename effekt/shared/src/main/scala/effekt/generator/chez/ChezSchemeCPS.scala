@@ -11,7 +11,7 @@ class ChezSchemeCPS extends Compiler[String] {
 
   override def extension: String = ".ss"
 
-  override def supportedFeatureFlags: List[String] = List("chez", "chezCPS")
+  override def supportedFeatureFlags: List[String] = TransformerCPS.chezFeatureFlags
 
   override def prettyIR(source: Source, stage: Stage)(using C: Context): Option[Document] = stage match {
     case Stage.Core if C.config.optimize() => Optimized(source).map { (_, _, res) => core.PrettyPrinter(Context.config.debug()).format(res) }

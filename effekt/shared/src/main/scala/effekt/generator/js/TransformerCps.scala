@@ -118,8 +118,8 @@ object TransformerCps extends Transformer {
           val k = freshName("k_")
           js.Function(nameDef(id), (vps ++ bps).map(toJSParam) ++ List(ks, k),
             List(js.Return(js.Call(toJS(contents), List(js.Variable(ks), js.Variable(k))))))
-        case ExternBody.Unsupported(err) =>
-          C.errors.report(err)
+        case ExternBody.Unsupported(missing) =>
+          missing.report(C.errors.compiler.supportedFeatureFlags)
           js.Function(nameDef(id), (vps ++ bps) map toJSParam, List(js.Return($effekt.call("unreachable"))))
       }
 
@@ -128,30 +128,30 @@ object TransformerCps extends Transformer {
       body match {
         case ExternBody.StringExternBody(_, contents) =>
           js.Function(nameDef(id), (vps ++ bps) map toJSParam, List(js.Return(toJS(contents))))
-        case ExternBody.Unsupported(err) =>
-          C.errors.report(err)
+        case ExternBody.Unsupported(missing) =>
+          missing.report(C.errors.compiler.supportedFeatureFlags)
           js.Function(nameDef(id), (vps ++ bps) map toJSParam, List(js.Return($effekt.call("unreachable"))))
       }
 
     case cps.Extern.Data(id, tps, ExternBody.StringExternBody(_, body)) =>
       val ttps = tps match {
         case Nil => ""
-        case tps => tps.map { x => x.show }.mkString(", ")
+        case tps => tps.map { x => x.show }.mkString("[", ", ", "]")
       }
-      js.RawStmt(s"// extern type ${id.show}${ttps} = ${body}")
+      js.RawStmt(s"// extern type ${id.show}${ttps} = ${body.fill(identity)}")
 
-    case cps.Extern.Data(id, tps, ExternBody.Unsupported(err)) =>
-      js.RawStmt(s"// unsupported extern type ${id.show}: ${err}")
+    case cps.Extern.Data(id, tps, ExternBody.Unsupported(missing)) =>
+      js.RawStmt(s"// unsupported extern type ${id.show}: ${missing.explanation(C.errors.compiler.supportedFeatureFlags)}")
 
     case cps.Extern.Interface(id, tps, ExternBody.StringExternBody(_, body)) =>
       val ttps = tps match {
         case Nil => ""
-        case tps => tps.map { x => x.show }.mkString(", ")
+        case tps => tps.map { x => x.show }.mkString("[", ", ", "]")
       }
-      js.RawStmt(s"// extern type ${id.show}${ttps} = ${body}")
+      js.RawStmt(s"// extern interface ${id.show}${ttps} = ${body.fill(identity)}")
 
-    case cps.Extern.Interface(id, tps, ExternBody.Unsupported(err)) =>
-      js.RawStmt(s"// unsupported extern type ${id.show}: ${err}")
+    case cps.Extern.Interface(id, tps, ExternBody.Unsupported(missing)) =>
+      js.RawStmt(s"// unsupported extern interface ${id.show}: ${missing.explanation(C.errors.compiler.supportedFeatureFlags)}")
 
     case cps.Extern.Include(ff, contents) =>
       js.RawStmt(contents)

@@ -15,15 +15,12 @@ object ResolveExternDefs extends Phase[Typechecked, Typechecked] {
 
   def supported(using Context): List[String] = Context.compiler.supportedFeatureFlags
 
-  def defaultExternBody(warning: String)(using Context): ExternBody[Nothing, Nothing] =
-    ExternBody.Unsupported(Context.plainMessage(warning, kiama.util.Severities.Warning))
-
   def rewrite(decl: ModuleDecl)(using Context): ModuleDecl = decl match {
     case ModuleDecl(path, includes, defs, doc, span) =>
       ModuleDecl(path, includes, defs.flatMap(rewrite), doc, span)
   }
 
-  def findPreferred[S, E](bodies: List[ExternBody[S, E]])(using Context): ExternBody[S, E] = {
+  def findPreferred[S, E](bodies: List[ExternBody[S, E]], name: String, span: Span)(using Context): ExternBody[S, E] = {
     // IMPORTANT: Should be deterministic.
     bodies.filter { b => b.featureFlag.matches(supported) }
       .minByOption { b =>
@@ -32,15 +29,13 @@ object ResolveExternDefs extends Phase[Typechecked, Typechecked] {
           case p => p
         }
       }.getOrElse {
-        val featureFlags = bodies.map(_.featureFlag)
-        defaultExternBody(s"Extern definition is not supported as it is only defined for feature flags ${featureFlags.mkString(", ")}," +
-          s"but the current backend only supports ${Context.compiler.supportedFeatureFlags.mkString(", ")}.")
+        ExternBody.Unsupported(MissingExternBody(name, bodies.map(_.featureFlag), span))
       }
   }
 
   def rewrite(defn: Def)(using Context): Option[Def] = Context.focusing(defn) {
       case Def.ExternDef(id, tparams, vparams, bparams, capture, ret, bodies, doc, span) =>
-        findPreferred(bodies.unspan) match {
+        findPreferred(bodies.unspan, id.name, span) match {
           case body@ExternBody.StringExternBody(featureFlag, template, span) =>
             if (featureFlag.isDefault) {
               Context.warning(s"Extern definition ${id} contains extern string without feature flag. This will likely not work in other backends, "
@@ -62,7 +57,7 @@ object ResolveExternDefs extends Phase[Typechecked, Typechecked] {
         }
 
       case Def.ExternType(id, tparams, bodies, info, span) =>
-        findPreferred(bodies.unspan) match {
+        findPreferred(bodies.unspan, id.name, span) match {
           case body@ExternBody.StringExternBody(featureFlag, template, span) =>
             if (featureFlag.isDefault) {
               Context.warning(s"Extern definition ${id} contains extern string without feature flag. This will likely not work in other backends, "
@@ -79,7 +74,7 @@ object ResolveExternDefs extends Phase[Typechecked, Typechecked] {
         }
 
       case Def.ExternInterface(id, tparams, bodies, info, span) =>
-        findPreferred(bodies.unspan) match {
+        findPreferred(bodies.unspan, id.name, span) match {
           case body@ExternBody.StringExternBody(featureFlag, template, span) =>
             if (featureFlag.isDefault) {
               Context.warning(s"Extern definition ${id} contains extern string without feature flag. This will likely not work in other backends, "

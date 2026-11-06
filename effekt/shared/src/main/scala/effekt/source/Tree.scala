@@ -238,9 +238,29 @@ sealed trait ExternBody[+S, +E] extends Tree {
 object ExternBody {
   case class StringExternBody[+S](featureFlag: FeatureFlag, template: Template[S], span: Span) extends ExternBody[S, Nothing]
   case class EffektExternBody[+T](featureFlag: FeatureFlag, body: T, span: Span) extends ExternBody[Nothing, T]
-  case class Unsupported(message: util.messages.EffektError) extends ExternBody {
+  case class Unsupported(missing: MissingExternBody) extends ExternBody {
     val span: Span = Span.missing
     override def featureFlag: FeatureFlag = FeatureFlag.Default(Span.missing)
+  }
+}
+
+/** An extern without a matching body for the current backend, being defined only for `definedFor`. */
+case class MissingExternBody(name: String, definedFor: List[FeatureFlag], span: Span) {
+  def explanation(supported: List[String]): String = definedFor match {
+    case Nil => s"Extern `${name}` has no body."
+    case List(flag) => s"Extern `${name}` has no body for feature flag ${listed(supported, "or")}. It has a body only for `${flag}`."
+    case flags => s"Extern `${name}` has no body for feature flag ${listed(supported, "or")}. It has bodies only for ${listed(flags.map(_.toString), "and")}."
+  }
+
+  def report(supported: List[String])(using E: util.messages.ErrorReporter): Unit = {
+    val range = if (span.origin == Origin.Missing) None else Some(span.range)
+    val text = s"${explanation(supported)} A call to `${name}` stops the program."
+    E.report(util.messages.PlainTextError(text, range, kiama.util.Severities.Warning))
+  }
+
+  private def listed(items: List[String], conjunction: String): String = items.map(i => s"`${i}`") match {
+    case init :+ last if init.nonEmpty => s"${init.mkString(", ")} ${conjunction} ${last}"
+    case items => items.mkString
   }
 }
 
@@ -994,7 +1014,7 @@ object Tree {
         case ExternBody.EffektExternBody(ff, body, span) => query(body)
         case ExternBody.StringExternBody(ff, tmpl, span) =>
           combineAll(tmpl.args.map(query))
-        case ExternBody.Unsupported(msg) => empty
+        case ExternBody.Unsupported(_) => empty
       }
     def query(a: ValueArg)(using Context, Ctx): Res = structuralQuery(a)
 

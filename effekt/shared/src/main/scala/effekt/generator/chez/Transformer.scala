@@ -17,6 +17,8 @@ import scala.collection.mutable
 
 object TransformerMonadic extends Transformer {
 
+  val chezFeatureFlags: List[String] = List("chezMonadic", "chez")
+
   def run(expr: chez.Expr): chez.Expr =
     Builtin("run", expr)
 
@@ -31,6 +33,8 @@ object TransformerMonadic extends Transformer {
 }
 
 object TransformerCallCC extends Transformer {
+
+  val chezFeatureFlags: List[String] = List("chezCallCC", "chez")
 
   def run(expr: chez.Expr): chez.Expr = expr
 
@@ -51,6 +55,8 @@ object TransformerCallCC extends Transformer {
 trait Transformer {
 
   val escapeSeqs: Map[Char, String] = Map('\'' -> raw"'", '\"' -> raw"\"", '\\' -> raw"\\", '\n' -> raw"\n", '\t' -> raw"\t", '\r' -> raw"\r")
+
+  def chezFeatureFlags: List[String]
 
   def run(expr: chez.Expr): chez.Expr
   def pure(exprs: List[chez.Expr]): chez.Expr
@@ -132,8 +138,8 @@ trait Transformer {
     case Extern.Def(id, qualifiedSignature, tpe, cps, vps, bps, ret, capt, body) =>
       val tBody = body match {
         case ExternBody.StringExternBody(featureFlag, contents) => toChez(contents)
-        case u: ExternBody.Unsupported =>
-          u.report
+        case ExternBody.Unsupported(missing) =>
+          missing.report(chezFeatureFlags)
           chez.Builtin("unreachable")
       }
       Some(chez.Constant(nameDef(id),

@@ -11,6 +11,8 @@ import effekt.util.messages.ErrorReporter
 
 object TransformerCPS {
 
+  val chezFeatureFlags: List[String] = List("chez", "chezCPS")
+
   val HOLE = "hole"
 
   // Defined in chez/cps/effekt.ss
@@ -70,19 +72,19 @@ object TransformerCPS {
     case Extern.Data(id, tps, ExternBody.StringExternBody(_, body)) =>
       val ttps = tps match {
         case Nil => ""
-        case tps => tps.map { x => x.show }.mkString(", ")
+        case tps => tps.map { x => x.show }.mkString("[", ", ", "]")
       }
-      chez.RawDef(s";; extern type ${id.show}${ttps} = ${body}")
-    case Extern.Data(id, tps, ExternBody.Unsupported(err)) =>
-      chez.RawDef(s";; unsupported extern type ${id.show}: ${err}")
+      chez.RawDef(s";; extern type ${id.show}${ttps} = ${body.fill(identity)}")
+    case Extern.Data(id, tps, ExternBody.Unsupported(missing)) =>
+      chez.RawDef(s";; unsupported extern type ${id.show}: ${missing.explanation(chezFeatureFlags)}")
     case Extern.Interface(id, tps, ExternBody.StringExternBody(_, body)) =>
       val ttps = tps match {
         case Nil => ""
-        case tps => tps.map { x => x.show }.mkString(", ")
+        case tps => tps.map { x => x.show }.mkString("[", ", ", "]")
       }
-      chez.RawDef(s";; extern interface ${id.show}${ttps} = ${body}")
-    case Extern.Interface(id, tps, ExternBody.Unsupported(err)) =>
-      chez.RawDef(s";; unsupported extern interface ${id.show}: ${err}")
+      chez.RawDef(s";; extern interface ${id.show}${ttps} = ${body.fill(identity)}")
+    case Extern.Interface(id, tps, ExternBody.Unsupported(missing)) =>
+      chez.RawDef(s";; unsupported extern interface ${id.show}: ${missing.explanation(chezFeatureFlags)}")
     case Extern.Include(_, contents) =>
       chez.RawDef(contents)
   }
@@ -90,8 +92,8 @@ object TransformerCPS {
   def toChez(externBody: cps.ExternBody[cps.Expr])(using ErrorReporter): chez.Expr = externBody match {
     case ExternBody.StringExternBody(_, contents) =>
       RawExpr(contents.strings, contents.args.map(toChez))
-    case unsupported: ExternBody.Unsupported =>
-      unsupported.report
+    case ExternBody.Unsupported(missing) =>
+      missing.report(chezFeatureFlags)
       chez.Builtin(HOLE)
   }
 

@@ -83,7 +83,7 @@ object Transformer {
       val tBody = body match {
         case core.ExternBody.StringExternBody(featureFlag, Template(strings, args)) =>
           ExternBody.StringExternBody(featureFlag, Template(strings, args.map{ absurd => absurd }))
-        case core.ExternBody.Unsupported(err) => ExternBody.Unsupported(err)
+        case core.ExternBody.Unsupported(missing) => ExternBody.Unsupported(missing)
       }
       ExternType(transform(id), tparams.map(transform), tBody)
 
@@ -91,7 +91,7 @@ object Transformer {
       val tBody = body match {
         case core.ExternBody.StringExternBody(featureFlag, Template(strings, args)) =>
           ExternBody.StringExternBody(featureFlag, Template(strings, args.map{ absurd => absurd }))
-        case core.ExternBody.Unsupported(err) => ExternBody.Unsupported(err)
+        case core.ExternBody.Unsupported(missing) => ExternBody.Unsupported(missing)
       }
       ExternInterface(transform(id), tparams.map(transform), tBody)
   }
@@ -112,7 +112,7 @@ object Transformer {
     DC.findExternData(name).flatMap(value => value.body match {
       case StringExternBody(_, contents) => 
         parseCType(contents.strings.head).map(machine.Type.CTpe.apply)
-      case Unsupported(err) => None
+      case Unsupported(_) => None
     })
 
   def getExternCTpe(name: Id)(using DC: DeclarationContext)(using ErrorReporter): machine.Type.CTpe =
@@ -143,8 +143,8 @@ object Transformer {
         case core.ValueVar(id, tpe) => Variable(transform(id), transformExtern(tpe))
         case _ => ErrorReporter.abort("In the LLVM backend, only variables are allowed in templates")
       }))
-    case core.ExternBody.Unsupported(err) =>
-      ExternBody.Unsupported(err)
+    case core.ExternBody.Unsupported(missing) =>
+      ExternBody.Unsupported(missing)
   }
 
   def transform(stmt: core.Stmt)(using BPC: BlocksParamsContext, DC: DeclarationContext, E: ErrorReporter): Trampoline[Statement] =

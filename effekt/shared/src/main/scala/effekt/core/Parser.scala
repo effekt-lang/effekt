@@ -322,9 +322,7 @@ class CoreParsers(names: Names) extends EffektLexers {
             Template(List(body), Nil)))
       case id ~ tparams ~ None =>
         Extern.Data(id, tparams.getOrElse(Nil),
-          ExternBody.Unsupported(
-            effekt.util.messages.PlainTextError(
-              "Extern has no right-hand side", None, kiama.util.Severities.Error)))
+          ExternBody.Unsupported(source.MissingExternBody(id.name.name, Nil, source.Span.missing)))
     })
 
   lazy val externBodyTemplate: P[Template[Expr]] =
