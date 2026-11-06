@@ -120,7 +120,7 @@ declare void @llvm.assume(i1)
 
 ; Prompts
 
-define private %Prompt @currentPrompt(%Stack %stack) {
+define private %Prompt @currentPrompt(%Stack %stack, %StackPointer %stackPointer) {
     %prompt_pointer = getelementptr %StackValue, %Stack %stack, i64 0, i32 3
     %prompt = load %Prompt, ptr %prompt_pointer, !alias.scope !11, !noalias !21
     ret %Prompt %prompt
@@ -261,7 +261,7 @@ define private %Stack @getStack(%Prompt %prompt) {
     ret %Stack %stack
 }
 
-define private ptr @getVarPointer(%Reference %reference, %Stack %stack) {
+define private ptr @getVarPointer(%Stack %stack, %StackPointer %stackPointer, %Reference %reference) {
     %prompt = extractvalue %Reference %reference, 0
     %offset = extractvalue %Reference %reference, 1
 
@@ -270,16 +270,13 @@ define private ptr @getVarPointer(%Reference %reference, %Stack %stack) {
     ret ptr %varPointer
 }
 
-define private %Reference @newReference(%Stack %stack) alwaysinline {
-    %stackPointer_pointer = getelementptr %StackValue, %Stack %stack, i64 0, i32 1
-    %stackPointer = load %StackPointer, ptr %stackPointer_pointer, !alias.scope !11, !noalias !21
-
+define private %Reference @newReference(%Stack %stack, %StackPointer %stackPointer) alwaysinline {
     %intStack = ptrtoint %StackPointer %stackPointer to i64
     %intBase = ptrtoint %Stack %stack to i64
 
     %offset = sub i64 %intStack, %intBase
 
-    %prompt = call %Prompt @currentPrompt(%Stack %stack)
+    %prompt = call %Prompt @currentPrompt(%Stack %stack, %StackPointer %stackPointer)
 
     %reference..1 = insertvalue %Reference undef, %Prompt %prompt, 0
     %reference = insertvalue %Reference %reference..1, i64 %offset, 1
@@ -288,22 +285,38 @@ define private %Reference @newReference(%Stack %stack) alwaysinline {
 }
 
 ; Stack management
+;
+; The stack pointer field of a stack is only meaningful while it is not the current stack:
+; the stack pointer of the current stack is passed as a value next to it.
+; Operations that switch stacks save it into the stack they leave and restore it from the stack they enter.
 
-define private %Stack @checkLimit(%Stack %stack, i64 %n) alwaysinline {
+define private %Stack @saveStackPointer(%Stack %stack, %StackPointer %stackPointer) alwaysinline {
     %stackPointer_pointer = getelementptr %StackValue, %Stack %stack, i64 0, i32 1
+    store %StackPointer %stackPointer, ptr %stackPointer_pointer, !alias.scope !11, !noalias !21
+    ret %Stack %stack
+}
+
+define private %StackPointer @restoreStackPointer(%Stack %stack) alwaysinline {
+    %stackPointer_pointer = getelementptr %StackValue, %Stack %stack, i64 0, i32 1
+    %stackPointer = load %StackPointer, ptr %stackPointer_pointer, !alias.scope !11, !noalias !21
+    ret %StackPointer %stackPointer
+}
+
+define private {%Stack, %StackPointer} @checkLimit(%Stack %stack, %StackPointer %stackPointer, i64 %n) alwaysinline {
     %limit_pointer = getelementptr %StackValue, %Stack %stack, i64 0, i32 2
 
-    %currentStackPointer = load %StackPointer, ptr %stackPointer_pointer, !alias.scope !11, !noalias !21
     %limit = load %Limit, ptr %limit_pointer, !alias.scope !11, !noalias !21
-    %nextStackPointer = getelementptr i8, %StackPointer %currentStackPointer, i64 %n
+    %nextStackPointer = getelementptr i8, %StackPointer %stackPointer, i64 %n
     %isInside = icmp ule %StackPointer %nextStackPointer, %limit
     br i1 %isInside, label %done, label %realloc
 
 done:
-    ret %Stack %stack
+    %stackAndPointer.0 = insertvalue {%Stack, %StackPointer} undef, %Stack %stack, 0
+    %stackAndPointer = insertvalue {%Stack, %StackPointer} %stackAndPointer.0, %StackPointer %stackPointer, 1
+    ret {%Stack, %StackPointer} %stackAndPointer
 
 realloc:
-    %intStackPointer = ptrtoint %StackPointer %currentStackPointer to i64
+    %intStackPointer = ptrtoint %StackPointer %stackPointer to i64
     %intBase = ptrtoint %Stack %stack to i64
 
     %size = sub i64 %intStackPointer, %intBase
@@ -314,10 +327,7 @@ realloc:
     %newLimit = getelementptr i8, %Base %newStack, i64 %newSize
     %newStackPointer = getelementptr i8, %Base %newStack, i64 %size
 
-    %newStackPointer_pointer = getelementptr %StackValue, %Stack %newStack, i64 0, i32 1
     %newLimit_pointer = getelementptr %StackValue, %Stack %newStack, i64 0, i32 2
-
-    store %StackPointer %newStackPointer, ptr %newStackPointer_pointer, !alias.scope !11, !noalias !21
     store %Limit %newLimit, ptr %newLimit_pointer, !alias.scope !11, !noalias !21
 
     %prompt_pointer = getelementptr %StackValue, %Stack %newStack, i64 0, i32 3
@@ -325,23 +335,17 @@ realloc:
     %promptStack = getelementptr %PromptValue, %Prompt %prompt, i64 0, i32 1
     store %Stack %newStack, ptr %promptStack, !alias.scope !13, !noalias !23
 
-    ret %Stack %newStack
+    %newStackAndPointer.0 = insertvalue {%Stack, %StackPointer} undef, %Stack %newStack, 0
+    %newStackAndPointer = insertvalue {%Stack, %StackPointer} %newStackAndPointer.0, %StackPointer %newStackPointer, 1
+    ret {%Stack, %StackPointer} %newStackAndPointer
 }
 
-define private %StackPointer @stackAllocate(%Stack %stack, i64 %n) alwaysinline {
-    %stackPointer_pointer = getelementptr %StackValue, %Stack %stack, i64 0, i32 1
-
-    %currentStackPointer = load %StackPointer, ptr %stackPointer_pointer, !alias.scope !11, !noalias !21
-    %nextStackPointer = getelementptr i8, %StackPointer %currentStackPointer, i64 %n
-
-    store %StackPointer %nextStackPointer, ptr %stackPointer_pointer, !alias.scope !11, !noalias !21
-    ret %StackPointer %currentStackPointer
+define private %StackPointer @stackAllocate(%StackPointer %stackPointer, i64 %n) alwaysinline {
+    %nextStackPointer = getelementptr i8, %StackPointer %stackPointer, i64 %n
+    ret %StackPointer %nextStackPointer
 }
 
-define private %StackPointer @stackDeallocate(%Stack %stack, i64 %n) {
-    %stackPointer_pointer = getelementptr %StackValue, %Stack %stack, i64 0, i32 1
-    %stackPointer = load %StackPointer, ptr %stackPointer_pointer, !alias.scope !11, !noalias !21
-
+define private %StackPointer @stackDeallocate(%Stack %stack, %StackPointer %stackPointer, i64 %n) {
     %limit_pointer = getelementptr %StackValue, %Stack %stack, i64 0, i32 2
     %limit = load %Limit, ptr %limit_pointer, !alias.scope !11, !noalias !21
     %isInside = icmp ule %StackPointer %stackPointer, %limit
@@ -349,7 +353,6 @@ define private %StackPointer @stackDeallocate(%Stack %stack, i64 %n) {
 
     %o = sub i64 0, %n
     %newStackPointer = getelementptr i8, %StackPointer %stackPointer, i64 %o
-    store %StackPointer %newStackPointer, ptr %stackPointer_pointer, !alias.scope !11, !noalias !21
 
     ret %StackPointer %newStackPointer
 }
@@ -361,9 +364,7 @@ define private i64 @nextPowerOfTwo(i64 %x) {
     ret i64 %result
 }
 
-define private void @assumeFrameHeaderWasPopped(%Stack %stack) alwaysinline {
-    %stackPointer_pointer = getelementptr %StackValue, %Stack %stack, i64 0, i32 1
-    %stackPointer = load %StackPointer, ptr %stackPointer_pointer, !alias.scope !11, !noalias !21
+define private void @assumeFrameHeaderWasPopped(%Stack %stack, %StackPointer %stackPointer) alwaysinline {
     %oldStackPointer = getelementptr %FrameHeader, %StackPointer %stackPointer, i64 1
 
     %limit_pointer = getelementptr %StackValue, %Stack %stack, i64 0, i32 2
@@ -375,7 +376,7 @@ define private void @assumeFrameHeaderWasPopped(%Stack %stack) alwaysinline {
 
 ; Meta-stack management
 
-define private %Stack @reset(%Stack %oldStack) {
+define private %Stack @freshStack(%Stack %rest) {
 
     %prompt = call %Prompt @freshPrompt()
 
@@ -387,7 +388,7 @@ define private %Stack @reset(%Stack %oldStack) {
     %stack.0 = insertvalue %StackValue zeroinitializer, %StackPointer %stackPointer, 1
     %stack.1 = insertvalue %StackValue %stack.0, %Limit %limit, 2
     %stack.2 = insertvalue %StackValue %stack.1, %Prompt %prompt, 3
-    %stack.3 = insertvalue %StackValue %stack.2, %Stack %oldStack, 4
+    %stack.3 = insertvalue %StackValue %stack.2, %Stack %rest, 4
 
     store %StackValue %stack.3, %Stack %stack, !alias.scope !11, !noalias !21
 
@@ -395,6 +396,15 @@ define private %Stack @reset(%Stack %oldStack) {
     store %Stack %stack, ptr %promptStack, !alias.scope !13, !noalias !23
 
     ret %Stack %stack
+}
+
+define private {%Stack, %StackPointer} @reset(%Stack %stack, %StackPointer %stackPointer) {
+    %saved = call %Stack @saveStackPointer(%Stack %stack, %StackPointer %stackPointer)
+    %fresh = call %Stack @freshStack(%Stack %saved)
+    %restored = call %StackPointer @restoreStackPointer(%Stack %fresh)
+    %stackAndPointer.0 = insertvalue {%Stack, %StackPointer} undef, %Stack %fresh, 0
+    %stackAndPointer = insertvalue {%Stack, %StackPointer} %stackAndPointer.0, %StackPointer %restored, 1
+    ret {%Stack, %StackPointer} %stackAndPointer
 }
 
 define private void @revalidate(%Stack %stack) {
@@ -454,7 +464,8 @@ continue:
     ret void
 }
 
-define private %Stack @resume(%Resumption %resumption, %Stack %oldStack) {
+define private {%Stack, %StackPointer} @resume(%Stack %stack, %StackPointer %stackPointer, %Resumption %resumption) {
+    %oldStack = call %Stack @saveStackPointer(%Stack %stack, %StackPointer %stackPointer)
     %uniqueResumption = call %Resumption @uniqueStack(%Resumption %resumption)
     %rest_pointer = getelementptr %StackValue, %Resumption %uniqueResumption, i64 0, i32 4
     %start = load %Stack, ptr %rest_pointer, !alias.scope !11, !noalias !21
@@ -462,20 +473,27 @@ define private %Stack @resume(%Resumption %resumption, %Stack %oldStack) {
 
     store %Stack %oldStack, ptr %rest_pointer, !alias.scope !11, !noalias !21
 
-    ret %Stack %start
+    %restored = call %StackPointer @restoreStackPointer(%Stack %start)
+    %stackAndPointer.0 = insertvalue {%Stack, %StackPointer} undef, %Stack %start, 0
+    %stackAndPointer = insertvalue {%Stack, %StackPointer} %stackAndPointer.0, %StackPointer %restored, 1
+    ret {%Stack, %StackPointer} %stackAndPointer
 }
 
-define private {%Resumption, %Stack} @shift(%Stack %stack, %Prompt %prompt) {
+define private {%Resumption, {%Stack, %StackPointer}} @shift(%Stack %stack, %StackPointer %stackPointer, %Prompt %prompt) {
+    %saved = call %Stack @saveStackPointer(%Stack %stack, %StackPointer %stackPointer)
     %resumpion_pointer = getelementptr %PromptValue, %Prompt %prompt, i64 0, i32 1
     %resumption = load %Stack, ptr %resumpion_pointer, !alias.scope !13, !noalias !23
     %next_pointer = getelementptr %StackValue, %Stack %resumption, i64 0, i32 4
     %next = load %Stack, ptr %next_pointer, !alias.scope !11, !noalias !21
 
-    store %Stack %stack, ptr %next_pointer, !alias.scope !11, !noalias !21
+    store %Stack %saved, ptr %next_pointer, !alias.scope !11, !noalias !21
 
-    %result.0 = insertvalue {%Resumption, %Stack} undef, %Resumption %resumption, 0
-    %result = insertvalue {%Resumption, %Stack} %result.0, %Stack %next, 1
-    ret {%Resumption, %Stack} %result
+    %restored = call %StackPointer @restoreStackPointer(%Stack %next)
+    %stackAndPointer.0 = insertvalue {%Stack, %StackPointer} undef, %Stack %next, 0
+    %stackAndPointer = insertvalue {%Stack, %StackPointer} %stackAndPointer.0, %StackPointer %restored, 1
+    %result.0 = insertvalue {%Resumption, {%Stack, %StackPointer}} undef, %Resumption %resumption, 0
+    %result = insertvalue {%Resumption, {%Stack, %StackPointer}} %result.0, {%Stack, %StackPointer} %stackAndPointer, 1
+    ret {%Resumption, {%Stack, %StackPointer}} %result
 }
 
 define private void @erasePrompt(%Prompt %prompt) alwaysinline {
@@ -501,7 +519,7 @@ define private void @sharePrompt(%Prompt %prompt) alwaysinline {
     ret void
 }
 
-define private %Stack @underflowStack(%Stack %stack) {
+define private %Stack @finishStack(%Stack %stack) {
     %stackPrompt = getelementptr %StackValue, %Stack %stack, i64 0, i32 3
     %stackRest = getelementptr %StackValue, %Stack %stack, i64 0, i32 4
 
@@ -515,6 +533,14 @@ define private %Stack @underflowStack(%Stack %stack) {
     call void @free(%Stack %stack)
 
     ret %Stack %rest
+}
+
+define private {%Stack, %StackPointer} @underflowStack(%Stack %stack, %StackPointer %stackPointer) {
+    %rest = call %Stack @finishStack(%Stack %stack)
+    %restored = call %StackPointer @restoreStackPointer(%Stack %rest)
+    %stackAndPointer.0 = insertvalue {%Stack, %StackPointer} undef, %Stack %rest, 0
+    %stackAndPointer = insertvalue {%Stack, %StackPointer} %stackAndPointer.0, %StackPointer %restored, 1
+    ret {%Stack, %StackPointer} %stackAndPointer
 }
 
 define private void @nop(%Stack %stack) {
@@ -688,8 +714,8 @@ define private void @freeStack(%StackPointer %stackPointer) alwaysinline {
 
 ; RTS initialization
 
-define private tailcc void @topLevel(%Stack %stack, %Pos %val) "no_callee_saved_registers" {
-    call %Stack @underflowStack(%Stack %stack)
+define private tailcc void @topLevel(%Stack %stack, %StackPointer %stackPointer, %Pos %val) "no_callee_saved_registers" {
+    call %Stack @finishStack(%Stack %stack)
     ret void
 }
 
@@ -702,7 +728,7 @@ define private void @topLevelEraser(%Environment %environment) {
 }
 
 define private %Stack @withEmptyStack() {
-    %stack = call %Stack @reset(%Stack null)
+    %stack = call %Stack @freshStack(%Stack null)
 
     %stackStackPointer = getelementptr %StackValue, %Stack %stack, i64 0, i32 1
     %stackPointer = load %StackPointer, ptr %stackStackPointer, !alias.scope !11, !noalias !21
@@ -725,10 +751,11 @@ define private %Stack @withEmptyStack() {
 ; Unlike `resume_Pos` below, it leaves no C native frame behind (like `$effekt.run` on JS)
 
 define private tailcc void @return_Pos(%Stack %stack, %Pos %argument) "no_callee_saved_registers" {
-    %stackPointer = call ccc %StackPointer @stackDeallocate(%Stack %stack, i64 24)
+    %startStackPointer = call %StackPointer @restoreStackPointer(%Stack %stack)
+    %stackPointer = call %StackPointer @stackDeallocate(%Stack %stack, %StackPointer %startStackPointer, i64 24)
     %returnAddressPointer = getelementptr %FrameHeader, %StackPointer %stackPointer, i64 0, i32 0
     %returnAddress = load %ReturnAddress, ptr %returnAddressPointer, !alias.scope !12, !noalias !22
-    musttail call tailcc void %returnAddress(%Stack %stack, %Pos %argument) "no_callee_saved_registers"
+    musttail call tailcc void %returnAddress(%Stack %stack, %StackPointer %stackPointer, %Pos %argument) "no_callee_saved_registers"
     ret void
 }
 
@@ -736,59 +763,65 @@ define private tailcc void @return_Pos(%Stack %stack, %Pos %argument) "no_callee
 
 define ccc void @runTopLevel(ptr %entry) noinline {
     %stack = call %Stack @withEmptyStack()
-    tail call tailcc void %entry(%Stack %stack) "no_callee_saved_registers"
+    %stackPointer = call %StackPointer @restoreStackPointer(%Stack %stack)
+    tail call tailcc void %entry(%Stack %stack, %StackPointer %stackPointer) "no_callee_saved_registers"
     ret void
 }
 
 define ccc void @resume_Int(%Stack %stack, %Int %argument) noinline {
-    %stackPointer = call ccc %StackPointer @stackDeallocate(%Stack %stack, i64 24)
+    %startStackPointer = call %StackPointer @restoreStackPointer(%Stack %stack)
+    %stackPointer = call %StackPointer @stackDeallocate(%Stack %stack, %StackPointer %startStackPointer, i64 24)
     %returnAddressPointer = getelementptr %FrameHeader, %StackPointer %stackPointer, i64 0, i32 0
     %returnAddress = load %ReturnAddress, ptr %returnAddressPointer, !alias.scope !12, !noalias !22
-    tail call tailcc void %returnAddress(%Stack %stack, %Int %argument) "no_callee_saved_registers"
+    tail call tailcc void %returnAddress(%Stack %stack, %StackPointer %stackPointer, %Int %argument) "no_callee_saved_registers"
     ret void
 }
 
 define ccc void @resume_Pos(%Stack %stack, %Pos %argument) noinline {
-    %stackPointer = call ccc %StackPointer @stackDeallocate(%Stack %stack, i64 24)
+    %startStackPointer = call %StackPointer @restoreStackPointer(%Stack %stack)
+    %stackPointer = call %StackPointer @stackDeallocate(%Stack %stack, %StackPointer %startStackPointer, i64 24)
     %returnAddressPointer = getelementptr %FrameHeader, %StackPointer %stackPointer, i64 0, i32 0
     %returnAddress = load %ReturnAddress, ptr %returnAddressPointer, !alias.scope !12, !noalias !22
-    tail call tailcc void %returnAddress(%Stack %stack, %Pos %argument) "no_callee_saved_registers"
+    tail call tailcc void %returnAddress(%Stack %stack, %StackPointer %stackPointer, %Pos %argument) "no_callee_saved_registers"
     ret void
 }
 
 define ccc void @run(%Neg %function) noinline {
     %stack = call %Stack @withEmptyStack()
+    %stackPointer = call %StackPointer @restoreStackPointer(%Stack %stack)
 
     %arrayPointer = extractvalue %Neg %function, 0
     %object = extractvalue %Neg %function, 1
     %functionPointerPointer = getelementptr ptr, ptr %arrayPointer, i64 0
     %functionPointer = load ptr, ptr %functionPointerPointer, !alias.scope !15, !noalias !25
 
-    tail call tailcc %Pos %functionPointer(%Stack %stack, %Object %object) "no_callee_saved_registers"
+    tail call tailcc %Pos %functionPointer(%Stack %stack, %StackPointer %stackPointer, %Object %object) "no_callee_saved_registers"
     ret void
 }
 
 define ccc void @run_Int(%Neg %function, %Int %argument) noinline {
     %stack = call %Stack @withEmptyStack()
+    %stackPointer = call %StackPointer @restoreStackPointer(%Stack %stack)
 
     %arrayPointer = extractvalue %Neg %function, 0
     %object = extractvalue %Neg %function, 1
     %functionPointerPointer = getelementptr ptr, ptr %arrayPointer, i64 0
     %functionPointer = load ptr, ptr %functionPointerPointer, !alias.scope !15, !noalias !25
 
-    tail call tailcc %Pos %functionPointer(%Stack %stack, %Object %object, %Int %argument) "no_callee_saved_registers"
+    tail call tailcc %Pos %functionPointer(%Stack %stack, %StackPointer %stackPointer, %Object %object, %Int %argument) "no_callee_saved_registers"
     ret void
 }
 
 define ccc void @run_Pos(%Neg %function, %Pos %argument) noinline {
     %stack = call %Stack @withEmptyStack()
+    %stackPointer = call %StackPointer @restoreStackPointer(%Stack %stack)
 
     %arrayPointer = extractvalue %Neg %function, 0
     %object = extractvalue %Neg %function, 1
     %functionPointerPointer = getelementptr ptr, ptr %arrayPointer, i64 0
     %functionPointer = load ptr, ptr %functionPointerPointer, !alias.scope !15, !noalias !25
 
-    tail call tailcc %Pos %functionPointer(%Stack %stack, %Object %object, %Pos %argument) "no_callee_saved_registers"
+    tail call tailcc %Pos %functionPointer(%Stack %stack, %StackPointer %stackPointer, %Object %object, %Pos %argument) "no_callee_saved_registers"
     ret void
 }
 
