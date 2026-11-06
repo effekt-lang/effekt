@@ -7,7 +7,7 @@ package llvm
  *  see: https://hackage.haskell.org/package/llvm-hs-pure-9.0.0/docs/LLVM-AST.html#t:Definition
  */
 enum Definition {
-  case Function(linkage: Linkage, callingConvention: CallingConvention, returnType: Type, name: String, parameters: List[Parameter], basicBlocks: List[BasicBlock])
+  case Function(linkage: Linkage, callingConvention: CallingConvention, returnType: Type, name: String, parameters: List[Parameter], basicBlocks: List[BasicBlock], prefix: Option[Operand] = None)
   case VerbatimFunction(callingConvention: CallingConvention, returnType: Type, name: String, parameters: List[Parameter], body: String)
   case Verbatim(content: String)
   case GlobalConstant(name: String, initializer: Operand) // initializer should be constant
@@ -103,6 +103,7 @@ object Operand {
   case class ConstantNull(tpe: Type) extends Operand
   case class ConstantArray(memberType: Type, members: List[Operand]) extends Operand // members should be homogeneous
   case class ConstantInteger8(b: Byte) extends Operand
+  case class ConstantOffset(target: String, origin: String) extends Operand // distance from global `origin` to global `target` as an `i64`
 }
 export Operand.*
 

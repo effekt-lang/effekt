@@ -29,9 +29,14 @@
 
 ; A Frame has the following layout
 ;
-;   +-------[ FrameHeader ]------------+--------------+
-;   | ReturnAddress  | Sharer | Eraser | Payload ...  |
-;   +----------------------------------+--------------+
+;         frame (on the stack)                 return address (in code)
+;   +-------[ FrameHeader ]-------+          +-------------------------+
+;   | ReturnAddress  -------------+--\       | sharer offset           |---> Sharer
+;   +-----------------------------+   \      | eraser offset           |---> Eraser
+;   | Payload ...                 |    \---> | code ...                |
+;   +-----------------------------+          +-------------------------+
+;
+; A sharer / eraser of a frame are stored before its return address (as LLVM prefix data).
 
 ; A stack pointer points to the top-most frame followed by all other frames.
 ;
@@ -54,7 +59,7 @@
 %Base = type %StackPointer
 %Limit = type %StackPointer
 %ReturnAddress = type ptr
-%FrameHeader = type { %ReturnAddress, %Sharer, %Eraser }
+%FrameHeader = type { %ReturnAddress }
 
 ; Unique address for each handler.
 %Prompt = type ptr
@@ -690,18 +695,26 @@ done:
     ret void
 }
 
+; The frame's sharer (index -2) or eraser (index -1) are an offset stored before its return address's code
+define private ptr @frameDescriptorEntry(%StackPointer %header, i64 %index) alwaysinline {
+    %returnAddressPointer = getelementptr %FrameHeader, %StackPointer %header, i64 0, i32 0
+    %returnAddress = load %ReturnAddress, ptr %returnAddressPointer, !alias.scope !12, !noalias !22
+    %offsetPointer = getelementptr i64, ptr %returnAddress, i64 %index
+    %offset = load i64, ptr %offsetPointer
+    %entry = getelementptr i8, ptr %returnAddress, i64 %offset
+    ret ptr %entry
+}
+
 define private void @shareFrames(%StackPointer %stackPointer) alwaysinline {
     %newStackPointer = getelementptr %FrameHeader, %StackPointer %stackPointer, i64 -1
-    %stackSharer = getelementptr %FrameHeader, %StackPointer %newStackPointer, i64 0, i32 1
-    %sharer = load %Sharer, ptr %stackSharer, !alias.scope !12, !noalias !22
+    %sharer = call %Sharer @frameDescriptorEntry(%StackPointer %newStackPointer, i64 -2)
     tail call void %sharer(%StackPointer %newStackPointer)
     ret void
 }
 
 define private void @eraseFrames(%StackPointer %stackPointer) alwaysinline {
     %newStackPointer = getelementptr %FrameHeader, %StackPointer %stackPointer, i64 -1
-    %stackEraser = getelementptr %FrameHeader, %StackPointer %newStackPointer, i64 0, i32 2
-    %eraser = load %Eraser, ptr %stackEraser, !alias.scope !12, !noalias !22
+    %eraser = call %Eraser @frameDescriptorEntry(%StackPointer %newStackPointer, i64 -1)
     tail call void %eraser(%StackPointer %newStackPointer)
     ret void
 }
@@ -714,7 +727,9 @@ define private void @freeStack(%StackPointer %stackPointer) alwaysinline {
 
 ; RTS initialization
 
-define private tailcc void @topLevel(%Stack %stack, %StackPointer %stackPointer, %Pos %val) "no_callee_saved_registers" {
+define private tailcc void @topLevel(%Stack %stack, %StackPointer %stackPointer, %Pos %val) "no_callee_saved_registers"
+    prefix [2 x i64] [i64 sub (i64 ptrtoint (ptr @topLevelSharer to i64), i64 ptrtoint (ptr @topLevel to i64)),
+                      i64 sub (i64 ptrtoint (ptr @topLevelEraser to i64), i64 ptrtoint (ptr @topLevel to i64))] {
     call %Stack @finishStack(%Stack %stack)
     ret void
 }
@@ -734,12 +749,8 @@ define private %Stack @withEmptyStack() {
     %stackPointer = load %StackPointer, ptr %stackStackPointer, !alias.scope !11, !noalias !21
 
     %returnAddressPointer = getelementptr %FrameHeader, %StackPointer %stackPointer, i64 0, i32 0
-    %sharerPointer = getelementptr %FrameHeader, %StackPointer %stackPointer, i64 0, i32 1
-    %eraserPointer = getelementptr %FrameHeader, %StackPointer %stackPointer, i64 0, i32 2
 
     store %ReturnAddress @topLevel, ptr %returnAddressPointer, !alias.scope !12, !noalias !22
-    store %Sharer @topLevelSharer, ptr %sharerPointer, !alias.scope !12, !noalias !22
-    store %Eraser @topLevelEraser, ptr %eraserPointer, !alias.scope !12, !noalias !22
 
     %stackPointer_2 = getelementptr %FrameHeader, %StackPointer %stackPointer, i64 1
     store %StackPointer %stackPointer_2, ptr %stackStackPointer, !alias.scope !11, !noalias !21
@@ -752,7 +763,7 @@ define private %Stack @withEmptyStack() {
 
 define private tailcc void @return_Pos(%Stack %stack, %Pos %argument) "no_callee_saved_registers" {
     %startStackPointer = call %StackPointer @restoreStackPointer(%Stack %stack)
-    %stackPointer = call %StackPointer @stackDeallocate(%Stack %stack, %StackPointer %startStackPointer, i64 24)
+    %stackPointer = call %StackPointer @stackDeallocate(%Stack %stack, %StackPointer %startStackPointer, i64 8) ; |%FrameHeader|
     %returnAddressPointer = getelementptr %FrameHeader, %StackPointer %stackPointer, i64 0, i32 0
     %returnAddress = load %ReturnAddress, ptr %returnAddressPointer, !alias.scope !12, !noalias !22
     musttail call tailcc void %returnAddress(%Stack %stack, %StackPointer %stackPointer, %Pos %argument) "no_callee_saved_registers"
@@ -770,7 +781,7 @@ define ccc void @runTopLevel(ptr %entry) noinline {
 
 define ccc void @resume_Int(%Stack %stack, %Int %argument) noinline {
     %startStackPointer = call %StackPointer @restoreStackPointer(%Stack %stack)
-    %stackPointer = call %StackPointer @stackDeallocate(%Stack %stack, %StackPointer %startStackPointer, i64 24)
+    %stackPointer = call %StackPointer @stackDeallocate(%Stack %stack, %StackPointer %startStackPointer, i64 8) ; |%FrameHeader|
     %returnAddressPointer = getelementptr %FrameHeader, %StackPointer %stackPointer, i64 0, i32 0
     %returnAddress = load %ReturnAddress, ptr %returnAddressPointer, !alias.scope !12, !noalias !22
     tail call tailcc void %returnAddress(%Stack %stack, %StackPointer %stackPointer, %Int %argument) "no_callee_saved_registers"
@@ -779,7 +790,7 @@ define ccc void @resume_Int(%Stack %stack, %Int %argument) noinline {
 
 define ccc void @resume_Pos(%Stack %stack, %Pos %argument) noinline {
     %startStackPointer = call %StackPointer @restoreStackPointer(%Stack %stack)
-    %stackPointer = call %StackPointer @stackDeallocate(%Stack %stack, %StackPointer %startStackPointer, i64 24)
+    %stackPointer = call %StackPointer @stackDeallocate(%Stack %stack, %StackPointer %startStackPointer, i64 8) ; |%FrameHeader|
     %returnAddressPointer = getelementptr %FrameHeader, %StackPointer %stackPointer, i64 0, i32 0
     %returnAddress = load %ReturnAddress, ptr %returnAddressPointer, !alias.scope !12, !noalias !22
     tail call tailcc void %returnAddress(%Stack %stack, %StackPointer %stackPointer, %Pos %argument) "no_callee_saved_registers"
