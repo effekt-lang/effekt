@@ -1,0 +1,13 @@
+hello
+4
+Cons(5, Cons(6, Nil()))
+don't care
+Nil()
+---
+world
+world
+helloSome(4)5
+---
+42
+---
+6

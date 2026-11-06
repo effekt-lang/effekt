@@ -3,6 +3,7 @@
 build/
 out/
 project/target/
+project/project
 target/
 drafts/
 node_modules/
@@ -12,6 +13,7 @@ licenses/
 .bsp/
 bin
 .metals/
+project/metals.sbt
 .vscode/
 .bloop/
 *.tgz
