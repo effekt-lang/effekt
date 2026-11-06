@@ -119,7 +119,7 @@ object messages {
 
     def panic(msg: EffektError): Nothing = throw CompilerPanic(msg)
     def panic(msg: String): Nothing = panic(plainMessage(msg, Error))
-    def panic(msg: StructuredMessage): Nothing = abort(structuredMessage(msg, Error))
+    def panic(msg: StructuredMessage): Nothing = panic(structuredMessage(msg, Error))
 
     def warning(msg: String): Unit = report(plainMessage(msg, Warning))
     def warning(msg: StructuredMessage): Unit = report(structuredMessage(msg, Warning))
