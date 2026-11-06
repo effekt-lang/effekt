@@ -177,4 +177,12 @@ trait Driver { outer =>
         config.output().emitln(e.getMessage)
     }
   }
+
+  def collectDependencies(filename: String, config: EffektConfig, encoding: String = "UTF-8")(implicit C: Context): List[String] = {
+    val source = FileSource(filename, encoding)
+    C.compiler.runFrontend(source)
+    val moduleOpt = C.compiler.getAST(source)
+    if (moduleOpt.isEmpty) return Nil
+    moduleOpt.get.includes.map(_.path)
+  }
 }
