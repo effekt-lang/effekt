@@ -95,13 +95,15 @@ def jump(k: BlockVar, jumpsTo: Id => Boolean, s: Stmt): Stmt = {
 
 /**
  * Moves every local definition down to the innermost statement that contains all its occurrences,
- * including the bodies of other definitions, delimiters and block arguments, but never into the jump of a frame `val r = s; k(r)`:
+ * including delimiters and block arguments, but never into the body of another definition nor into the jump of a frame `val r = s; k(r)`:
  *
  *   [[ def f = b; let x = e; s ]]       =  let x = e; [[ def f = b; s ]]                if `f` does not occur in `e`
  *   [[ def f = b; def g = c; s ]]       =  def g = c; [[ def f = b; s ]]                if `f` does not occur in `c`
- *   [[ def f = b; def g() = c; s ]]     =  def g() = [[ def f = b; c ]]; s              if `f` occurs only in `c`
  *   [[ def f = b; if (c) s1 else s2 ]]  =  if (c) [[ def f = b; s1 ]] else s2           if `f` occurs only in `s1`
  *   [[ def f = b; g(a) { () => s } ]]   =  g(a) { () => [[ def f = b; s ]] }            if `f` occurs only in that argument
+ *
+ * TODO Moving into the bodies of other definitions would let more definitions see their continuation, but makes those
+ *   bodies too big to inline. With closed definitions at the toplevel, sinking would not be necessary at all.
  */
 def sink(m: ModuleDecl): ModuleDecl = {
   object sinking extends Tree.Rewrite {
@@ -129,8 +131,6 @@ private def sinkDefinition(id: Id, block: Block, rest: Stmt): Stmt = {
     }
 
   if !occurs(rest.free) then here else rest match {
-    case Stmt.Def(other, otherBlock: BlockLit, body) if occurs(otherBlock.free) && !occurs(body.free) =>
-      Stmt.Def(other, intoBlock(otherBlock), body)
     case Stmt.Def(other, otherBlock, body) if !occurs(otherBlock.free) =>
       Stmt.Def(other, otherBlock, into(body))
     case Stmt.Let(x, binding, body) if !occurs(binding.free) =>
