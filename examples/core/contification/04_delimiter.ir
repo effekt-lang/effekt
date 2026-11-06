@@ -1,0 +1,77 @@
+// A call under a var cannot jump to the continuation outside of it.
+
+def main = { (n: Bool) =>
+  def f(b: Bool) = {
+    return 1
+  }
+  val x = {
+    var r @ c = 0;
+    (f : (Bool) => Int @ {})(n: Bool)
+  };
+  return x: Int
+}
+
+/// IDENTIFY
+
+def main(n: Bool) = {
+  def f(b: Bool) = {
+    return 1
+  }
+  def k(x: Int) = {
+    return x: Int
+  }
+  val y = {
+    var r @ c = 0;
+    f: (Bool) => Int @ {}(n: Bool)
+  };
+  k: (Int) => Int @ {}(y: Int)
+}
+
+/// SINK
+
+def main(n: Bool) = {
+  def k(x: Int) = {
+    return x: Int
+  }
+  val y = {
+    var r @ c = 0;
+    def f(b: Bool) = {
+      return 1
+    }
+    f: (Bool) => Int @ {}(n: Bool)
+  };
+  k: (Int) => Int @ {}(y: Int)
+}
+
+/// RETURNS_TO
+
+f ↦ ?
+k ↦ ?
+
+/// CONTIFY
+
+def main(n: Bool) = {
+  def k(x: Int) = {
+    return x: Int
+  }
+  val y = {
+    var r @ c = 0;
+    def f(b: Bool) = {
+      return 1
+    }
+    f: (Bool) => Int @ {}(n: Bool)
+  };
+  k: (Int) => Int @ {}(y: Int)
+}
+
+/// CLEANUP
+
+def main(n: Bool) = {
+  val y = {
+    var r @ c = 0;
+    let b = n: Bool
+    return 1
+  };
+  let x = y: Int
+  return x: Int
+}

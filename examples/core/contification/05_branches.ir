@@ -1,0 +1,62 @@
+// Every exit of the binding of a val jumps to its body.
+
+def main = { (b: Bool) =>
+  val x = if (b: Bool) { return 1 } else { return 2 };
+  return x: Int
+}
+
+/// IDENTIFY
+
+def main(b: Bool) = {
+  def k(x: Int) = {
+    return x: Int
+  }
+  if (b: Bool) {
+    k: (Int) => Int @ {}(1)
+  } else {
+    k: (Int) => Int @ {}(2)
+  }
+}
+
+/// SINK
+
+def main(b: Bool) = {
+  def k(x: Int) = {
+    return x: Int
+  }
+  if (b: Bool) {
+    k: (Int) => Int @ {}(1)
+  } else {
+    k: (Int) => Int @ {}(2)
+  }
+}
+
+/// RETURNS_TO
+
+k ↦ ?
+
+/// CONTIFY
+
+def main(b: Bool) = {
+  def k(x: Int) = {
+    return x: Int
+  }
+  if (b: Bool) {
+    k: (Int) => Int @ {}(1)
+  } else {
+    k: (Int) => Int @ {}(2)
+  }
+}
+
+/// CLEANUP
+
+def main(b: Bool) = {
+  def k(x: Int) = {
+    return x: Int
+  }
+  if (b: Bool) {
+    k: (Int) => Int @ {}(1)
+  } else {
+    k: (Int) => Int @ {}(2)
+  }
+}
