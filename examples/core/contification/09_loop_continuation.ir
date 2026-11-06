@@ -1,4 +1,5 @@
-// A loop whose continuation inside of it calls the loop again: the definition returning there moves right after the continuation.
+// A loop whose continuation inside of it calls the loop again: the continuation floats up to the start of the loop,
+// the definition returning there comes down after it, and what the continuation floated past becomes a parameter.
 
 def main = { (n: Bool) =>
   def f(x: Bool) = {
@@ -49,7 +50,6 @@ def main(n: Bool) = {
 
 def main(n: Bool) = {
   def loop(b: Bool) = {
-    let c = n: Bool
     def k(r: Bool) = {
       if (r: Bool) {
         loop: (Bool) => Int @ {}(c: Bool)
@@ -64,6 +64,7 @@ def main(n: Bool) = {
         return true
       }
     }
+    let c = n: Bool
     val r = f: (Bool) => Bool @ {}(b: Bool);
     k: (Bool) => Int @ {}(r: Bool)
   }
@@ -80,7 +81,6 @@ loop ↦ ?
 
 def main(n: Bool) = {
   def loop(b: Bool) = {
-    let c = n: Bool
     def k(r: Bool) = {
       if (r: Bool) {
         loop: (Bool) => Int @ {}(c: Bool)
@@ -95,6 +95,7 @@ def main(n: Bool) = {
         k: (Bool) => Int @ {}(true)
       }
     }
+    let c = n: Bool
     f: (Bool) => Int @ {}(b: Bool)
   }
   loop: (Bool) => Int @ {}(n: Bool)
@@ -104,22 +105,22 @@ def main(n: Bool) = {
 
 def main(n: Bool) = {
   def loop(b: Bool) = {
-    let c = n: Bool
-    def k(r: Bool) = {
+    def k(r: Bool, c: Bool) = {
       if (r: Bool) {
         loop: (Bool) => Int @ {}(c: Bool)
       } else {
         return 0
       }
     }
-    def f(x: Bool) = {
+    def f(x: Bool, c: Bool) = {
       if (x: Bool) {
-        k: (Bool) => Int @ {}(false)
+        k: (Bool, Bool) => Int @ {}(false, c: Bool)
       } else {
-        k: (Bool) => Int @ {}(true)
+        k: (Bool, Bool) => Int @ {}(true, c: Bool)
       }
     }
-    f: (Bool) => Int @ {}(b: Bool)
+    let c = n: Bool
+    f: (Bool, Bool) => Int @ {}(b: Bool, c: Bool)
   }
   loop: (Bool) => Int @ {}(n: Bool)
 }
@@ -128,19 +129,20 @@ def main(n: Bool) = {
 
 def main(n: Bool) = {
   def loop(b: Bool) = {
-    let c = n: Bool
-    def k(r: Bool) = {
+    def k(r: Bool, c: Bool) = {
       if (r: Bool) {
         loop: (Bool) => Int @ {}(c: Bool)
       } else {
         return 0
       }
     }
+    let c = n: Bool
     let x = b: Bool
+    let c = c: Bool
     if (x: Bool) {
-      k: (Bool) => Int @ {}(false)
+      k: (Bool, Bool) => Int @ {}(false, c: Bool)
     } else {
-      k: (Bool) => Int @ {}(true)
+      k: (Bool, Bool) => Int @ {}(true, c: Bool)
     }
   }
   loop: (Bool) => Int @ {}(n: Bool)
