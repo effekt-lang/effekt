@@ -73,19 +73,19 @@ object Transformer {
       case machine.ExternType(name, tps, machine.ExternBody.StringExternBody(_, body)) =>
         val ttps = tps match {
           case Nil => ""
-          case tps => tps.mkString(", ")
+          case tps => tps.mkString("[", ", ", "]")
         }
-        emit(Verbatim(s"; declaration extern type ${name}${ttps} = ${body}"))
-      case machine.ExternType(name, tps, machine.ExternBody.Unsupported(err)) =>
-        emit(Verbatim(s"; unsupported extern type ${name}: ${err}"))
+        emit(Verbatim(s"; declaration extern type ${name}${ttps} = ${body.fill(identity)}"))
+      case machine.ExternType(name, tps, machine.ExternBody.Unsupported(missing)) =>
+        emit(Verbatim(s"; unsupported extern type ${name}: ${missing.explanation(llvmFeatureFlags)}"))
       case machine.ExternInterface(name, tps, machine.ExternBody.StringExternBody(_, body)) =>
         val ttps = tps match {
           case Nil => ""
-          case tps => tps.mkString(", ")
+          case tps => tps.mkString("[", ", ", "]")
         }
-        emit(Verbatim(s"; declaration extern interface ${name}${ttps} = ${body}"))
-      case machine.ExternInterface(name, tps, machine.ExternBody.Unsupported(err)) =>
-        emit(Verbatim(s"; unsupported extern interface ${name}: ${err}"))
+        emit(Verbatim(s"; declaration extern interface ${name}${ttps} = ${body.fill(identity)}"))
+      case machine.ExternInterface(name, tps, machine.ExternBody.Unsupported(missing)) =>
+        emit(Verbatim(s"; unsupported extern interface ${name}: ${missing.explanation(llvmFeatureFlags)}"))
       case machine.Include(ff, content) =>
         emit(Verbatim("; declaration include" ++ content))
     }
@@ -93,8 +93,8 @@ object Transformer {
   def transform(body: machine.ExternBody[machine.Variable])(using ErrorReporter): String = body match {
     case machine.ExternBody.StringExternBody(_, contents) =>
       "; declaration extern\n    " ++ transform(contents)
-    case u: machine.ExternBody.Unsupported =>
-      u.report
+    case machine.ExternBody.Unsupported(missing) =>
+      missing.report(llvmFeatureFlags)
       """call void @hole()
         |unreachable
         |""".stripMargin

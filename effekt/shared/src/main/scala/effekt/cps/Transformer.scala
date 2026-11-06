@@ -45,14 +45,14 @@ object Transformer {
       val tBody = body match {
         case core.ExternBody.StringExternBody(ff, Template(strings, args)) =>
           ExternBody.StringExternBody(ff, Template(strings, args.map { absurd => absurd }))
-        case core.ExternBody.Unsupported(err) => ExternBody.Unsupported(err)
+        case core.ExternBody.Unsupported(missing) => ExternBody.Unsupported(missing)
       }
       Extern.Data(id, tparams, tBody)
     case core.Extern.Interface(id, tparams, body) =>
       val tBody = body match {
         case core.ExternBody.StringExternBody(ff, Template(strings, args)) =>
           ExternBody.StringExternBody(ff, Template(strings, args.map { absurd => absurd }))
-        case core.ExternBody.Unsupported(err) => ExternBody.Unsupported(err)
+        case core.ExternBody.Unsupported(missing) => ExternBody.Unsupported(missing)
       }
       Extern.Interface(id, tparams, tBody)
   }
@@ -60,7 +60,7 @@ object Transformer {
   def transform(externBody: core.ExternBody[core.Expr])(using TransformationContext): ExternBody[Expr] = externBody match {
     case core.ExternBody.StringExternBody(featureFlag, Template(strings, args)) =>
       ExternBody.StringExternBody(featureFlag, Template(strings, args.map(transform)))
-    case core.ExternBody.Unsupported(err) => ExternBody.Unsupported(err)
+    case core.ExternBody.Unsupported(missing) => ExternBody.Unsupported(missing)
   }
 
   def transform(stmt: core.Stmt, ks: Id, k: Continuation)(using C: TransformationContext): Stmt = stmt match {

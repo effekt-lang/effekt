@@ -48,9 +48,7 @@ export Declaration.*
 sealed trait ExternBody[+S]
 object ExternBody {
   case class StringExternBody[+S](featureFlag: FeatureFlag, contents: Template[S]) extends ExternBody[S]
-  case class Unsupported(err: util.messages.EffektError) extends ExternBody[Nothing] {
-    def report(using E: util.messages.ErrorReporter): Unit = E.report(err)
-  }
+  case class Unsupported(missing: source.MissingExternBody) extends ExternBody[Nothing]
 }
 
 /**

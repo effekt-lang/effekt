@@ -97,8 +97,8 @@ object Transformer extends Phase[Typechecked, CoreTransformed] {
       val tBody = bodies.unspan match {
         case source.ExternBody.StringExternBody(ff, body, span) :: Nil =>
           ExternBody.StringExternBody(ff, Template(body.strings, body.args.map(transformAsExpr)))
-        case source.ExternBody.Unsupported(err) :: Nil =>
-          ExternBody.Unsupported(err)
+        case source.ExternBody.Unsupported(missing) :: Nil =>
+          ExternBody.Unsupported(missing)
         case _ =>
           Context.abort("Externs should be resolved and desugared before core.Transformer")
       }
@@ -114,8 +114,8 @@ object Transformer extends Phase[Typechecked, CoreTransformed] {
       val tBody = bodies.unspan match {
         case source.ExternBody.StringExternBody(ff, body, span) :: Nil =>
           ExternBody.StringExternBody(ff, Template(body.strings, body.args.map { absurd => absurd }))
-        case source.ExternBody.Unsupported(err) :: Nil =>
-          ExternBody.Unsupported(err)
+        case source.ExternBody.Unsupported(missing) :: Nil =>
+          ExternBody.Unsupported(missing)
         case _ =>
           Context.abort("Externs should be resolved and desugared before core.Transformer")
       }
@@ -864,9 +864,9 @@ object Transformer extends Phase[Typechecked, CoreTransformed] {
     case Pure, Direct, Control
   }
   private def callingConvention(callable: Callable)(using Context): CallingConvention = callable match {
-    case f @ ExternFunction(name, _, _, _, _, _, capture, bodies, _) =>
+    case f @ ExternFunction(name, _, _, _, _, _, capture, bodies, decl) =>
       // resolve the preferred body again and hope it's the same
-      val body = ResolveExternDefs.findPreferred(bodies)
+      val body = ResolveExternDefs.findPreferred(bodies, name.name, decl.span)
       body match {
         case b: source.ExternBody.EffektExternBody[_] => CallingConvention.Control
         case _ if f.capture.pure => CallingConvention.Pure

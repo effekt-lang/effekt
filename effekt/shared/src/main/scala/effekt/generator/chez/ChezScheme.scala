@@ -13,7 +13,7 @@ class ChezSchemeMonadic extends ChezScheme {
   def compilationUnit(mainSymbol: Symbol, mod: Module, decl: core.ModuleDecl)(using ErrorReporter): chez.Block =
     chez.TransformerMonadic.compilationUnit(mainSymbol, mod, decl)
 
-  override def supportedFeatureFlags: List[String] = List("chezMonadic", "chez")
+  override def supportedFeatureFlags: List[String] = chez.TransformerMonadic.chezFeatureFlags
 }
 
 
@@ -21,7 +21,7 @@ class ChezSchemeCallCC extends ChezScheme {
   def compilationUnit(mainSymbol: Symbol, mod: Module, decl: core.ModuleDecl)(using ErrorReporter): chez.Block =
     chez.TransformerCallCC.compilationUnit(mainSymbol, mod, decl)
 
-  override def supportedFeatureFlags: List[String] =  List("chezCallCC", "chez")
+  override def supportedFeatureFlags: List[String] = chez.TransformerCallCC.chezFeatureFlags
 }
 
 

@@ -145,9 +145,7 @@ object QualifiedSignature {
 sealed trait ExternBody[+T] extends Tree
 object ExternBody {
   case class StringExternBody[+T](featureFlag: FeatureFlag, contents: Template[T]) extends ExternBody[T]
-  case class Unsupported(err: util.messages.EffektError) extends ExternBody[Nothing] {
-    def report(using E: ErrorReporter): Unit = E.report(err)
-  }
+  case class Unsupported(missing: source.MissingExternBody) extends ExternBody[Nothing]
 }
 
 enum Toplevel {
@@ -813,7 +811,7 @@ object Tree {
     def rewrite(b: ExternBody[Expr]): Trampoline[ExternBody[Expr]] = b match {
       case ExternBody.StringExternBody(featureFlag, Template(strings, args)) =>
         all(args, rewrite).map { args2 => ExternBody.StringExternBody(featureFlag, Template(strings, args2)) }
-      case ExternBody.Unsupported(err) => done(b)
+      case ExternBody.Unsupported(_) => done(b)
     }
 
     def rewrite(d: Toplevel): Toplevel = d match {
@@ -1503,7 +1501,7 @@ object freeVariables {
         case Extern.Def(id, qualifiedSignature, tparams, cparams, vparams, bparams, ret, annotatedCapture, body) =>
           val splices = body match {
             case ExternBody.StringExternBody(featureFlag, contents) => contents.args
-            case ExternBody.Unsupported(err) => Nil
+            case ExternBody.Unsupported(_) => Nil
           }
           assertClosed(all(splices, (splice: Expr) => splice.free).without(vparams, bparams))
 
