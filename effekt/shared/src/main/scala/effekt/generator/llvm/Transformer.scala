@@ -2,6 +2,7 @@ package effekt
 package generator
 package llvm
 
+import scala.collection.immutable.ListSet
 import effekt.context.Context
 import effekt.machine
 import effekt.util.intercalate
@@ -138,7 +139,7 @@ object Transformer {
 
       case machine.Switch(value, clauses, default) =>
         emit(Comment(s"switch ${value.name}, ${clauses.length} clauses"))
-        val freeInClauses = clauses.flatMap(freeVariables).toSet ++ default.map(freeVariables).getOrElse(Set.empty)
+        val freeInClauses = ListSet.from(clauses.flatMap(freeVariables)) ++ default.map(freeVariables).getOrElse(ListSet.empty)
         shareValues(List(value), freeInClauses)
 
         val tagName = freshName("tag")
