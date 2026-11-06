@@ -1,0 +1,37 @@
+// A continuation that does not escape becomes a labeled block
+def main(x, ks, k) {
+  def j(y, ks1) { k(y, ks1) }
+  run c = eq(x, 0);
+  if (c) { j(1, ks) } else { j(2, ks) }
+}
+
+/// JAVASCRIPT
+
+function main_0(x_0, ks_0, k_0) {
+  let y_0 = undefined;
+  let ks_1 = undefined;
+  j_0: {
+    const c_0 = eq_0(x_0, 0);
+    if (c_0) {
+      y_0 = 1;
+      ks_1 = ks_0;
+      break j_0;
+    } else {
+      y_0 = 2;
+      ks_1 = ks_0;
+      break j_0;
+    }
+  }
+  return () => k_0(y_0, ks_1);
+}
+
+/// CHEZ
+
+(define (main_0 x_1 ks_2 k_3)
+  (define j_4 (lambda (y_5 ks1_6)
+    (k_3 y_5  ks1_6)))
+
+  (define c_7 (eq_-4 x_1  0))
+  (if c_7
+    (j_4 1  ks_2)
+    (j_4 2  ks_2)))

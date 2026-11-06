@@ -9,12 +9,20 @@ import effekt.core
 import effekt.util.UByte
 import effekt.util.messages.ErrorReporter
 
+/**
+ * Lowers the CPS IR to Chez Scheme.
+ *
+ * Chez already provides proper tail calls, so CPS applications can be
+ * translated literally. Reset, shift, and resume use the Chez CPS
+ * runtime; their CPS bodies become the program lambdas expected there.
+ */
 object TransformerCPS {
 
   val HOLE = "hole"
 
   // Defined in chez/cps/effekt.ss
   val RUN_TOP_LEVEL = "run-top-level"
+  val TOP_LEVEL_KS = "top-level-ks"
   val RESET = "reset"
   val RESUME = "resume"
   val SHIFT = "shift"
@@ -33,22 +41,16 @@ object TransformerCPS {
     chez.Block(externs ++ declarations ++ definitions, Nil, runMain)
   }
 
-  def compileLSP(input: cps.ModuleDecl, mainSymbol: symbols.TermSymbol)(using ErrorReporter): chez.Block = input match {
-    case ModuleDecl(path, includes, declarations, externs, definitions, exports) =>
-      val lspModule = cps.ModuleDecl(
-        path,
-        Nil,
-        Nil,
-        externs.collect{case d: Extern.Def => d},
-        definitions,
-        exports
-      )
-      compile(lspModule, mainSymbol)
-  }
+  def compileLSP(input: cps.ModuleDecl, mainSymbol: symbols.TermSymbol)(using ErrorReporter): chez.Block =
+    compile(input.copy(
+      includes = Nil,
+      declarations = Nil,
+      externs = input.externs.collect { case d: Extern.Def => d }
+    ), mainSymbol)
 
   def toChez(definition: cps.ToplevelDefinition): chez.Def = definition match {
-    case ToplevelDefinition.Def(id, block) => chez.Constant(nameDef(id), toChez(block))
-    case ToplevelDefinition.Let(id, expr) => chez.Constant(nameDef(id), toChez(expr))
+    case ToplevelDefinition.Def(id, params, body) =>
+      chez.Function(nameDef(id), params.map(nameDef), toChez(body))
     case ToplevelDefinition.Val(id, ks, k, binding) =>
       val lambda = chez.Lambda(List(ks, k).map(nameDef), toChez(binding))
       chez.Constant(nameDef(id), Builtin(RUN_TOP_LEVEL, lambda))
@@ -64,30 +66,13 @@ object TransformerCPS {
   }
 
   def toChez(extern: cps.Extern)(using ErrorReporter): chez.Def = extern match {
-    case Extern.Def(id, vparams, bparams, _, body) =>
-      val params = (vparams ++ bparams).map(nameDef)
-      chez.Function(nameDef(id), params, toChez(body))
-    case Extern.Data(id, tps, ExternBody.StringExternBody(_, body)) =>
-      val ttps = tps match {
-        case Nil => ""
-        case tps => tps.map { x => x.show }.mkString(", ")
-      }
-      chez.RawDef(s";; extern type ${id.show}${ttps} = ${body}")
-    case Extern.Data(id, tps, ExternBody.Unsupported(err)) =>
-      chez.RawDef(s";; unsupported extern type ${id.show}: ${err}")
-    case Extern.Interface(id, tps, ExternBody.StringExternBody(_, body)) =>
-      val ttps = tps match {
-        case Nil => ""
-        case tps => tps.map { x => x.show }.mkString(", ")
-      }
-      chez.RawDef(s";; extern interface ${id.show}${ttps} = ${body}")
-    case Extern.Interface(id, tps, ExternBody.Unsupported(err)) =>
-      chez.RawDef(s";; unsupported extern interface ${id.show}: ${err}")
+    case Extern.Def(id, params, _, body) =>
+      chez.Function(nameDef(id), params.map(nameDef), toChez(body))
     case Extern.Include(_, contents) =>
       chez.RawDef(contents)
   }
 
-  def toChez(externBody: cps.ExternBody[cps.Expr])(using ErrorReporter): chez.Expr = externBody match {
+  def toChez(externBody: cps.ExternBody)(using ErrorReporter): chez.Expr = externBody match {
     case ExternBody.StringExternBody(_, contents) =>
       RawExpr(contents.strings, contents.args.map(toChez))
     case unsupported: ExternBody.Unsupported =>
@@ -95,89 +80,87 @@ object TransformerCPS {
       chez.Builtin(HOLE)
   }
 
-  def toChez(block: cps.Block): chez.Expr = block match {
-    case BlockVar(id) => chez.Variable(nameRef(id))
-    case BlockLit(vparams, bparams, ks, k, body) =>
-      val params = vparams ++ bparams ++ List(ks, k)
-      chez.Lambda(params.map(nameDef), toChez(body))
-    case New(impl) =>
-      chez.Call(toChez(impl.interface.name), impl.operations.map(toChez))
-    case Unbox(pure) => toChez(pure)
-  }
-
   def toChez(operation: cps.Operation): chez.Expr = operation match {
-    case Operation(_, vparams, bparams, ks, k, body) =>
-      val params = (vparams ++ bparams ++ List(ks, k)).map(nameDef)
-      chez.Lambda(params, toChez(body))
+    case Operation(_, params, body) =>
+      chez.Lambda(params.map(nameDef), toChez(body))
   }
 
   def toChez(stmt: cps.Stmt): chez.Block = stmt match {
-    case ImpureApp(id, callee, vargs, bargs, body) =>
-      val binding = chez.Call(toChez(callee), vargs.map(toChez) ++ bargs.map(toChez))
-      resolveLet(id, binding, body)
-    case LetCont(id, binding, body) => resolveLet(id, toChez(binding), body)
-    case LetDef(id, binding, body) => resolveLet(id, toChez(binding), body)
-    case LetExpr(id, binding, body) => resolveLet(id, toChez(binding), body)
-    case Region(id, ks, body) =>
-      val binding = Builtin(CREATE_REGION, toChez(ks))
-      resolveLet(id, binding, body)
-    case Alloc(id, init, region, body) =>
-      val binding = Builtin(ALLOCATE, toChez(init), toChez(region))
-      resolveLet(id, binding, body)
-    case Get(ref, id, body) =>
-      val binding = Builtin(GET, toChez(ref))
-      resolveLet(id, binding, body)
-    case Put(ref, value, body) =>
-      val call = Builtin(PUT, toChez(ref), toChez(value))
-      chez.Block(Nil, List(call), toChezExpr(body))
-    case Dealloc(ref, body) =>
-      val dealloc = Builtin(DEALLOCATE, toChez(ref))
-      chez.Block(Nil, List(dealloc), toChezExpr(body))
-    case Var(id, init, ks, body) =>
-      val binding = Builtin(VAR, toChez(init), toChez(ks))
-      resolveLet(id, binding, body)
+    case Stmt.Def(id, params, body, rest) =>
+      resolveLet(id, chez.Lambda(params.map(nameDef), toChez(body)), rest)
+    case Stmt.New(id, interface, operations, rest) =>
+      resolveLet(id, chez.Call(nameRef(interface), operations.map(toChez)), rest)
+    case Stmt.Let(id, binding, rest) =>
+      resolveLet(id, toChez(binding), rest)
+    case Stmt.Run(id, callee, args, _, rest) =>
+      resolveLet(id, chez.Call(nameRef(callee), args.map(toChez)), rest)
+    case Stmt.Region(id, ks, rest) =>
+      resolveLet(id, Builtin(CREATE_REGION, toChez(ks)), rest)
+    case Stmt.Alloc(id, init, region, rest) =>
+      resolveLet(id, Builtin(ALLOCATE, toChez(init), toChez(region)), rest)
+    case Stmt.Get(ref, id, rest) =>
+      resolveLet(id, Builtin(GET, toChez(ref)), rest)
+    case Stmt.Put(ref, value, rest) =>
+      chez.Block(Nil, List(Builtin(PUT, toChez(ref), toChez(value))), toChezExpr(rest))
+    case Stmt.Dealloc(ref, rest) =>
+      chez.Block(Nil, List(Builtin(DEALLOCATE, toChez(ref))), toChezExpr(rest))
+    case Stmt.Var(id, init, ks, rest) =>
+      resolveLet(id, Builtin(VAR, toChez(init), toChez(ks)), rest)
     case _ => chez.Block(Nil, Nil, toChezExpr(stmt))
   }
 
-  def resolveLet(toBind: Symbol, bindTo: chez.Expr, thn: cps.Stmt): chez.Block = {
-    val chez.Block(defs, exprs, result) = toChez(thn)
+  def resolveLet(toBind: Symbol, bindTo: chez.Expr, rest: cps.Stmt): chez.Block = {
+    val chez.Block(defs, exprs, result) = toChez(rest)
     chez.Block(chez.Constant(nameDef(toBind), bindTo) :: defs, exprs, result)
   }
 
+  def toChez(callee: Callee): chez.Expr = callee match {
+    case Callee.Function(id) => toChez(id)
+    case Callee.Method(receiver, method) => chez.Call(toChez(method), toChez(receiver))
+  }
+
   def toChezExpr(stmt: cps.Stmt): chez.Expr = stmt match {
-    case App(callee, vargs, bargs, ks, k) =>
-      val args = vargs.map(toChez) ++ bargs.map(toChez)
-              ++ List(toChez(ks), toChez(k))
-      chez.Call(toChez(callee), args)
-    case Jump(k, vargs, ks) =>
-      val args = vargs.map(toChez) :+ toChez(ks)
-      chez.Call(toChez(k), args)
-    case Hole(span) => chez.Builtin(HOLE, chez.ChezString(span.range.from.format))
-    case If(cond, thn, els) =>
-      val chezCond = toChez(cond)
-      chez.If(chezCond, toChezExpr(thn), toChezExpr(els))
-    case Match(scrutinee, clauses, default) =>
+    case Stmt.Call(callee, args, ReturnPoint.Bind(results, returnedKs, ks, rest)) =>
+      val continuation = chez.Lambda((results :+ returnedKs).map(nameDef), toChez(rest))
+      chez.Call(toChez(callee), (args :+ ks).map(toChez) :+ continuation)
+
+    case Stmt.Call(callee, args, ReturnPoint.Direct(List(result), rest)) =>
+      chez.Let(List(Binding(nameDef(result), chez.Call(toChez(callee), args.map(toChez)))), toChez(rest))
+
+    case Stmt.Call(callee, args, ReturnPoint.Direct(results, rest)) =>
+      Builtin("call-with-values",
+        chez.Lambda(Nil, chez.Call(toChez(callee), args.map(toChez))),
+        chez.Lambda(results.map(nameDef), toChez(rest)))
+
+    case call @ Stmt.Call(callee, _, _: ReturnPoint.Tail | ReturnPoint.Jump) =>
+      chez.Call(toChez(callee), call.knownArguments.map(toChez))
+
+    case Stmt.Return(List(value)) => toChez(value)
+    case Stmt.Return(values) => Builtin("values", values.map(toChez)*)
+
+    case Stmt.Hole(span) => chez.Builtin(HOLE, chez.ChezString(span.range.from.format))
+    case Stmt.If(cond, thn, els) =>
+      chez.If(toChez(cond), toChezExpr(thn), toChezExpr(els))
+    case Stmt.Match(scrutinee, clauses, default) =>
       val sc = toChez(scrutinee)
       val cls = clauses.map { case (constr, branch) =>
         val names = RecordNames(constr)
-        val pred = generateTest(constr, branch.vparams.isEmpty, sc)
+        val pred = generateTest(constr, branch.params.isEmpty, sc)
         val matcher = chez.Call(chez.Variable(names.matcher), sc, toChez(branch))
         (pred, matcher)
       }
       generateMatch(cls, default.map(toChezExpr))
-    case Reset(prog, arity, ks, k) =>
-      chez.Builtin(RESET, toChez(prog), returnFrom(arity), toChez(ks), toChez(k))
-    case Resume(resumption, body, ks, k) =>
-      chez.Builtin(RESUME, toChez(resumption), toChez(body), toChez(ks), toChez(k))
-    case Shift(prompt, body, ks, k) =>
-      chez.Builtin(SHIFT, toChez(prompt), toChez(body), toChez(ks), toChez(k))
-    case Invoke(callee, method, vargs, bargs, ks, k) =>
-      val methodLam = chez.Call(toChez(method), toChez(callee))
-      val args = vargs.map(toChez) ++ bargs.map(toChez)
-              ++ List(toChez(ks), toChez(k))
-      chez.Call(methodLam, args)
-    case let: (LetCont | LetDef | LetExpr | ImpureApp
-             | Region | Alloc | Get | Put | Dealloc | Var) =>
+    case Stmt.Reset(p, ks, k, body, arity, ks1, k1) =>
+      val prog = chez.Lambda(List(p, ks, k).map(nameDef), toChez(body))
+      chez.Builtin(RESET, prog, returnFrom(arity), toChez(ks1), toChez(k1))
+    case Stmt.Shift(prompt, resume, ks, k, body, ks1, k1) =>
+      val handler = chez.Lambda(List(resume, ks, k).map(nameDef), toChez(body))
+      chez.Builtin(SHIFT, toChez(prompt), handler, toChez(ks1), toChez(k1))
+    case Stmt.Resume(resumption, ks, k, body, ks1, k1) =>
+      val resumed = chez.Lambda(List(ks, k).map(nameDef), toChez(body))
+      chez.Builtin(RESUME, toChez(resumption), resumed, toChez(ks1), toChez(k1))
+    case let: (Stmt.Def | Stmt.New | Stmt.Let | Stmt.Run
+             | Stmt.Region | Stmt.Alloc | Stmt.Get | Stmt.Put | Stmt.Dealloc | Stmt.Var) =>
       chez.Let(Nil, toChez(stmt))
   }
 
@@ -191,37 +174,27 @@ object TransformerCPS {
   }
 
   def toChez(expr: cps.Expr): chez.Expr = expr match {
-    case ValueVar(id) => toChez(id)
-    case Literal((), core.Type.TUnit) => chez.RawValue("(void)")
+    case Expr.Variable(id) => toChez(id)
+    case Expr.Literal((), core.Type.TUnit) => chez.RawValue("(void)")
     //TODO: Copy paste escape procedure to this transformer?
-    case Literal(v: String, core.Type.TString) =>
+    case Expr.Literal(v: String, core.Type.TString) =>
       effekt.generator.chez.TransformerMonadic.escape(v)
-    case Literal(b: Boolean, core.Type.TBoolean) =>
+    case Expr.Literal(b: Boolean, core.Type.TBoolean) =>
       if (b) chez.RawValue("#t") else chez.RawValue("#f")
-    case Literal(b: Byte, core.Type.TByte) => chez.RawValue(UByte.unsafeFromByte(b).toInt.toString)
-    case Literal(n: Long, core.Type.TInt) => intLiteral(n)
-    case Literal(value, _) => chez.RawValue(value.toString()) // TODO this should match on the actual types...
-    case PureApp(id, vargs) => chez.Call(toChez(id), vargs.map(toChez))
-    case Make(_, tag, Nil) => chez.Variable(RecordNames(tag).instance)
-    case Make(_, tag, vargs) =>
+    case Expr.Literal(b: Byte, core.Type.TByte) => chez.RawValue(UByte.unsafeFromByte(b).toInt.toString)
+    case Expr.Literal(n: Long, core.Type.TInt) => intLiteral(n)
+    case Expr.Literal(value, _) => chez.RawValue(value.toString()) // TODO this should match on the actual types...
+    case Expr.Make(_, tag, Nil) => chez.Variable(RecordNames(tag).instance)
+    case Expr.Make(_, tag, vargs) =>
       chez.Call(nameRef(tag), vargs.map(toChez))
-    case Box(id) => toChez(id)
-  }
-
-  def toChez(cont: cps.Cont): chez.Expr = cont match {
-    case Cont.ContVar(id) => toChez(id)
-    case Cont.ContLam(results, ks, body) =>
-      val params = (results :+ ks).map(nameDef)
-      chez.Lambda(params, toChez(body))
-    case Cont.Abort => chez.RawExpr("(void)")
+    case Expr.Abort => chez.RawExpr("(void)")
+    case Expr.Toplevel => chez.Variable(ChezName(TOP_LEVEL_KS))
   }
 
   def toChez(clause: cps.Clause): chez.Expr = clause match {
-    case Clause(vparams, body) =>
-      chez.Lambda(vparams.map(nameDef), toChez(body))
+    case Clause(params, body) =>
+      chez.Lambda(params.map(nameDef), toChez(body))
   }
 
-  def toChez(id: Symbol): chez.Variable = Variable(nameRef(id))
-
-  def toChez(mc: cps.MetaCont): chez.Variable = toChez(mc.id)
+  def toChez(id: Symbol): chez.Variable = chez.Variable(nameRef(id))
 }

@@ -1,0 +1,76 @@
+// Self-recursive tail calls become loops
+def countdown(n, ks, k) {
+  run done = eq(n, 0);
+  if (done) { k(n, ks) } else {
+    run m = sub(n, 1);
+    countdown(m) @ ks, k
+  }
+}
+def main(ks, k) {
+  def loop(i, ks1, k1) {
+    run done = eq(i, 0);
+    if (done) { k1(i, ks1) } else {
+      run j = sub(i, 1);
+      loop(j) @ ks1, k1
+    }
+  }
+  loop(10) @ ks, k
+}
+
+/// JAVASCRIPT
+
+function countdown_0(n_0, ks_0, k_0) {
+  countdown_0: while (true) {
+    const done_0 = eq_0(n_0, 0);
+    if (done_0) {
+      return () => k_0(n_0, ks_0);
+    } else {
+      const m_0 = sub_0(n_0, 1);
+      n_0 = m_0;
+      continue countdown_0;
+    }
+  }
+}
+
+function main_0(ks_1, k_1) {
+  let i_0 = undefined;
+  let ks_2 = undefined;
+  let k_2 = undefined;
+  loop_0: {
+    i_0 = 10;
+    ks_2 = ks_1;
+    k_2 = k_1;
+    break loop_0;
+  }
+  loop_0: while (true) {
+    const done_1 = eq_0(i_0, 0);
+    if (done_1) {
+      return () => k_2(i_0, ks_2);
+    } else {
+      const j_0 = sub_0(i_0, 1);
+      i_0 = j_0;
+      continue loop_0;
+    }
+  }
+}
+
+/// CHEZ
+
+(define (countdown_0 n_2 ks_3 k_4)
+  (define done_5 (eq_-4 n_2  0))
+  (if done_5
+    (k_4 n_2  ks_3)
+    (let ()
+      (define m_6 (sub_-3 n_2  1))
+      (countdown_0 m_6  ks_3  k_4))))
+
+
+(define (main_1 ks_7 k_8)
+  (define loop_9 (lambda (i_10 ks1_11 k1_12)
+    (define done_13 (eq_-4 i_10  0))
+    (if done_13
+      (k1_12 i_10  ks1_11)
+      (let ()
+        (define j_14 (sub_-3 i_10  1))
+        (loop_9 j_14  ks1_11  k1_12)))))
+  (loop_9 10  ks_7  k_8))
