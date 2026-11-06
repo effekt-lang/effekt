@@ -67,6 +67,12 @@ object Transformer {
       }
       val transformedRet = transformExtern(ret)
       val isExternAsync = capture.contains(symbols.builtins.AsyncCapability.capture)
+      body match {
+        // the generated C wrapper is a function that returns in C, but async externs receive the stack as an arg and return to the stack pointer in it
+        case core.ExternBody.StringExternBody(ff, _) if isExternAsync && ff.matches("c") =>
+          ErrorReporter.abort("Foreign functions with a C body currently cannot be async.")
+        case _ => ()
+      }
       noteDefinition(name, transformedParams, Nil, isExternAsync)
       Extern(transform(name), transformedParams, transformedRet, isExternAsync, transform(body))
 

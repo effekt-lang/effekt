@@ -1,0 +1,1 @@
+[error] Foreign functions with a C body currently cannot be async.
