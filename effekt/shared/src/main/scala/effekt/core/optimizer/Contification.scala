@@ -58,6 +58,8 @@ def frame(ids: List[Id], body: Stmt): Option[BlockVar] = body match {
  *
  *   [[ return v ]]  =  k(v)
  *   [[ f(a) ]]      =  f(a)               if [[jumpsTo]](f), since `f` jumps to `k` itself
+ *   [[ shift(p) { {k0} => b } ]]  =  shift(p) { {k0} => b[ resume(k0){ s } := resume(k0){ [[ s ]] } ] }
+ *                                     if `k0` occurs only resumed, since the frame is part of what `k0` captures
  *   [[ s ]]         =  val r = s; k(r)    for any other exit, including delimiters like `var` and `reset`
  */
 def jump(k: BlockVar, jumpsTo: Id => Boolean, s: Stmt): Stmt = {
@@ -82,6 +84,12 @@ def jump(k: BlockVar, jumpsTo: Id => Boolean, s: Stmt): Stmt = {
     case Stmt.Get(id, tpe, ref, capt, rest) => Stmt.Get(id, tpe, ref, capt, go(rest))
     case Stmt.Put(ref, capt, value, rest) => Stmt.Put(ref, capt, value, go(rest))
     case Stmt.Hole(tpe, span) => Stmt.Hole(result, span)
+    case StaticResumptions.Shift(shift) if shift.resumesOnly =>
+      val Stmt.Shift(prompt, BlockParam(resumption, BlockType.Resume(_, answer), captures), _) = shift.stmt: @unchecked
+      val retyped = BlockParam(resumption, BlockType.Resume(result, answer), captures)
+      Stmt.Shift(prompt, retyped, shift.replaceResumptions { resumed =>
+        Stmt.Resume(BlockVar(resumption, retyped.tpe, retyped.capt), go(resumed))
+      })
     case other =>
       val results = other.tpe.map { _ => Id("r") }
       Stmt.Val(results, other, Stmt.App(k, Nil, (results zip other.tpe).map(ValueVar.apply), Nil))
