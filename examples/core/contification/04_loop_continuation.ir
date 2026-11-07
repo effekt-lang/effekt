@@ -54,30 +54,6 @@ loop ↦ ?
 /// CONTIFY
 
 def main(n: Bool) = {
-  def f(x: Bool) = {
-    if (x: Bool) {
-      k: (Bool) => Int @ {}(false)
-    } else {
-      k: (Bool) => Int @ {}(true)
-    }
-  }
-  def loop(b: Bool) = {
-    let c = n: Bool
-    def k(r: Bool) = {
-      if (r: Bool) {
-        loop: (Bool) => Int @ {}(c: Bool)
-      } else {
-        return 0
-      }
-    }
-    f: (Bool) => Int @ {}(b: Bool)
-  }
-  loop: (Bool) => Int @ {}(n: Bool)
-}
-
-/// SINK
-
-def main(n: Bool) = {
   def loop(b: Bool) = {
     let c = n: Bool
     def k(r: Bool) = {

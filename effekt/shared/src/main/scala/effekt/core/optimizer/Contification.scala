@@ -11,13 +11,13 @@ import effekt.core.substitutions.{ Substitution, substitute }
 /**
  * Turns statically known continuations into jumps:
  * [[identify]] names the body of every `val`, [[contify]] uses [[returnsTo]] to replace the returns of definitions
- * returning to a single continuation by jumps there, [[sink]] moves them into the scope of that continuation,
+ * returning to a single continuation by jumps there and moves them into the scope of that continuation,
  * and [[cleanup]] removes unused definitions and inlines those used once.
  */
 def contification(m: ModuleDecl): ModuleDecl = {
   val identified = identify(m)
   val analysis = returnsTo(identified)
-  cleanup(sink(contify(identified, analysis), analysis))
+  cleanup(contify(identified, analysis))
 }
 
 
@@ -88,7 +88,8 @@ enum Target {
  * returns wherever `g` returns to; any other occurrence, a tail call under a delimiter or in a block literal,
  * or a use other than as the callee of a call, returns to somewhere unknown.
  *
- * The rest of a definition comes before its body, so that the body sees all the callers of the definition.
+ * The rest of a definition comes before its body, so that the body sees all the callers of the definition;
+ * a definition without callers returns to somewhere unknown.
  * When the body calls the definition itself other than in tail position, it has added to where the definition
  * returns to, so we look at the body once more.
  */
@@ -102,6 +103,7 @@ def returnsTo(m: ModuleDecl): Map[Id, Set[Target]] = {
       case Stmt.Def(id, block: BlockLit, rest) =>
         targets(id) = Set.empty
         query(rest)
+        if targets(id).isEmpty then targets(id) = Set(Target.Unknown)
         val before = targets(id)
         query(block.body)(using before)
         if targets(id) != before then query(block.body)(using targets(id))
@@ -141,13 +143,17 @@ def returnsTo(m: ModuleDecl): Map[Id, Set[Target]] = {
 // Contify
 // -------
 
-/** Lets every local definition that returns to exactly one continuation jump there, wherever it stands. */
+/**
+ * Lets every local definition that returns to exactly one continuation `k` jump there and moves it right behind `k`,
+ * unless `k` is already in scope. Such a definition waits for `k` while we rewrite the rest after it.
+ */
 def contify(m: ModuleDecl, analysis: Map[Id, Set[Target]]): ModuleDecl = {
   val chains = contified(analysis)
   val definitions = localDefinitions(m)
   val reached = chains.map { case (f, chain) => f -> chain.toSet }
   val results = chains.map { case (f, chain) => f -> result(definitions(chain.last)) }
   val captures = chains.map { case (f, chain) => f -> chain.flatMap(definitions(_).capt).toSet }
+  val waiting = mutable.Map.empty[Id, List[(Id, Block)]]
 
   object contification extends Tree.Rewrite {
     override def rewrite(b: BlockVar): BlockVar = b match {
@@ -160,9 +166,23 @@ def contify(m: ModuleDecl, analysis: Map[Id, Set[Target]]): ModuleDecl = {
       case Stmt.Val(ids, binding, Stmt.App(BlockVar(k, _, _), Nil, vargs, Nil)) if isFrame(ids, vargs) && definitions.contains(k) =>
         go(rewrite(binding), rewrite(definitions(k)))
       case Stmt.Def(f, BlockLit(tparams, cparams, vparams, bparams, body), rest) if chains.contains(f) =>
-        Stmt.Def(f, BlockLit(tparams, cparams, vparams, bparams, go(rewrite(body), rewrite(definitions(chains(f).head)))), rewrite(rest))
+        val k = chains(f).head
+        val block = BlockLit(tparams, cparams, vparams, bparams, go(rewrite(body), rewrite(definitions(k))))
+        waiting(k) = (f, block) :: waiting.getOrElse(k, Nil)
+        val rewrittenRest = rewrite(rest)
+        if waiting.getOrElse(k, Nil).exists(_._1 == f) then {
+          waiting(k) = waiting(k).filterNot(_._1 == f)
+          placed(f, block, rewrittenRest)
+        } else rewrittenRest
+      case Stmt.Def(id, block, rest) =>
+        val rewrittenBlock = rewrite(block)
+        placed(id, rewrittenBlock, rewrite(rest))
       case other => super.rewrite(other)
     }
+
+    /** The definition of [[id]], followed by the definitions waiting for it, each followed by those waiting for it. */
+    def placed(id: Id, block: Block, rest: Stmt): Stmt =
+      Stmt.Def(id, block, waiting.remove(id).getOrElse(Nil).foldLeft(rest) { case (rest, (f, block)) => placed(f, block, rest) })
 
     /**
      *   [[ return v ]]_k  =  k(v)
@@ -194,54 +214,6 @@ def contify(m: ModuleDecl, analysis: Map[Id, Set[Target]]): ModuleDecl = {
 
   contification.rewrite(m)
 }
-
-// Sink
-// ----
-
-/**
- * Sinks every contified definition right behind the continuation `k` it returns to;
- * if `k` uses it, it sinks to the place of `k` and takes `k` into its body. The rest of the statements first.
- */
-def sink(m: ModuleDecl, analysis: Map[Id, Set[Target]]): ModuleDecl = {
-  val targets = contified(analysis).view.mapValues(_.head).toMap
-  object sinking extends Tree.Rewrite {
-    override def rewrite(s: Stmt): Stmt = s match {
-      case Stmt.Def(f, block: BlockLit, rest) if targets.contains(f) =>
-        val sunkRest = rewrite(rest)
-        val sunkBlock = rewrite(block).asInstanceOf[BlockLit]
-        val k = targets(f)
-        if defines(sunkRest, k) then behind(k, f, sunkBlock, sunkRest) else Stmt.Def(f, sunkBlock, sunkRest)
-      case other => super.rewrite(other)
-    }
-  }
-  sinking.rewrite(m)
-}
-
-/** [[s]] with [[f]] right behind the definition of [[k]], or around it if `k` uses `f`. */
-private def behind(k: Id, f: Id, block: BlockLit, s: Stmt): Stmt = {
-  object inserting extends Tree.Rewrite {
-    override def rewrite(s: Stmt): Stmt = s match {
-      case Stmt.Def(id, kBlock, rest) if id == k && kBlock.free.contains(f) =>
-        Stmt.Def(f, block.copy(body = Stmt.Def(k, kBlock, block.body)), rest)
-      case Stmt.Def(id, kBlock, rest) if id == k => Stmt.Def(k, kBlock, Stmt.Def(f, block, rest))
-      case other => super.rewrite(other)
-    }
-  }
-  inserting.rewrite(s)
-}
-
-/** Whether [[s]] defines [[k]]. */
-private def defines(s: Stmt, k: Id): Boolean = {
-  object definition extends Tree.Query[Unit, Boolean] {
-    def empty = false
-    def combine = _ || _
-    override def stmt(using Unit) = {
-      case Stmt.Def(id, block, rest) => id == k || query(block) || query(rest)
-    }
-  }
-  definition.query(s)(using ())
-}
-
 
 // Cleanup
 // -------
