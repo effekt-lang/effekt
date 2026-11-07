@@ -1,0 +1,49 @@
+// see issue #836, PR #1536
+// dropping a long list all at once used to overflow the C stack on LLVM
+
+// copied and specialized the stdlib here, so that the tests work even if we change the list stdlib
+type ListInt {
+  Nil()
+  Cons(head: Int, tail: ListInt)
+}
+
+def each(start: Int, end: Int) { action: (Int) => Unit } = {
+  def loop(i: Int): Unit =
+    if (i < end) { action(i); loop(i + 1) }
+
+  loop(start)
+}
+
+def foreach(l: ListInt) { f: (Int) => Unit } : Unit = l match {
+  case Nil() => ()
+  case Cons(head, tail) => 
+    f(head)
+    tail.foreach {f}
+}
+
+def reverse(l: ListInt): ListInt = {
+  var res = Nil()
+  l.foreach { el => 
+    res = Cons(el, res)
+  }
+  res
+}
+
+def fill(size: Int, default: Int): ListInt = {
+  var result = Nil()
+  each(0, size) { i =>
+    result = Cons(default, result)
+  }
+  result.reverse
+}
+
+def sum(list: ListInt): Int = {
+  var n = 0;
+  list.foreach { x => n = n + x }
+  n
+}
+
+def main() = {
+  val l = fill(1000000, 1)
+  println(l.sum)
+}
