@@ -10,6 +10,7 @@ import effekt.symbols.Binder.{ValBinder, VarBinder}
 import effekt.symbols.BlockTypeConstructor.{ExternInterface, Interface}
 import effekt.symbols.TypeConstructor.{DataType, ExternType}
 import effekt.symbols.{Anon, Binder, Callable, Effects, ErrorMessageInterpolator, Module, Param, Symbol, TypeAlias, TypePrinter, UserFunction, ValueType, isSynthetic}
+import effekt.util.messages.{Diagnostic as EffektDiagnostic, Severity}
 import effekt.util.{PlainMessaging, PrettyPrinter}
 import kiama.util.Collections.{mapToJavaMap, seqToJavaList}
 import kiama.util.Convert.*
@@ -20,7 +21,7 @@ import org.eclipse.lsp4j.jsonrpc.services.{JsonNotification, JsonRequest}
 import org.eclipse.lsp4j.jsonrpc.{Launcher, messages}
 import org.eclipse.lsp4j.launch.LSPLauncher
 import org.eclipse.lsp4j.services.*
-import org.eclipse.lsp4j.{CodeAction, CodeActionKind, CodeActionParams, Command, DefinitionParams, Diagnostic, DidChangeConfigurationParams, DidChangeTextDocumentParams, DidChangeWatchedFilesParams, DidCloseTextDocumentParams, DidOpenTextDocumentParams, DidSaveTextDocumentParams, DocumentSymbol, DocumentSymbolParams, Hover, HoverParams, InitializeParams, InitializeResult, InitializedParams, InlayHint, InlayHintKind, InlayHintParams, Location, LocationLink, MarkupContent, MessageParams, MessageType, PublishDiagnosticsParams, ReferenceParams, SaveOptions, ServerCapabilities, SetTraceParams, SymbolInformation, SymbolKind, TextDocumentSyncKind, TextDocumentSyncOptions, TextEdit, WorkspaceEdit, Range as LSPRange}
+import org.eclipse.lsp4j.{CodeAction, CodeActionKind, CodeActionParams, Command, DefinitionParams, Diagnostic, DiagnosticSeverity, DidChangeConfigurationParams, DidChangeTextDocumentParams, DidChangeWatchedFilesParams, DidCloseTextDocumentParams, DidOpenTextDocumentParams, DidSaveTextDocumentParams, DocumentSymbol, DocumentSymbolParams, Hover, HoverParams, InitializeParams, InitializeResult, InitializedParams, InlayHint, InlayHintKind, InlayHintParams, Location, LocationLink, MarkupContent, MessageParams, MessageType, PublishDiagnosticsParams, ReferenceParams, SaveOptions, ServerCapabilities, SetTraceParams, SymbolInformation, SymbolKind, TextDocumentSyncKind, TextDocumentSyncOptions, TextEdit, WorkspaceEdit, Range as LSPRange}
 
 import java.io.{InputStream, OutputStream, PrintWriter}
 import java.net.ServerSocket
@@ -203,15 +204,25 @@ class Server(config: EffektConfig, compileOnChange: Boolean=false) extends Drive
   //
   //
 
+  def toLSP(diagnostic: EffektDiagnostic): Diagnostic = {
+    val range = diagnostic.range.map(convertRange).getOrElse(emptyRange)
+    new Diagnostic(range, lspMessaging.formatContent(diagnostic), toLSP(diagnostic.severity), "effekt")
+  }
+
+  def toLSP(severity: Severity): DiagnosticSeverity = severity match {
+    case Severity.Error   => DiagnosticSeverity.Error
+    case Severity.Warning => DiagnosticSeverity.Warning
+    case Severity.Info    => DiagnosticSeverity.Information
+    case Severity.Hint    => DiagnosticSeverity.Hint
+  }
+
   override def afterCompilation(source: Source, config: EffektConfig)(implicit C: Context): Unit = {
     // Publish LSP diagnostics
     val messages = C.messaging.buffer
     val groups = messages.groupBy(msg => msg.range.map(_.from.source.name).getOrElse(""))
     for ((name, msgs) <- groups) {
       val distinct = msgs.distinctBy { msg => (msg.range, msg.reason, msg.severity) } // deduplicate equivalent
-      publishDiagnostics(name, distinct.map { msg =>
-        Convert.diagnostic(msg.range, lspMessaging.formatContent(msg), KiamaMessages.toKiama(msg.severity))
-      })
+      publishDiagnostics(name, distinct.map(toLSP))
     }
     try {
       publishIR(source, config)
