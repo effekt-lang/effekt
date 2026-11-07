@@ -18,6 +18,15 @@ object messages {
   case class PlainTextError(content: String, range: Option[Range], severity: Severity) extends Diagnostic
   case class StructuredError(content: StructuredMessage, range: Option[Range], severity: Severity) extends Diagnostic
 
+  /** Semantic style for parts of error messages, leaving the styling to each output. */
+  trait Style {
+    def title(s: String): String
+    def code(s: String): String
+    def candidate(s: String): String
+
+    def indent(s: String): String = s.linesIterator.map(l => "  " + l).mkString("\n")
+  }
+
   case class StructuredMessage(stringContext: StringContext, args: Seq[Any])
 
   implicit class ErrorMessageReifier(private val sc: StringContext) extends AnyVal {
