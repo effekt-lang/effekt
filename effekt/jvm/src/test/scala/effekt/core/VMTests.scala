@@ -700,9 +700,9 @@ class VMTests extends munit.FunSuite {
       closures = 7,
       variableReads = 56,
       variableWrites = 52,
-      resets = 0,
-      shifts = 0,
-      resumes = 0
+      resets = 1,
+      shifts = 7,
+      resumes = 7
     )),
 
     examplesDir / "casestudies" / "lexer.effekt.md" -> Some(Summary(
@@ -1610,9 +1610,9 @@ class VMTests extends munit.FunSuite {
       closures = 7,
       variableReads = 56,
       variableWrites = 52,
-      resets = 0,
-      shifts = 0,
-      resumes = 0
+      resets = 1,
+      shifts = 7,
+      resumes = 7
     )),
 
     examplesDir / "pos" / "with_val_else.effekt" -> Some(Summary(
