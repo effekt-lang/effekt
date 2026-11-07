@@ -106,6 +106,7 @@ jobs:
       - uses: ./.github/actions/setup-effekt
         with:
           install-dependencies: 'true'
+          llvm-version: '21'
 
       - name: Compile project
         run: sbt Test/compile
