@@ -108,6 +108,10 @@ object Normalizer { normal =>
     case ValueType.Boxed(_, _) => false
   }
 
+  /** Whether [[s]] resumes a continuation bound outside of it. */
+  private def resumes(s: Stmt): Boolean =
+    s.free.blocks.toMap.exists { case (_, (tpe, _)) => tpe.isInstanceOf[BlockType.Resume] }
+
   private def blockFor(id: Id)(using ctx: Context): Option[Block] =
     ctx.blocks.get(id)
 
@@ -362,6 +366,23 @@ object Normalizer { normal =>
         // [[ val x: A = shift(p) { {k: A => R} => body2 }; body: B ]] = shift(p) { {k: >>>B<<< => R} => body2 }
         case Stmt.Shift(p, BlockParam(k, BlockType.Resume(tpeA, answer), captures), body2) if !body2.free.contains(k) =>
             Stmt.Shift(p, BlockParam(k, BlockType.Resume(body.tpe, answer), captures), body2)
+
+        // [[ val x: A = shift(p) { {k: A => R} => body2 }; body: B ]] =
+        //   def j(x) = [[ body ]]
+        //   shift(p) { {k: >>>B<<< => R} => body2[ resume(k) { s } := resume(k) { [[ val x = s; j(x) ]] } ] }
+        // if `k` occurs only resumed, since the frame is part of what `k` captures,
+        // and the frame neither resumes nor shifts to `p` itself, which [[StaticResumptions]] treats better
+        case shift @ Stmt.Shift(p, BlockParam(k, BlockType.Resume(tpeA, answer), captures), body2)
+            if StaticResumptions.Shift(shift, k, tpeA).resumesOnly =>
+          val res = normalize(body)
+          if resumes(res) || res.free.blocks.isDefinedAt(p.id) then Stmt.Val(ids, shift, res) else
+          joinpoint(ids, tpeA, res) { j => (C: Context) ?=>
+            val retyped = BlockParam(k, BlockType.Resume(res.tpe, answer), captures)
+            Stmt.Shift(p, retyped, StaticResumptions.Shift(shift, k, tpeA).replaceResumptions { resumed =>
+              val x = fresh(ids)
+              Stmt.Resume(Block.BlockVar(k, retyped.tpe, retyped.capt), normalizeVal(x, resumed, jump(j, x, tpeA)))
+            })
+          }
 
         // [[ val x: A = sc match [A] { case ... => body2: A }; body: B ]] == sc match [B] { case ... => [[ val x: A = body2; body: B ]] }
         case Stmt.Match(sc, tpe, List((id2, clause @ BlockLit(tparams2, cparams2, vparams2, bparams2, body2))), None) =>
