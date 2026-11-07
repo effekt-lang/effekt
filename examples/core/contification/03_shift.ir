@@ -28,45 +28,11 @@ def main(b: Bool){p @ p: Prompt[Int]} = {
   }
 }
 
-/// PLACE
-
-def main(b: Bool){p @ p: Prompt[Int]} = {
-  def k(x: Int) = {
-    return x: Int
-  }
-  shift(p: Prompt[Int] @ {p}) {{r: (Int) ~> Int} => 
-    if (b: Bool) {
-      resume(r: (Int) ~> Int @ {r}) {
-        k: (Int) => Int @ {}(1)
-      }
-    } else {
-      return 0
-    }
-  }
-}
-
 /// RETURNS_TO
 
 k ↦ ?
 
-/// CONTIFY
-
-def main(b: Bool){p @ p: Prompt[Int]} = {
-  def k(x: Int) = {
-    return x: Int
-  }
-  shift(p: Prompt[Int] @ {p}) {{r: (Int) ~> Int} => 
-    if (b: Bool) {
-      resume(r: (Int) ~> Int @ {r}) {
-        k: (Int) => Int @ {}(1)
-      }
-    } else {
-      return 0
-    }
-  }
-}
-
-/// PARAMETRIZE
+/// SINK
 
 def main(b: Bool){p @ p: Prompt[Int]} = {
   def k(x: Int) = {

@@ -1,4 +1,4 @@
-// A loop through two definitions from outside, one tail-calling the other: both move into the loop.
+// A loop through two definitions from outside, one tail-calling the other: both sink behind the continuation, in their order.
 
 def main = { (n: Bool) =>
   def g(y: Bool) = {
@@ -37,32 +37,11 @@ def main(n: Bool) = {
   }
   def loop(b: Bool) = {
     if (b: Bool) {
-      val r = f: (Bool) => Bool @ {}(b: Bool);
-      loop: (Bool) => Int @ {}(r: Bool)
-    } else {
-      return 0
-    }
-  }
-  loop: (Bool) => Int @ {}(n: Bool)
-}
-
-/// PLACE
-
-def main(n: Bool) = {
-  def loop(b: Bool) = {
-    def g(y: Bool) = {
-      if (y: Bool) {
-        return false
-      } else {
-        return true
+      def k(r: Bool) = {
+        loop: (Bool) => Int @ {}(r: Bool)
       }
-    }
-    def f(x: Bool) = {
-      g: (Bool) => Bool @ {}(x: Bool)
-    }
-    if (b: Bool) {
       val r = f: (Bool) => Bool @ {}(b: Bool);
-      loop: (Bool) => Int @ {}(r: Bool)
+      k: (Bool) => Int @ {}(r: Bool)
     } else {
       return 0
     }
@@ -72,48 +51,29 @@ def main(n: Bool) = {
 
 /// RETURNS_TO
 
-f ↦ loop
-g ↦ loop
+f ↦ k
+g ↦ k
+k ↦ ?
 loop ↦ ?
 
-/// CONTIFY
+/// SINK
 
 def main(n: Bool) = {
   def loop(b: Bool) = {
-    def g(y: Bool) = {
-      if (y: Bool) {
-        loop: (Bool) => Int @ {}(false)
-      } else {
-        loop: (Bool) => Int @ {}(true)
-      }
-    }
-    def f(x: Bool) = {
-      g: (Bool) => Int @ {}(x: Bool)
-    }
     if (b: Bool) {
-      f: (Bool) => Int @ {}(b: Bool)
-    } else {
-      return 0
-    }
-  }
-  loop: (Bool) => Int @ {}(n: Bool)
-}
-
-/// PARAMETRIZE
-
-def main(n: Bool) = {
-  def loop(b: Bool) = {
-    def g(y: Bool) = {
-      if (y: Bool) {
-        loop: (Bool) => Int @ {}(false)
-      } else {
-        loop: (Bool) => Int @ {}(true)
+      def k(r: Bool) = {
+        loop: (Bool) => Int @ {}(r: Bool)
       }
-    }
-    def f(x: Bool) = {
-      g: (Bool) => Int @ {}(x: Bool)
-    }
-    if (b: Bool) {
+      def g(y: Bool) = {
+        if (y: Bool) {
+          k: (Bool) => Int @ {}(false)
+        } else {
+          k: (Bool) => Int @ {}(true)
+        }
+      }
+      def f(x: Bool) = {
+        g: (Bool) => Int @ {}(x: Bool)
+      }
       f: (Bool) => Int @ {}(b: Bool)
     } else {
       return 0
@@ -127,12 +87,15 @@ def main(n: Bool) = {
 def main(n: Bool) = {
   def loop(b: Bool) = {
     if (b: Bool) {
+      def k(r: Bool) = {
+        loop: (Bool) => Int @ {}(r: Bool)
+      }
       let x = b: Bool
       let y = x: Bool
       if (y: Bool) {
-        loop: (Bool) => Int @ {}(false)
+        k: (Bool) => Int @ {}(false)
       } else {
-        loop: (Bool) => Int @ {}(true)
+        k: (Bool) => Int @ {}(true)
       }
     } else {
       return 0

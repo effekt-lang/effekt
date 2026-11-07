@@ -26,47 +26,13 @@ def main(n: Bool) = {
   k: (Int) => Int @ {}(r: Int)
 }
 
-/// PLACE
-
-def main(n: Bool) = {
-  def f(b: Bool) = {
-    return 1
-  }
-  def k(x: Int) = {
-    def k(y: Int) = {
-      return y: Int
-    }
-    val r = f: (Bool) => Int @ {}(n: Bool);
-    k: (Int) => Int @ {}(r: Int)
-  }
-  val r = f: (Bool) => Int @ {}(n: Bool);
-  k: (Int) => Int @ {}(r: Int)
-}
-
 /// RETURNS_TO
 
 f ↦ k, k
 k ↦ ?
 k ↦ ?
 
-/// CONTIFY
-
-def main(n: Bool) = {
-  def f(b: Bool) = {
-    return 1
-  }
-  def k(x: Int) = {
-    def k(y: Int) = {
-      return y: Int
-    }
-    val r = f: (Bool) => Int @ {}(n: Bool);
-    k: (Int) => Int @ {}(r: Int)
-  }
-  val r = f: (Bool) => Int @ {}(n: Bool);
-  k: (Int) => Int @ {}(r: Int)
-}
-
-/// PARAMETRIZE
+/// SINK
 
 def main(n: Bool) = {
   def f(b: Bool) = {

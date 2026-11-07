@@ -9,12 +9,11 @@ import effekt.core.substitutions.{ Substitution, substitute }
 
 /**
  * Turns statically known continuations into jumps:
- * [[identify]] names the body of every `val`, [[place]] brings continuations into scope where they are returned to,
- * [[returnsTo]] computes where each local definition returns to, [[contify]] replaces its returns by jumps there,
- * [[parametrize]] passes what went out of scope as parameters,
+ * [[identify]] names the body of every `val`, [[returnsTo]] computes where each local definition returns to,
+ * [[sinking]] replaces the returns of those returning to a single continuation by jumps there and sinks them behind it,
  * and [[cleanup]] removes unused definitions and inlines those used once.
  */
-def contification(m: ModuleDecl): ModuleDecl = cleanup(parametrize(contify(place(identify(m)))))
+def contification(m: ModuleDecl): ModuleDecl = cleanup(sinking(identify(m)))
 
 
 // Identify
@@ -31,14 +30,11 @@ def contification(m: ModuleDecl): ModuleDecl = cleanup(parametrize(contify(place
 def identify(m: ModuleDecl): ModuleDecl = {
   object identification extends Tree.Rewrite {
     override def rewrite(s: Stmt): Stmt = s match {
-      case Stmt.Val(ids, binding, body) => frame(ids, body) match {
-        case Some(k) => jump(k, _ => false, rewrite(binding))
-        case None =>
-          val rewrittenBinding = rewrite(binding)
-          val continuation = BlockLit(Nil, Nil, (ids zip rewrittenBinding.tpe).map(ValueParam.apply), Nil, rewrite(body))
-          val k = Id("k")
-          Stmt.Def(k, continuation, jump(BlockVar(k, continuation.tpe, continuation.capt), _ => false, rewrittenBinding))
-      }
+      case Stmt.Val(ids, binding, body) =>
+        val rewrittenBinding = rewrite(binding)
+        val continuation = BlockLit(Nil, Nil, (ids zip rewrittenBinding.tpe).map(ValueParam.apply), Nil, rewrite(body))
+        val k = Id("k")
+        Stmt.Def(k, continuation, jump(BlockVar(k, continuation.tpe, continuation.capt), _ => false, rewrittenBinding))
       case other => super.rewrite(other)
     }
   }
@@ -96,166 +92,6 @@ def jump(k: BlockVar, jumpsTo: Id => Boolean, s: Stmt): Stmt = {
       Stmt.Val(results, other, Stmt.App(k, Nil, (results zip other.tpe).map(ValueVar.apply), Nil))
   }
   go(s)
-}
-
-
-// Place
-// -----
-
-/**
- * Brings every continuation `k` into scope at the definitions returning to it, in one pass down and up again:
- *
- *   - Down: a definition `f` returning to a `k` it does not see is taken out and carried along.
- *   - Up: `k` floats out of every scope, until it reaches the binder of something it uses that is not a value
- *     (a definition, a block parameter, a resumption, or a type variable), or the place `f` was taken out.
- *     There it lands, followed by the definitions carried for it. What uses it lands with it.
- *
- * In a loop, `k` uses the definition around it, so it lands at the start of its body and `f` comes down to it;
- * if `k` is the loop and uses `f` itself, `f` comes into its body. Otherwise `k` floats up to `f`.
- * Values and references it floats past become parameters in [[parametrize]].
- */
-def place(m: ModuleDecl): ModuleDecl = {
-  val analysis = returnsTo(m)
-  val placing = Placing(analysis.definitions.keySet.flatMap { f => analysis.target(f).map(f -> _) }.toMap)
-  given Down = Down(Set.empty, Map.empty)
-  m.copy(definitions = m.definitions.map {
-    case Toplevel.Def(id, block: BlockLit) => Toplevel.Def(id, placing.literal(block, everything).value)
-    case Toplevel.Val(id, binding) => Toplevel.Val(id, placing.land(placing.stmt(binding), everything).value)
-    case other => other
-  })
-}
-
-private case class Definition(id: Id, block: Block) {
-  def uses(id: Id): Boolean = block.free.contains(id)
-  def uses(ids: Iterable[Id]): Boolean = ids.exists(uses)
-}
-
-private val everything: Definition => Boolean = _ => true
-private val nothing: Definition => Boolean = _ => false
-
-/** On the way down: the definitions in sight, and those carried along for each continuation. */
-private case class Down(visible: Set[Id], carried: Map[Id, List[Definition]]) {
-  def see(id: Id): Down = copy(visible = visible + id)
-  def carry(k: Id, f: Definition): Down = copy(carried = carried.updated(k, carried.getOrElse(k, Nil) :+ f))
-  def carriedFor(k: Id): List[Definition] = carried.getOrElse(k, Nil)
-}
-
-/** On the way up: the definitions still floating, in order, and the carried definitions already placed. */
-private case class Up(floating: List[Definition], placed: Set[Id]) {
-  def ++(other: Up): Up = Up(floating ++ other.floating, placed ++ other.placed)
-}
-private object Up {
-  val empty = Up(Nil, Set.empty)
-}
-
-/** A placed [[value]], and what floats up out of it. */
-private case class Placed[+A](value: A, up: Up) {
-  def map[B](f: A => B): Placed[B] = Placed(f(value), up)
-  def and[B](other: Placed[B]): Placed[(A, B)] = Placed((value, other.value), up ++ other.up)
-}
-private object Placed {
-  def all[A](placed: List[Placed[A]]): Placed[List[A]] = Placed(placed.map(_.value), placed.foldLeft(Up.empty)(_ ++ _.up))
-}
-
-@tailrec private def closure(ids: Set[Id])(step: Set[Id] => Set[Id]): Set[Id] = {
-  val next = ids ++ step(ids)
-  if next == ids then ids else closure(next)(step)
-}
-
-/** [[targets]] maps each definition to the continuation it returns to. */
-private case class Placing(targets: Map[Id, Id]) {
-
-  def stmt(s: Stmt)(using down: Down): Placed[Stmt] = s match {
-    case Stmt.Def(f, block, rest) if targets.get(f).exists(k => !down.visible.contains(k)) =>
-      val k = targets(f)
-      val placedBlock = definition(f, block, Nil)
-      val carrying = down.see(f).carry(k, Definition(f, placedBlock.value))
-      val placedRest = land(stmt(rest)(using carrying), _.id == k)(using carrying)
-      val restored = if placedRest.up.placed.contains(f) then placedRest else placedRest.map(Stmt.Def(f, placedBlock.value, _))
-      Placed(restored.value, placedBlock.up ++ restored.up)
-
-    case Stmt.Def(g, block, rest) =>
-      val carried = down.carriedFor(g)
-      val inside = called(carried, Definition(g, block))
-      val placedBlock = definition(g, block, inside)
-      val placedRest = stmt(rest)(using down.see(g))
-      if carried.exists(f => !inside.contains(f)) then
-        Placed(placedRest.value, placedBlock.up ++ Up(List(Definition(g, placedBlock.value)), Set.empty) ++ placedRest.up)
-      else placedBlock.and(land(placedRest, _.uses(g))).map(Stmt.Def(g, _, _))
-
-    case Stmt.Let(id, binding, rest) => stmt(rest).map(Stmt.Let(id, binding, _))
-    case Stmt.ImpureApp(id, callee, targs, vargs, bargs, rest) =>
-      blocks(bargs).and(stmt(rest)).map { case (placedArgs, placedRest) => Stmt.ImpureApp(id, callee, targs, vargs, placedArgs, placedRest) }
-    case Stmt.Val(ids, binding, rest) => stmt(binding).and(stmt(rest)).map { case (b, r) => Stmt.Val(ids, b, r) }
-    case Stmt.App(callee, targs, vargs, bargs) => blocks(bargs).map(Stmt.App(callee, targs, vargs, _))
-    case Stmt.Invoke(callee, method, tpe, targs, vargs, bargs) => blocks(bargs).map(Stmt.Invoke(callee, method, tpe, targs, vargs, _))
-    case Stmt.If(cond, thn, els) => stmt(thn).and(stmt(els)).map { case (t, e) => Stmt.If(cond, t, e) }
-    case Stmt.Match(scrutinee, tpe, clauses, default) =>
-      Placed.all(clauses.map { case (tag, clause) => literal(clause, nothing).map(tag -> _) })
-        .and(Placed.all(default.toList.map(stmt)))
-        .map { case (placedClauses, placedDefault) => Stmt.Match(scrutinee, tpe, placedClauses, placedDefault.headOption) }
-    case Stmt.Region(body) => literal(body, nothing).map(Stmt.Region(_))
-    case Stmt.Reset(body) => literal(body, nothing).map(Stmt.Reset(_))
-    case Stmt.Shift(prompt, k, body) => land(stmt(body), _.uses(k.id)).map(Stmt.Shift(prompt, k, _))
-    case Stmt.Alloc(id, init, region, rest) => stmt(rest).map(Stmt.Alloc(id, init, region, _))
-    case Stmt.Var(ref, init, capture, rest) => stmt(rest).map(Stmt.Var(ref, init, capture, _))
-    case Stmt.Get(id, tpe, ref, capt, rest) => stmt(rest).map(Stmt.Get(id, tpe, ref, capt, _))
-    case Stmt.Put(ref, capt, value, rest) => stmt(rest).map(Stmt.Put(ref, capt, value, _))
-    case Stmt.Resume(k, body) => stmt(body).map(Stmt.Resume(k, _))
-    case Stmt.Return(_) | Stmt.Hole(_, _) => Placed(s, Up.empty)
-  }
-
-  /** The block of the definition [[g]]: [[inside]], and what uses `g`, land at the start of its body. */
-  def definition(g: Id, b: Block, inside: List[Definition])(using down: Down): Placed[Block] = {
-    val placed = block(b, _.uses(g))(using down.see(g))
-    val prefix = inside.flatMap(withCarried(_, Set.empty))
-    Placed(placed.value match {
-      case lit: BlockLit => lit.copy(body = defineAll(prefix, lit.body))
-      case other => other
-    }, placed.up ++ Up(Nil, prefix.map(_.id).toSet))
-  }
-
-  /** A block literal, or each operation of an object like one. */
-  def block(b: Block, stops: Definition => Boolean)(using Down): Placed[Block] = b match {
-    case lit: BlockLit => literal(lit, stops)
-    case Block.New(Implementation(interface, operations)) =>
-      Placed.all(operations.map { case Operation(name, tparams, cparams, vparams, bparams, body) =>
-        literal(BlockLit(tparams, cparams, vparams, bparams, body), stops).map { lit => Operation(name, tparams, cparams, vparams, bparams, lit.body) }
-      }).map { placedOperations => Block.New(Implementation(interface, placedOperations)) }
-    case other => Placed(other, Up.empty)
-  }
-
-  def blocks(bs: List[Block])(using Down): Placed[List[Block]] = Placed.all(bs.map(block(_, nothing)))
-
-  /** What uses one of the block parameters, or meets type parameters, lands at the start of the body, and so does [[stops]]. */
-  def literal(lit: BlockLit, stops: Definition => Boolean)(using Down): Placed[BlockLit] = {
-    val BlockLit(tparams, cparams, vparams, bparams, body) = lit
-    land(stmt(body), d => tparams.nonEmpty || d.uses(bparams.map(_.id)) || stops(d)).map(BlockLit(tparams, cparams, vparams, bparams, _))
-  }
-
-  /** Lands the floating definitions that [[stops]], and those using them, each followed by what is carried for it. */
-  def land(placed: Placed[Stmt], stops: Definition => Boolean)(using Down): Placed[Stmt] = {
-    val Up(floating, alreadyPlaced) = placed.up
-    val here = closure(floating.filter(stops).map(_.id).toSet) { ids => floating.filter(_.uses(ids)).map(_.id).toSet }
-    val (landing, onward) = floating.partition(d => here.contains(d.id))
-    val defined = landing.flatMap(withCarried(_, alreadyPlaced))
-    Placed(defineAll(defined, placed.value), Up(onward, alreadyPlaced ++ defined.map(_.id)))
-  }
-
-  /** [[d]] followed by what is carried for it and not [[placed]] yet, and theirs. */
-  def withCarried(d: Definition, placed: Set[Id])(using down: Down): List[Definition] =
-    d :: down.carriedFor(d.id).filterNot(f => placed.contains(f.id)).flatMap(withCarried(_, placed))
-
-  /** The definitions of [[carried]] that [[d]] calls, and those they call in turn, in order. */
-  def called(carried: List[Definition], d: Definition): List[Definition] = {
-    val found = closure(carried.filter(f => d.uses(f.id)).map(_.id).toSet) { ids =>
-      carried.filter { f => carried.exists(c => ids.contains(c.id) && c.uses(f.id)) }.map(_.id).toSet
-    }
-    carried.filter(f => found.contains(f.id))
-  }
-
-  def defineAll(definitions: List[Definition], body: Stmt): Stmt =
-    definitions.foldRight(body) { (d, rest) => Stmt.Def(d.id, d.block, rest) }
 }
 
 
@@ -352,19 +188,6 @@ private def calls(m: ModuleDecl, local: Set[Id]): List[(Id, Source)] = {
 // Contify
 // -------
 
-/**
- * Replaces the returns of every local definition that always returns to the same continuation `k`
- * by jumps to `k`, provided `k` is in scope at the definition, and dissolves the frames around its calls:
- *
- *   [[ def f(x) = s; ... val r = f(a); k(r) ... ]]  =  def f(x) = jump(k, s); ... f(a) ...
- */
-def contify(m: ModuleDecl): ModuleDecl = {
-  val analysis = returnsTo(m)
-  val where = positions(m)
-  val targets = analysis.definitions.keySet.flatMap { f => analysis.target(f).filter(where(f).sees).map(f -> _) }.toMap
-  Contification(targets, analysis.definitions).rewrite(m)
-}
-
 /** Lets each definition in [[targets]] jump to its continuation, retyping its occurrences accordingly. */
 private case class Contification(targets: Map[Id, Id], definitions: Map[Id, BlockLit]) extends Tree.Rewrite {
 
@@ -416,101 +239,57 @@ private case class Contification(targets: Map[Id, Id], definitions: Map[Id, Bloc
 }
 
 
-// Parametrize
-// -----------
+// Sink
+// ----
 
 /**
- * Makes every local definition take what it uses but does not see as additional parameters, and passes them at every call:
- *
- *   [[ def f(x){g} = s; ... f(a){h} ... ]]  =  def f(x, y){g, b} = s[y := y', b := b']; ... f(a, y){h, b} ...
- *
- * where `y` and `b` are the free values and blocks of `f` out of sight at `f`. Passing them makes them free in the
- * callers, so this repeats until every definition sees what it uses. Only the innermost definitions take them in
- * each round, since what is free in a definition inside of another is free in that other one, too.
- * Each additional block parameter gets a fresh capture parameter, which replaces the captures of that block in `s`.
- *
- * TODO Abstract over type variables, too. For now, [[place]] does not float continuations out of the scope of type
- *   parameters, and values of types with type variables or captures cannot become parameters.
+ * Contifies every local definition that returns to exactly one continuation `k`, wherever it stands, and then sinks
+ * it right behind `k`; if `k` uses it, it sinks to the place of `k` and takes `k` into its body.
  */
-@tailrec def parametrize(m: ModuleDecl): ModuleDecl = {
-  val missing = outOfSight(m)
-  if missing.isEmpty then m else parametrize(passing(m, missing))
+def sinking(m: ModuleDecl): ModuleDecl = {
+  val analysis = returnsTo(m)
+  val targets = analysis.definitions.keySet.flatMap { f => analysis.target(f).map(f -> _) }.toMap
+  sink(Contification(targets, analysis.definitions).rewrite(m), targets)
 }
 
-/**
- * The free values and blocks of the innermost local definitions of [[m]] that do not see them.
- * They must be able to become parameters: neither definitions nor of types with type variables or captures,
- * taken by definitions that only occur as the callee of calls.
- */
-private def outOfSight(m: ModuleDecl): Map[Id, (List[(Id, ValueType)], List[(Id, (BlockType, Captures))])] = {
-  val global = m.definitions.map(_.id).toSet ++ m.externs.collect { case extern: Extern.Def => extern.id }
-  val definitions = allDefinitions(m)
-  val where = positions(m)
-  lazy val callCounts = callCounting.query(m)(using ())
-  lazy val occurrenceCounts = occurrenceCounting.query(m)(using ())
-
-  val missing = definitions.flatMap { case (d, block) =>
-    def unseen(id: Id) = !global.contains(id) && id != d && !where(d).sees(id)
-    val values = block.free.values.iterator.filter { case (id, _) => unseen(id) }.toList.sortBy(_._1.id)
-    val blocks = block.free.blocks.iterator.filter { case (id, _) => unseen(id) }.toList.sortBy(_._1.id)
-    Option.when(values.nonEmpty || blocks.nonEmpty)(d -> (values, blocks))
-  }
-  val innermost = missing.filter { case (d, _) => !missing.keys.exists(other => where(other).enclosing.contains(d)) }
-
-  innermost.foreach { case (d, (values, blocks)) =>
-    def impossible(reason: String) = sys error s"Cannot pass what is out of scope at ${d.show} as parameters: $reason"
-    if !definitions(d).isInstanceOf[BlockLit] then impossible("not a block literal")
-    if callCounts.getOrElse(d, 0) != occurrenceCounts.getOrElse(d, 0) then impossible("not only called")
-    values.foreach { case (x, tpe) => if !closed(tpe) then impossible(s"${x.show} has type $tpe") }
-    blocks.foreach { case (b, (tpe, _)) =>
-      if definitions.contains(b) then impossible(s"${b.show} is a definition")
-      if !closedBlock(tpe) then impossible(s"${b.show} has type $tpe")
-    }
-  }
-  innermost
-}
-
-/** [[m]] where each definition in [[parameters]] takes them, and every call passes them. */
-private def passing(m: ModuleDecl, parameters: Map[Id, (List[(Id, ValueType)], List[(Id, (BlockType, Captures))])]): ModuleDecl = {
-  object passing extends Tree.Rewrite {
+/** Sinks each definition in [[targets]] right behind its continuation, the rest of the statements first. */
+private def sink(m: ModuleDecl, targets: Map[Id, Id]): ModuleDecl = {
+  object sinking extends Tree.Rewrite {
     override def rewrite(s: Stmt): Stmt = s match {
-      case Stmt.App(BlockVar(f, BlockType.Function(tparams, cparams, vparams, bparams, result), capt), targs, vargs, bargs)
-          if parameters.contains(f) =>
-        val (values, blocks) = parameters(f)
-        val tpe = BlockType.Function(tparams, cparams ++ blocks.map(_._1), vparams ++ values.map(_._2), bparams ++ blocks.map(_._2._1), result)
-        Stmt.App(BlockVar(f, tpe, capt), targs, vargs.map(rewrite) ++ values.map(ValueVar.apply),
-          bargs.map(rewrite) ++ blocks.map { case (b, (tpe, capt)) => BlockVar(b, tpe, capt) })
-      case Stmt.Def(f, block: BlockLit, rest) if parameters.contains(f) =>
-        val (values, blocks) = parameters(f)
-        val BlockLit(tparams, cparams, vparams, bparams, body) = rewrite(block): @unchecked
-        val freshValues = values.map { case (id, tpe) => ValueParam(Id(id), tpe) }
-        val freshCaptures = blocks.map { case (id, _) => Id(id) }
-        val freshBlocks = blocks.zip(freshCaptures).map { case ((id, (tpe, _)), c) => BlockParam(Id(id), tpe, Set(c)) }
-        val captures = blocks.zip(freshCaptures).flatMap { case ((_, (_, capt)), c) => capt.map(_ -> c) }
-          .groupMap(_._1)(_._2).view.mapValues(_.toSet).toMap
-        val renaming = Substitution(DB.empty, DB.from(captures),
-          DB.from(values.map(_._1) zip freshValues.map(p => ValueVar(p.id, p.tpe))),
-          DB.from(blocks.map(_._1) zip freshBlocks.map(p => BlockVar(p.id, p.tpe, p.capt))))
-        Stmt.Def(f, BlockLit(tparams, cparams ++ freshCaptures, vparams ++ freshValues, bparams ++ freshBlocks,
-          substitute(body)(using renaming)), rewrite(rest))
+      case Stmt.Def(f, block: BlockLit, rest) if targets.contains(f) =>
+        val sunkRest = rewrite(rest)
+        val sunkBlock = rewrite(block).asInstanceOf[BlockLit]
+        val k = targets(f)
+        if defines(sunkRest, k) then behind(k, f, sunkBlock, sunkRest) else Stmt.Def(f, sunkBlock, sunkRest)
       case other => super.rewrite(other)
     }
   }
-  passing.rewrite(m)
+  sinking.rewrite(m)
 }
 
-private def closed(tpe: ValueType): Boolean = tpe match {
-  case ValueType.Var(_) => false
-  case ValueType.Data(_, targs) => targs.forall(closed)
-  case ValueType.Boxed(_, _) => false
+/** [[s]] with [[f]] right behind the definition of [[k]], or around it if `k` uses `f`. */
+private def behind(k: Id, f: Id, block: BlockLit, s: Stmt): Stmt = {
+  object inserting extends Tree.Rewrite {
+    override def rewrite(s: Stmt): Stmt = s match {
+      case Stmt.Def(id, kBlock, rest) if id == k && kBlock.free.contains(f) =>
+        Stmt.Def(f, block.copy(body = Stmt.Def(k, kBlock, block.body)), rest)
+      case Stmt.Def(id, kBlock, rest) if id == k => Stmt.Def(k, kBlock, Stmt.Def(f, block, rest))
+      case other => super.rewrite(other)
+    }
+  }
+  inserting.rewrite(s)
 }
 
-private def closedBlock(tpe: BlockType): Boolean = tpe match {
-  case BlockType.Function(tparams, cparams, vparams, bparams, result) =>
-    tparams.isEmpty && vparams.forall(closed) && bparams.forall(closedBlock) && result.forall(closed)
-  case BlockType.Interface(_, targs) => targs.forall(closed)
-  case BlockType.Prompt(answer) => answer.forall(closed)
-  case BlockType.Resume(result, answer) => result.forall(closed) && answer.forall(closed)
+/** Whether [[s]] defines [[k]]. */
+private def defines(s: Stmt, k: Id): Boolean = {
+  object definition extends Tree.Query[Unit, Boolean] {
+    def empty = false
+    def combine = _ || _
+    override def stmt(using Unit) = {
+      case Stmt.Def(id, block, rest) => id == k || query(block) || query(rest)
+    }
+  }
+  definition.query(s)(using ())
 }
 
 
@@ -569,58 +348,17 @@ private def bind(block: BlockLit, targs: List[ValueType], vargs: List[Expr], bar
 // Shared
 // ------
 
-/** All local definitions of [[m]], of any block. */
-private def allDefinitions(m: ModuleDecl): Map[Id, Block] = {
-  object collector extends Tree.Query[Unit, Map[Id, Block]] {
+/** All local definitions of block literals in [[m]]. */
+private def localDefinitions(m: ModuleDecl): Map[Id, BlockLit] = {
+  object collector extends Tree.Query[Unit, Map[Id, BlockLit]] {
     def empty = Map.empty
     def combine = _ ++ _
     override def stmt(using Unit) = {
-      case Stmt.Def(id, block, rest) => Map(id -> block) ++ query(block) ++ query(rest)
+      case Stmt.Def(id, block: BlockLit, rest) => Map(id -> block) ++ query(block) ++ query(rest)
     }
   }
   collector.query(m)(using ())
 }
-
-/** All local definitions of block literals in [[m]]. */
-private def localDefinitions(m: ModuleDecl): Map[Id, BlockLit] = allDefinitions(m).collect { case (id, block: BlockLit) => id -> block }
-
-/** Where a definition stands: what it sees there, and the definitions around it. */
-private case class Position(visible: Set[Id], enclosing: List[Id]) {
-  def sees(id: Id): Boolean = visible.contains(id) || enclosing.contains(id)
-  def bind(ids: IterableOnce[Id]): Position = copy(visible = visible ++ ids)
-}
-
-/** The position of every local definition in [[m]]. */
-private def positions(m: ModuleDecl): Map[Id, Position] = {
-  object positioning extends Tree.Query[Position, Map[Id, Position]] {
-    def empty = Map.empty
-    def combine = _ ++ _
-    override def stmt(using here: Position) = {
-      case Stmt.Def(id, block, rest) =>
-        Map(id -> here) ++ query(block)(using here.copy(enclosing = id :: here.enclosing)) ++ query(rest)(using here.bind(List(id)))
-      case Stmt.Let(id, binding, rest) => query(binding) ++ query(rest)(using here.bind(List(id)))
-      case Stmt.ImpureApp(id, callee, targs, vargs, bargs, rest) =>
-        all(vargs, query) ++ all(bargs, query) ++ query(rest)(using here.bind(List(id)))
-      case Stmt.Val(ids, binding, rest) => query(binding) ++ query(rest)(using here.bind(ids))
-      case Stmt.Var(ref, init, capture, rest) => query(init) ++ query(rest)(using here.bind(List(ref)))
-      case Stmt.Alloc(id, init, region, rest) => query(init) ++ query(rest)(using here.bind(List(id)))
-      case Stmt.Get(id, tpe, ref, capt, rest) => query(rest)(using here.bind(List(id)))
-      case Stmt.Shift(prompt, k, rest) => query(rest)(using here.bind(List(k.id)))
-    }
-    override def block(using here: Position) = {
-      case BlockLit(tparams, cparams, vparams, bparams, body) =>
-        query(body)(using here.bind(vparams.map(_.id) ++ bparams.map(_.id)))
-    }
-    override def operation(using here: Position) = {
-      case Operation(name, tparams, cparams, vparams, bparams, body) =>
-        query(body)(using here.bind(vparams.map(_.id) ++ bparams.map(_.id)))
-    }
-  }
-  positioning.query(m)(using Position(Set.empty, Nil))
-}
-
-
-
 
 /** How often each block occurs as the callee of a call. */
 private object callCounting extends Tree.Query[Unit, Map[Id, Int]] {

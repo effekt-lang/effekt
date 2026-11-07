@@ -707,13 +707,13 @@ class VMTests extends munit.FunSuite {
 
     examplesDir / "casestudies" / "lexer.effekt.md" -> Some(Summary(
       staticDispatches = 311,
-      dynamicDispatches = 5,
+      dynamicDispatches = 8,
       patternMatches = 137,
       branches = 388,
       pushedFrames = 103,
       poppedFrames = 103,
       allocations = 60,
-      closures = 3,
+      closures = 4,
       variableReads = 164,
       variableWrites = 51,
       resets = 10,
