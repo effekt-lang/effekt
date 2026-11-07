@@ -1,0 +1,615 @@
+module probs
+
+import list
+import stream
+import pile
+
+// enumerate "results"
+effect fail(): Nothing
+effect fork(): Bool
+
+// randomness
+effect random(): Double
+
+/// Should be called with a positive number
+effect loss(weight: Double): Unit
+
+type Probability = Double
+type Trace = List[Double]
+
+// SAMPLE FUNCTIONS
+
+def sampleUniform(lower: Double, upper: Double): Double / random = {
+  val x = do random()
+  return (lower + (x * (upper - lower)))
+}
+
+def sampleGaussian(mean: Double, variance: Double): Double / random = {
+  val u1 = do random()
+  val u2 = do random()
+
+  val sigma = variance
+
+  //box-muller-Methode
+  val mag = sigma * sqrt(-2.0 * log(u1))
+  val z0 = mag * cos(2.0 * PI * u2) 
+  //val z1 = mag * sin(2.0 * PI * u2)
+
+  return z0 + mean
+}
+
+// sample from Betadistribution
+def sampleBeta(mean: Double, sampleSize: Double): Double / random = {
+  val alpha = mean * sampleSize
+  sampleGaussian(0.5, 1.0 / (4.0 * (2.0 * alpha + 1.0)))
+}
+
+// Geometric distribution
+def sampleGeometric(prob: Double): Int / random =
+  ceil(log(do random()) / log(1.0 - prob))
+
+// sample from Bernoulli
+def sampleBernoulli(prob: Double): Int / random =
+  if (do random() < prob) { 1 } else { 0 }
+
+// sampleBinomial
+def sampleBinomial(prob: Double, n: Int): Int / random = {
+  var sucesses = 0
+  var iterations = n
+  while (iterations > 0){
+    sucesses = sucesses + sampleBernoulli(prob)
+    iterations = iterations - 1
+  }
+  return sucesses
+}
+
+/// The given weights have to sum to one
+def sampleCategorical(probs: List[Probability]): Int / random = {
+  var target = do random()
+  var index = 0
+  def go(probs: List[Probability]): Int = probs match {
+    case Nil() => panic("empty list in sampleCategorical")
+    case Cons(this, rest) =>
+      if (target < this) index
+      else {
+        index = index + 1
+        target = target - this
+        go(rest)
+      }
+  }
+  go(probs)
+}
+
+def sampleGumbel(): Double / random =
+  neg(log(neg(log(do random()))))
+
+def smaller[A](x1: Weighted[A], x2: Weighted[A]): Weighted[A] =
+  if (x1.weight < x2.weight) x1 else x2
+
+def minimum[A] { stream: () => Unit / emit[Weighted[A]] }: Option[Weighted[A]] = {
+  var current = None()
+  for[Weighted[A]] { stream() } { other =>
+    current match {
+      case None() => current = Some(other)
+      case Some(weighted) => current = Some(smaller(weighted, other))
+    }
+  }
+  return current
+}
+
+// Gumbel-max trick
+/// Weights are the unnormalized neg log likelihoods
+def sampleSoftmax[A]{ stream: () => Unit / emit[Weighted[A]] }: A / {fail, random} = {
+  val result =
+    minimum[A] {
+      for { stream() } {
+        case Weighted(value, weight) => do emit(Weighted(value, weight - sampleGumbel()))
+      }
+    }
+  result.getOrElse { do fail() }.value
+}
+
+// OBSERVATION FUNCTIONS
+
+def gamma(z0: Double): Double = {
+  var z = z0
+  //g is a small integer and p is list of coeficients dependent on g
+  val g = 7.0 
+  val p = [0.99999999999980993,
+    676.5203681218851,
+    -1259.1392167224028,
+    771.32342877765313,
+    -176.61502916214059,
+    12.507343278686905,
+    -0.13857109526572012,
+    9.9843695780195716 * pow(10.0, 0.0 - 6.0),
+    1.5056327351493116 * pow(10.0, 0.0 - 7.0)] 
+
+  // takes the i-th element of a list
+  def takeith(i: Double, p0: List[Double]): Double = {
+    p0 match {
+      case Nil() => panic("empty list")
+      case Cons(p, ps) =>
+        if(i == 1.0) {p}
+        else {takeith(i - 1.0, ps)}
+    }
+  }
+
+  //lanczos approximation
+  if (z < 0.5) {
+    val y = PI / (sin(PI * z) * gamma(1.0 - z))
+    return y
+  } else {
+    z = z - 1.0
+    var x = takeith(1.0, p)
+    var i = 2.0
+    while(i <= 9.0){
+      x = x + (takeith(i, p) / (z + i - 1.0))
+      i = i + 1.0
+    }
+    val t = z + g + 0.5
+    val y = sqrt(2.0 * PI) * pow(t, (z + 0.5)) * exp(0.0 - t) * x
+    return y
+  }
+}
+
+def factorial(x: Int): Int = {
+  def factorialHelper(x: Int, accumulator: Int): Int =
+    if (x == 1) { accumulator }
+    else { factorialHelper(x - 1, accumulator * x) }
+  
+  factorialHelper(x, 1)
+}
+
+// calculation of binomial coefficient (i think should be correct)
+def binomialCoefficient(n: Int, koef: Int) = {
+  var k = koef
+  if((2 * k) > n) {
+    k = n - k
+  }
+  var result = 1
+  var i = 1
+  while (i <= k) {
+    result = result * ((n + 1 - i) / i)
+    i = i + 1
+  }
+  return result
+}
+
+// returns minimum of a list of weighted elements
+def minimum[T](values: List[Weighted[T]]): Weighted[T] / fail = values match {
+  case Nil() => do fail()
+  case Cons(x, Nil()) => x
+  case Cons(x, xs) => minimumWorker(x, xs)
+}
+def minimumWorker[T](min: Weighted[T], values: List[Weighted[T]]): Weighted[T] / fail = values match {
+  case Nil() => min
+  case Cons(x, xs) => minimumWorker(if (x.weight < min.weight) x else min, xs)
+}
+
+def factor(prob: Double) =
+  do loss(neg(log(prob)))
+
+// observe functions
+def observeGaussian(value: Double, mean: Double, variance: Double): Unit / loss = {
+  // normalizing constant l speeds up rejection sampling
+  val l = neg(log(1.0 / (sqrt(variance) * sqrt(2.0 * PI))))
+  do loss(l + (square(value - mean) / (2.0 * variance)))
+}
+
+def observeUniform(value: Double, lower: Double, upper: Double): Unit / loss = {
+  if(lower < value && value < upper){ 
+    do loss(log(upper - lower))
+  } else {
+    do loss(1.0 / 0.0)
+  }
+}
+
+def observeBeta(value: Double, mean: Double, sampleSize: Double): Unit / loss = {
+  val alpha = mean * sampleSize
+  val beta = (1.0 - mean) * sampleSize
+  val x = (gamma(alpha + beta) / (gamma(alpha) * gamma(beta))) * pow(value, (alpha - 1.0)) * pow((1.0 - value), (beta - 1.0))
+
+  factor(x)
+}
+
+def observeGeometric(value: Int, prob: Double) = {
+  if(value >= 1){ factor(pow(1.0 - prob, value - 1) * prob) }
+  else { factor(0.0) }
+}
+
+def observeBernoulli(value: Int, prob: Double) = {
+  if (value == 1) {
+    factor(prob)
+  } else {
+    factor(1.0 - prob)
+  }
+}
+
+def observeCategorical(value: Int, probs: List[Probability]): Unit / loss =
+  probs match {
+    case Nil() => factor(0.0)
+    case Cons(_, _) and value < 0 => factor(0.0)
+    case Cons(prob, _) and value == 0 => factor(prob)
+    case Cons(_, rest) => observeCategorical(value - 1, rest)
+  }
+
+// observe for binomial distribution
+def observeBinomial(value: Int, prob: Double, n: Int) = {
+  val x = binomialCoefficient(n, value)
+  val y = toDouble(x) * pow(prob, value) * pow((1.0 - prob), (n - value))
+
+  factor(y)
+}
+
+// INFERENCE HANDLERS
+
+// handler for fail is repeated until good sample is found
+def repeatedly[R]{ program: () => R / fail }: R = {
+  def loop(): R = 
+    try { program() }
+    with fail { loop() }
+  loop()
+}
+
+// handler for effect random
+def handleRandom[R]{ program: () => R / random }: R =
+  try { program() }
+  with random { resume(random()) }
+
+// rejection sampling  
+def handleRejection[R]{ program: () => R / loss }: R / {random, fail} =
+  try { program() }
+  with loss { weight =>
+    if (do random() < exp(neg(weight))) {
+      resume(())
+    } else {
+      do fail()
+    }
+  }
+
+// handler for loss accumulating the negative log probability
+def handleLoss[R]{ program: () => R / loss }: Weighted[R]  = {
+  var current = 0.0
+  try { Weighted(program(), current) }
+  with loss { weight =>
+    current = current + weight
+    resume(())
+  }
+}
+
+def countResults[A] { query: () => Unit / {fork, fail}}: Int =
+  try { query(); 1 } with fail { 0 } with fork { resume(true) + resume(false) }
+
+def enumerationSampling[R] { program: () => R / {fork, fail, loss} }: R / random =
+  repeatedly { sampleSoftmax[R] { results[Weighted[R]] { weighted[R] { program() } } } }
+
+def rejectionSampling[R]{ program: () => R / loss }: R / random =
+  repeatedly { handleRejection { program() } }
+
+/// MCMC algorithm for drawing 'random' numbers from distribution
+def markovChainSampling[R]{ program: () => R / loss }: Unit / {random, emit[R]} = {
+  var slice = 0.0
+  forever{
+    do emit(rejectionSampling {
+      val candidate = handleLoss { program() }
+      if (candidate.weight > slice) {
+        do loss(candidate.weight - slice)
+      }
+      slice = candidate.weight
+      return candidate.value
+    })
+  }
+}
+
+// things from search.effekt
+def select[A] { stream: () => Unit / emit[A] }: A / {fork, fail} = {
+  def body(): A / emit[A] = {
+    stream()
+    do fail()
+  }
+  try {
+    body()
+  } with emit[A] { value =>
+    if (do fork()) {
+      return value
+    } else {
+      resume(())
+    }
+  }
+}
+
+def results[R] { query: () => R / {fork, fail} }: Unit / emit[R] =
+  try {
+    do emit(query())
+  } with fork { () =>
+    resume(true)
+    resume(false)
+  } with fail { () =>
+    ()
+  }
+
+def weighted[R] { program: () => R / loss}: Weighted[R] = {
+  var weight = 0.0
+  try { Weighted(program(), weight) }
+  with loss { w => 
+    weight = weight + w 
+    resume(())
+  }
+}
+
+def choose[A](items: List[A]): A / {fork, fail} =
+  items match {
+    case Nil() => do fail()
+    case Cons(value, values) =>
+      if (do fork()) {
+        return value
+      } else {
+        choose(values)
+      }
+  }
+
+def choice[A] { action1: () => A } { action2: () => A }: A / fork =
+  if (do fork()) { action1() } else { action2() }
+
+def where(condition: Bool): Unit / fail =
+  if (condition) { () } else { do fail() }
+
+//def flip(prob: Double) : Bool / {fork, loss} = {
+//  if(do fork()) {
+//    factor(prob)
+//    return true
+//  } else {
+//    factor(1.0 - prob)
+//    return false
+//  }
+//}
+def flip(prob: Double): Bool / {fork, loss} = 
+  choice{factor(prob); return true} {factor(1.0 - prob); return false}
+
+def example() = {
+  val b1 = flip(0.4)
+  val b2 = flip(0.6)
+
+  return (b1 && b2, b1 || b2)
+}
+
+interface Sampler {
+  def sample[A](heap: Heap[A]): A / {fail, random}
+}
+
+def softmaxSampler = new Sampler {
+  def sample[A](heap: Heap[A]) = sampleSoftmax{heap.each} 
+}
+
+// sampling method
+// We needed to add some workaround in this implementation that are not mentioned in the paper 
+// for visualization and explanation purposes.
+def sampling[A]{sampler: Sampler}{program: () => A / {fork, fail, loss}}: A / {fail, random} = {
+  val tasks = try {
+    val result = program()
+    single(box{ if (false){do random(); do fail()} else {return result} }, 0.0)
+  } with loss { weight =>
+    single[() => A / {fail, random} at {program, io, sampler}](
+      box{ sampler.sample(resume(()))() },
+      weight
+    )
+  } with fork {
+    meld(resume(true), resume(false))
+  } with fail {
+    pile::empty()
+  }
+  sampler.sample(tasks)()
+}
+
+def lazySampling[A]{ program: () => A / {fork, fail, loss} }: A / random  = 
+  repeatedly{sampling{softmaxSampler}{program}}
+
+// def main2() = {
+//   with handleRandom
+//   with sampleImportance
+//   example()
+// }
+
+// def test[A]{program: () => A / {fail}}: Unit / {emit[Weighted[A]], fail} = {
+//   var weight = 0.0
+//   var queue = Empty[() => Unit at {}]()
+
+//   do emit(Weighted(program(), weight))
+//   extract(queue) match {
+//     case None() => ()
+//     case Some((Weighted(v, wv), rest)) => 
+//       weight = wv
+//       queue = rest
+//       v() 
+//   }
+// }
+
+def minimize[A]{ program: () => A / {loss, fork, fail}}: Unit / emit[Weighted[A]] = {
+  var weight = 0.0
+  var queue = Empty()
+  try {
+    do emit(Weighted(program(), weight))
+  } with fail { () =>
+    ()
+  } with fork { () => 
+    queue = insert(queue, box { resume(false) }, weight)
+    resume(true)
+  } with loss { (w) => 
+    val (Weighted(thread, priority), rest) = exchange(queue, box { resume(()) }, weight + w)
+    weight = priority
+    queue = rest
+    thread()
+  }
+  while (extract(queue) is Some((Weighted(thread, priority), rest))) {
+    weight = priority
+    queue = rest
+    thread()
+  }
+}
+
+def main() = {
+  // one handle Random call used for all example calls
+  with handleRandom
+
+  println("slice sampling: gaus(0,1)")
+  // samples seem to be correct so idk
+  for[Double]{
+    with limit[Double](5)
+    markovChainSampling {
+      val x = sampleGaussian(0.0, 1.0)
+      return x
+    }
+  }{x => println(x)}
+
+  println("\n")
+
+  println("rejection sampling: gaus(-2,5) observed in (unif(0,2))")
+  for[Double] {
+    do emit(rejectionSampling {
+    val x = sampleGaussian(-2.0, 5.0)
+    observeUniform(x, 0.0, 2.0)
+    return x
+    })
+  }{x => println(x)}
+
+  println("\n")
+
+  println("rejection sampling: Binomial(0.5, 5) ")
+  for[Int] {
+    do emit(rejectionSampling {
+    val x = sampleBinomial(0.5, 5)
+    return x
+    })
+  }{x => println(x)}
+
+  println("\n")
+
+  println("rejection sampling: uniform(0, 10) observed in Binomial(0.5, 5) ")
+  for[Int] {
+    do emit(rejectionSampling {
+    val x = sampleBinomial(0.5, 5)
+    observeBinomial(x, 0.5, 5)
+    return x
+    })
+  }{x => println(x)}
+
+  println("\n")
+
+  println("rejection sampling: Categorical (0.5, 0.5) ")
+  for[Int] {
+    do emit(rejectionSampling {
+    val x = sampleCategorical([0.5, 0.5])
+    return x
+    })
+  }{x => println(x)}
+
+  println("\n")
+
+  println("slice: unif(1,10) in categorical(0.2, 0.2, 0.2, 0.2, 0.2) ")
+  for[Int] {
+    with limit[Int](5)
+    with markovChainSampling
+    val x = floor(sampleUniform(0.0, 10.0))
+    observeCategorical(x,[0.2, 0.2, 0.2, 0.2, 0.2])
+    return x
+  }{x => println(x)}
+
+  println("\n")
+
+  println("slice: gaus(0,2) observed in (unif(0,2))")
+  for[Double]{
+    with limit[Double](5)
+    markovChainSampling {
+      val x = sampleGaussian(0.0, 2.0)
+      observeUniform(x, 0.0, 2.0)
+      return x
+    }
+  }{x => println(x)}
+
+  println("\n")
+
+  println("slice: unif(0,5) observed in gaus(0.0,0.1)")
+  for[Double]{
+    with limit[Double](5)
+    markovChainSampling{
+      val x = sampleUniform(0.0, 5.0)
+      observeGaussian(x, 0.0, 1.0)
+      return x
+    }
+  }{x => println(x)}
+
+  println("\n")
+
+  println("slice: unif(5.0, 10.0)")
+  for[Double]{
+    with limit[Double](5)
+    markovChainSampling{
+      val x = sampleUniform(5.0, 10.0)
+      return x
+    }
+  }{x => println(x)}
+
+  println("\n")
+
+  println("enumeration Sampling: Normal(0.0,1.0) ")
+  for[Double] {
+    do emit(enumerationSampling{
+    val x = sampleGaussian(0.0, 1.0)
+    return x
+    })
+  }{x => println(x)}
+
+  println("\n")
+
+  println("rejection: Geometric(0.5)")
+  for[Int] {
+    do emit(rejectionSampling {
+    val x = sampleGeometric(0.5)
+    return x
+    })
+  }{x => println(x)}
+
+   println("\n")
+
+  println("rejection: Bernoulli(0.5)")
+  for[Int] {
+    do emit(rejectionSampling {
+    val x = sampleBernoulli(0.5)
+    return x
+    })
+  }{x => println(x)}
+
+  println("\n")
+
+  println("rejection: Gaus(0,1) observed in Geometric(0.2)")
+  for[Int] {
+    do emit(rejectionSampling {
+    val x = floor(sampleGaussian(0.0, 1.0))
+    observeGeometric(x, 0.2)
+    return x
+    })
+  }{x => println(x)}
+
+  println("\n")
+
+  println("rejection: Gaus(0,1) observed in Uniform(0,3)")
+  for[Double] {
+    do emit(rejectionSampling {
+    val x = sampleGaussian(0.0, 1.0)
+    observeUniform(x, 0.0, 3.0)
+    return x
+    })
+  }{x => println(x)}
+
+  println("\n")
+
+  println("collect heap")
+  collectHeap[(Bool,Bool)]{results{weighted[(Bool,Bool)]{example()}}} match {
+    case result => 
+      for[Weighted[(Bool,Bool)]]{ result.each }{
+        case Weighted((b1, b2), w) => println (b1.show ++ "," ++ b2.show ++ "," ++ w.show)
+      }
+  }
+
+}
