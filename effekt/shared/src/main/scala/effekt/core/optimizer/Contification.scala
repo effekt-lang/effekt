@@ -41,14 +41,9 @@ def identify(m: ModuleDecl): ModuleDecl = {
   identification.rewrite(m)
 }
 
-/** The continuation `k` if [[body]] is `k(ids)`, so that `val ids = binding; body` is a frame around `binding`. */
-def frame(ids: List[Id], body: Stmt): Option[BlockVar] = body match {
-  case Stmt.App(k: BlockVar, Nil, vargs, Nil) if ids.size == vargs.size && (ids zip vargs).forall {
-    case (id, ValueVar(x, _)) => x == id
-    case _ => false
-  } => Some(k)
-  case _ => None
-}
+/** Whether `val ids = s; k(vargs)` is a frame `val r = s; k(r)`. */
+def isFrame(ids: List[Id], vargs: List[Expr]): Boolean =
+  vargs.collect { case ValueVar(x, _) => x } == ids && vargs.size == ids.size
 
 /**
  * [[s]] where every exit jumps to [[k]]:
@@ -57,6 +52,8 @@ def frame(ids: List[Id], body: Stmt): Option[BlockVar] = body match {
  *   [[ f(a) ]]      =  f(a)               if [[jumpsTo]](f), since `f` jumps to `k` itself
  *   [[ shift(p) { {k0} => b } ]]  =  shift(p) { {k0} => b[ resume(k0){ s } := resume(k0){ [[ s ]] } ] }
  *                                     if `k0` occurs only resumed, since the frame is part of what `k0` captures
+ *                                     (TODO: maybe move this to another phase, the Normalizer already pushes frames
+ *                                     into shifts that do not resume)
  *   [[ s ]]         =  val r = s; k(r)    for any other exit, including delimiters like `var` and `reset`
  */
 def jump(k: BlockVar, jumpsTo: Id => Boolean, s: Stmt): Stmt = {
@@ -81,11 +78,11 @@ def jump(k: BlockVar, jumpsTo: Id => Boolean, s: Stmt): Stmt = {
     case Stmt.Get(id, tpe, ref, capt, rest) => Stmt.Get(id, tpe, ref, capt, go(rest))
     case Stmt.Put(ref, capt, value, rest) => Stmt.Put(ref, capt, value, go(rest))
     case Stmt.Hole(tpe, span) => Stmt.Hole(result, span)
-    case StaticResumptions.Shift(shift) if shift.resumesOnly =>
-      val Stmt.Shift(prompt, BlockParam(resumption, BlockType.Resume(_, answer), captures), _) = shift.stmt: @unchecked
+    case shift @ Stmt.Shift(prompt, BlockParam(resumption, BlockType.Resume(resumed, answer), captures), _)
+        if StaticResumptions.Shift(shift, resumption, resumed).resumesOnly =>
       val retyped = BlockParam(resumption, BlockType.Resume(result, answer), captures)
-      Stmt.Shift(prompt, retyped, shift.replaceResumptions { resumed =>
-        Stmt.Resume(BlockVar(resumption, retyped.tpe, retyped.capt), go(resumed))
+      Stmt.Shift(prompt, retyped, StaticResumptions.Shift(shift, resumption, resumed).replaceResumptions { s =>
+        Stmt.Resume(BlockVar(resumption, retyped.tpe, retyped.capt), go(s))
       })
     case other =>
       val results = other.tpe.map { _ => Id("r") }
@@ -161,8 +158,7 @@ private def calls(m: ModuleDecl, local: Set[Id]): List[(Id, Source)] = {
     def combine = _ ++ _
     override def stmt(using tail: Source) = {
       case Stmt.Def(id, block: BlockLit, rest) => query(block.body)(using Source.Like(id)) ++ query(rest)
-      case Stmt.Val(ids, binding, body) if frame(ids, body).exists(k => local.contains(k.id)) =>
-        val k = frame(ids, body).get.id
+      case Stmt.Val(ids, binding, Stmt.App(BlockVar(k, _, _), Nil, vargs, Nil)) if isFrame(ids, vargs) && local.contains(k) =>
         query(binding)(using Source.Exactly(Target.Known(k))) ++ List(k -> tail)
       case Stmt.Val(ids, binding, body) => query(binding)(using unknown) ++ query(body)
       case Stmt.App(BlockVar(f, _, _), targs, vargs, bargs) => (f -> tail) :: all(vargs, query) ++ all(bargs, query)
@@ -215,10 +211,7 @@ private case class Contification(targets: Map[Id, Id], definitions: Map[Id, Bloc
     visited.tail.contains(k) || targets.get(visited.last).contains(k)
   }
 
-  def continuation(k: Id): BlockVar = {
-    val original: BlockVar = BlockVar(k, definitions(k).tpe, definitions(k).capt)
-    rewrite(original)
-  }
+  def continuation(k: Id): BlockVar = rewrite(BlockVar(k, definitions(k).tpe, definitions(k).capt): BlockVar)
 
   override def rewrite(b: BlockVar): BlockVar = b match {
     case BlockVar(f, BlockType.Function(tparams, cparams, vparams, bparams, _), capt) if targets.contains(f) =>
@@ -227,8 +220,7 @@ private case class Contification(targets: Map[Id, Id], definitions: Map[Id, Bloc
   }
 
   override def rewrite(s: Stmt): Stmt = s match {
-    case Stmt.Val(ids, binding, body) if frame(ids, body).exists(k => definitions.contains(k.id)) =>
-      val k = frame(ids, body).get.id
+    case Stmt.Val(ids, binding, Stmt.App(BlockVar(k, _, _), Nil, vargs, Nil)) if isFrame(ids, vargs) && definitions.contains(k) =>
       jump(continuation(k), reaches(_, k), rewrite(binding))
     case Stmt.Def(f, BlockLit(tparams, cparams, vparams, bparams, body), rest) if targets.contains(f) =>
       val k = targets(f)
@@ -360,19 +352,20 @@ private def localDefinitions(m: ModuleDecl): Map[Id, BlockLit] = {
   collector.query(m)(using ())
 }
 
-/** How often each block occurs as the callee of a call. */
-private object callCounting extends Tree.Query[Unit, Map[Id, Int]] {
+private trait Counting extends Tree.Query[Unit, Map[Id, Int]] {
   def empty = Map.empty
   def combine = (left, right) => right.foldLeft(left) { case (counts, (id, n)) => counts.updated(id, counts.getOrElse(id, 0) + n) }
+}
+
+/** How often each block occurs as the callee of a call. */
+private object callCounting extends Counting {
   override def stmt(using Unit) = {
     case Stmt.App(BlockVar(f, _, _), targs, vargs, bargs) => combine(Map(f -> 1), combine(all(vargs, query), all(bargs, query)))
   }
 }
 
 /** How often each block occurs. */
-private object occurrenceCounting extends Tree.Query[Unit, Map[Id, Int]] {
-  def empty = Map.empty
-  def combine = (left, right) => right.foldLeft(left) { case (counts, (id, n)) => counts.updated(id, counts.getOrElse(id, 0) + n) }
+private object occurrenceCounting extends Counting {
   override def block(using Unit) = {
     case BlockVar(f, _, _) => Map(f -> 1)
   }
