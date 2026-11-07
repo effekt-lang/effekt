@@ -72,6 +72,16 @@ def identify(m: ModuleDecl): ModuleDecl = {
   identification.rewrite(m)
 }
 
+/** The result type of the continuation [[k]]. */
+def result(k: BlockVar): List[ValueType] = k.annotatedTpe match {
+  case BlockType.Function(_, _, _, _, result) => result
+  case _ => sys error "A continuation needs a function type"
+}
+
+/** Whether `val ids = s; k(vargs)` is a frame `val r = s; k(r)`. */
+def isFrame(ids: List[Id], vargs: List[Expr]): Boolean =
+  vargs.size == ids.size && vargs.collect { case ValueVar(x, _) => x } == ids
+
 // Returns to
 // ----------
 
@@ -215,102 +225,6 @@ def contify(m: ModuleDecl, analysis: Map[Id, Set[Target]]): ModuleDecl = {
   contification.rewrite(m)
 }
 
-// Cleanup
-// -------
-
-/**
- * Removes local definitions that do not occur and inlines those that occur exactly once, as the callee of a call.
- * Nothing else:
- *
- *   [[ def f = b; s ]]                 =  [[ s ]]                          if `f` does not occur in `s`
- *   [[ def f(x){g} = s; C[ f(a){h} ] ]]  =  C[ let x = a; def g = h; s ]    if `f` occurs exactly once
- */
-def cleanup(m: ModuleDecl): ModuleDecl = {
-  object cleaning extends Tree.Rewrite {
-    override def rewrite(s: Stmt): Stmt = s match {
-      case Stmt.Def(id, block, rest) =>
-        val rewrittenBlock = rewrite(block)
-        val rewrittenRest = rewrite(rest)
-        val occurring = occurrenceCounting.query(rewrittenRest)(using ()).getOrElse(id, 0)
-        rewrittenBlock match {
-          case _ if occurring == 0 => rewrittenRest
-          case block: BlockLit if occurring == 1 && callCounting.query(rewrittenRest)(using ()).getOrElse(id, 0) == 1 && !block.free.contains(id) =>
-            inlineCall(id, block, rewrittenRest)
-          case _ => Stmt.Def(id, rewrittenBlock, rewrittenRest)
-        }
-      case other => super.rewrite(other)
-    }
-  }
-  cleaning.rewrite(m)
-}
-
-/** [[rest]] with the call to [[id]] replaced by the body of [[block]]. */
-private def inlineCall(id: Id, block: BlockLit, rest: Stmt): Stmt = {
-  object replacement extends Tree.Rewrite {
-    override def rewrite(s: Stmt): Stmt = s match {
-      case Stmt.App(BlockVar(f, _, _), targs, vargs, bargs) if f == id => bind(block, targs, vargs.map(rewrite), bargs.map(rewrite))
-      case other => super.rewrite(other)
-    }
-  }
-  replacement.rewrite(rest)
-}
-
-/**
- * The body of [[block]] applied to the arguments: value arguments are bound by `let`, block arguments by `def`;
- * only type and capture parameters are substituted.
- */
-private def bind(block: BlockLit, targs: List[ValueType], vargs: List[Expr], bargs: List[Block]): Stmt = {
-  val types = Substitution(DB.from(block.tparams zip targs), DB.from(block.cparams zip bargs.map(_.capt)), DB.empty, DB.empty)
-  val body = substitute(block.body)(using types)
-  val withBlocks = (block.bparams zip bargs).foldRight(body) { case ((param, arg), rest) => Stmt.Def(param.id, arg, rest) }
-  (block.vparams zip vargs).foldRight(withBlocks) { case ((param, arg), rest) => Stmt.Let(param.id, arg, rest) }
-}
-
-
-// Shared
-// ------
-
-/** All local definitions of block literals in [[m]], with their types and captures. */
-private def localDefinitions(m: ModuleDecl): Map[Id, BlockVar] = {
-  object collector extends Tree.Query[Unit, Map[Id, BlockVar]] {
-    def empty = Map.empty
-    def combine = _ ++ _
-    override def stmt(using Unit) = {
-      case Stmt.Def(id, block: BlockLit, rest) => Map[Id, BlockVar](id -> BlockVar(id, block.tpe, block.capt)) ++ query(block) ++ query(rest)
-    }
-  }
-  collector.query(m)(using ())
-}
-
-private trait Counting extends Tree.Query[Unit, Map[Id, Int]] {
-  def empty = Map.empty
-  def combine = (left, right) => right.foldLeft(left) { case (counts, (id, n)) => counts.updated(id, counts.getOrElse(id, 0) + n) }
-}
-
-/** How often each block occurs as the callee of a call. */
-private object callCounting extends Counting {
-  override def stmt(using Unit) = {
-    case Stmt.App(BlockVar(f, _, _), targs, vargs, bargs) => combine(Map(f -> 1), combine(all(vargs, query), all(bargs, query)))
-  }
-}
-
-/** How often each block occurs. */
-private object occurrenceCounting extends Counting {
-  override def block(using Unit) = {
-    case BlockVar(f, _, _) => Map(f -> 1)
-  }
-}
-
-/** The result type of the continuation [[k]]. */
-def result(k: BlockVar): List[ValueType] = k.annotatedTpe match {
-  case BlockType.Function(_, _, _, _, result) => result
-  case _ => sys error "A continuation needs a function type"
-}
-
-/** Whether `val ids = s; k(vargs)` is a frame `val r = s; k(r)`. */
-def isFrame(ids: List[Id], vargs: List[Expr]): Boolean =
-  vargs.size == ids.size && vargs.collect { case ValueVar(x, _) => x } == ids
-
 /**
  * The definitions that return to exactly one continuation, each with the continuations it reaches:
  * that one, the one it in turn returns to, and so on, until one does not jump or they would repeat.
@@ -327,4 +241,71 @@ def contified(analysis: Map[Id, Set[Target]]): Map[Id, List[Id]] = {
     case _ => reached.reverse
   }
   targets.map { case (f, _) => f -> chain(f, Nil) }
+}
+
+/** All local definitions of block literals in [[m]], with their types and captures. */
+private def localDefinitions(m: ModuleDecl): Map[Id, BlockVar] = {
+  object collector extends Tree.Query[Unit, Map[Id, BlockVar]] {
+    def empty = Map.empty
+    def combine = _ ++ _
+    override def stmt(using Unit) = {
+      case Stmt.Def(id, block: BlockLit, rest) => Map[Id, BlockVar](id -> BlockVar(id, block.tpe, block.capt)) ++ query(block) ++ query(rest)
+    }
+  }
+  collector.query(m)(using ())
+}
+
+// Cleanup
+// -------
+
+/**
+ * Removes local definitions that do not occur, noting on the way whether the others are called once and occur nowhere
+ * else, and then inlines those with [[inlineOnce]].
+ *
+ * A definition comes after its rest, so a removed definition does not count what it uses.
+ */
+def cleanup(m: ModuleDecl): ModuleDecl = {
+  val calledOnce = mutable.Map.empty[Id, Boolean]
+  object removing extends Tree.Rewrite {
+    override def rewrite(b: BlockVar): BlockVar = {
+      calledOnce(b.id) = false
+      b
+    }
+    override def rewrite(s: Stmt): Stmt = s match {
+      case Stmt.Def(id, block, rest) =>
+        val rewrittenRest = rewrite(rest)
+        if calledOnce.contains(id) then Stmt.Def(id, rewrite(block), rewrittenRest) else rewrittenRest
+      case Stmt.App(callee @ BlockVar(f, _, _), targs, vargs, bargs) =>
+        calledOnce(f) = !calledOnce.contains(f)
+        Stmt.App(callee, targs, vargs.map(rewrite), bargs.map(rewrite))
+      case other => super.rewrite(other)
+    }
+  }
+  val removed = removing.rewrite(m)
+  inlineOnce(removed, calledOnce.collect { case (f, true) => f }.toSet)
+}
+
+/**
+ * Inlines the definitions in [[once]] at their only call:
+ *
+ *   [[ def f(x){g} = s; C[ f(a){h} ] ]]  =  C[ let x = a; def g = h; s ]
+ */
+def inlineOnce(m: ModuleDecl, once: Set[Id]): ModuleDecl = {
+  val inlined = mutable.Map.empty[Id, BlockLit]
+  object inlining extends Tree.Rewrite {
+    override def rewrite(s: Stmt): Stmt = s match {
+      case Stmt.Def(id, block: BlockLit, rest) if once.contains(id) =>
+        inlined(id) = rewrite(block)
+        rewrite(rest)
+      case Stmt.App(BlockVar(f, _, _), targs, vargs, bargs) if inlined.contains(f) =>
+        val block = inlined(f)
+        val types = Substitution(DB.from(block.tparams zip targs), DB.from(block.cparams zip bargs.map(_.capt)), DB.empty, DB.empty)
+        val withBlocks = (block.bparams zip bargs).foldRight(substitute(block.body)(using types)) {
+          case ((param, arg), rest) => Stmt.Def(param.id, rewrite(arg), rest)
+        }
+        (block.vparams zip vargs).foldRight(withBlocks) { case ((param, arg), rest) => Stmt.Let(param.id, rewrite(arg), rest) }
+      case other => super.rewrite(other)
+    }
+  }
+  inlining.rewrite(m)
 }
