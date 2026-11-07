@@ -1,0 +1,34 @@
+// The state is returned even when nothing reads it afterwards.
+
+def main = { (n: Bool) =>
+  var x @ c = 0;
+  def loop(b: Bool) = {
+    if (b: Bool) {
+      put x @ c = 1;
+      (loop : (Bool) => Unit @ {c})(false)
+    } else {
+      return ()
+    }
+  }
+  val u = (loop : (Bool) => Unit @ {c})(n: Bool);
+  return 42
+}
+
+/// REFERENCES_TO_PARAMETERS
+
+def main = { (n: Bool) =>
+  let x0 = 0
+  val y, x4 = {
+    def loop(b: Bool, x1: Int) = {
+      if (b: Bool) {
+        let x2 = 1
+        (loop : (Bool, Int) => (Unit, Int) @ {})(false, x2: Int)
+      } else {
+        return (), x1: Int
+      }
+    }
+    val u, x3 = (loop : (Bool, Int) => (Unit, Int) @ {})(n: Bool, x0: Int);
+    return 42, x3: Int
+  };
+  return y: Int
+}

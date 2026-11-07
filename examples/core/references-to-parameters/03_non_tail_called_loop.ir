@@ -1,0 +1,36 @@
+// A loop called in non-tail position returns the state as an additional result.
+
+def main = { (n: Bool) =>
+  var x @ c = 0;
+  def loop(b: Bool) = {
+    if (b: Bool) {
+      put x @ c = 1;
+      (loop : (Bool) => Unit @ {c})(false)
+    } else {
+      return ()
+    }
+  }
+  val u = (loop : (Bool) => Unit @ {c})(n: Bool);
+  get r: Int = !x @ c;
+  return r: Int
+}
+
+/// REFERENCES_TO_PARAMETERS
+
+def main = { (n: Bool) =>
+  let x0 = 0
+  val y, x4 = {
+    def loop(b: Bool, x1: Int) = {
+      if (b: Bool) {
+        let x2 = 1
+        (loop : (Bool, Int) => (Unit, Int) @ {})(false, x2: Int)
+      } else {
+        return (), x1: Int
+      }
+    }
+    val u, x3 = (loop : (Bool, Int) => (Unit, Int) @ {})(n: Bool, x0: Int);
+    let r = x3: Int
+    return r: Int, x3: Int
+  };
+  return y: Int
+}
