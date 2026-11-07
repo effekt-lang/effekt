@@ -6,7 +6,7 @@ import effekt.util.messages.*
 import kiama.util.Severities.*
 import kiama.util.{Position, Severities}
 
-trait ColoredMessaging extends EffektMessaging {
+trait ColoredMessaging extends EffektMessaging with Style {
 
   // Colors
   // ------
@@ -15,11 +15,12 @@ trait ColoredMessaging extends EffektMessaging {
   def red(s: String): String
   def white(s: String): String
   def bold(s: String): String
-  def bold_red(s: String): String
   def highlight(s: String): String
   def underlined(s: String): String
 
-  def indent(s: String): String = s.linesIterator.map(l => "  " + l).mkString("\n")
+  def title(s: String): String = bold(s)
+  def code(s: String): String = highlight(s)
+  def candidate(s: String): String = underlined(s)
 
   def severityToWord(severity: Severity): String =
     severity match {
@@ -58,19 +59,19 @@ trait ColoredMessaging extends EffektMessaging {
     case ParseError(msg, range, severity)     => msg
     case PlainTextError(msg, range, severity) => msg
     case StructuredError(StructuredMessage(sc, args), _, _) => sc.s(args.map {
-      case id: source.IdDef    => highlight(TypePrinter.show(id))
-      case id: source.IdRef    => highlight(TypePrinter.show(id))
-      case name: Name          => highlight(name.name)
-      case t: symbols.Type     => highlight(TypePrinter.show(t))
-      case t: Capture          => highlight(TypePrinter.show(t))
-      case t: Captures         => highlight(TypePrinter.show(t))
-      case t: Effects          => highlight(TypePrinter.show(t))
-      case n: Int              => highlight(n.toString)
+      case id: source.IdDef    => code(TypePrinter.show(id))
+      case id: source.IdRef    => code(TypePrinter.show(id))
+      case name: Name          => code(name.name)
+      case t: symbols.Type     => code(TypePrinter.show(t))
+      case t: Capture          => code(TypePrinter.show(t))
+      case t: Captures         => code(TypePrinter.show(t))
+      case t: Effects          => code(TypePrinter.show(t))
+      case n: Int              => code(n.toString)
       case nested: Diagnostic  => formatContent(nested)
       case other               => other.toString
     }*)
     case AmbiguousOverloadError(matches, range) =>
-      val title = bold("Ambiguous overload.\n")
+      val title = this.title("Ambiguous overload.\n")
       val mainMessage = s"${title}There are multiple overloads, which all would type check:"
 
       val longestNameLength = matches.map { case (sym, tpe) => fullname(sym.name).size }.max
@@ -79,19 +80,19 @@ trait ColoredMessaging extends EffektMessaging {
         case (sym, tpe) =>
           val name = fullname(sym.name)
           val padding = " " * (longestNameLength - name.size)
-          pp"- ${highlight(name)}: ${padding}${tpe}"
+          pp"- ${code(name)}: ${padding}${tpe}"
       }
 
       mainMessage + "\n" + explanations.mkString("\n")
     case FailedOverloadError(failedAttempts, range) =>
-      val title = bold("Cannot typecheck call.\n")
+      val title = this.title("Cannot typecheck call.\n")
       val mainMessage = s"${title}There are multiple overloads, which all fail to check:"
 
       val explanations = failedAttempts map {
         case (sym, tpe, msgs) =>
           val nestedErrors = msgs.map { msg => formatContent(msg) }.mkString("\n")
 
-          val header = underlined(pp"Possible overload: ${highlight(fullname(sym.name))}") + underlined(pp" of type ${tpe}")
+          val header = candidate(pp"Possible overload: ${code(fullname(sym.name))}") + candidate(pp" of type ${tpe}")
           s"$header\n${indent(nestedErrors)}"
       }
 
@@ -104,10 +105,10 @@ trait ColoredMessaging extends EffektMessaging {
         case 2 => "3rd"
         case n => s"${n + 1}th"
       }
-      val title = bold("Cannot instantiate implicit argument.\n")
+      val title = this.title("Cannot instantiate implicit argument.\n")
       val prettyIndex = formatIndex(err.index)
       val prettyTpe = TypePrinter.show(tpe)
-      val mainMessage = underlined(s"Cannot instantiate ${prettyIndex} ${err.kind} ${err.name} of type ${prettyTpe}.")
+      val mainMessage = candidate(s"Cannot instantiate ${prettyIndex} ${err.kind} ${err.name} of type ${prettyTpe}.")
       val info = err.explanation match {
         case Some(e) => indent(e) + "\n"
         case None => ""
@@ -128,7 +129,6 @@ class PlainMessaging extends ColoredMessaging {
   def red(s: String): String = s
   def white(s: String): String = s
   def bold(s: String): String = s
-  def bold_red(s: String): String = s
   def highlight(s: String): String = s
   def underlined(s: String): String = s
 
@@ -147,7 +147,6 @@ class AnsiColoredMessaging extends ColoredMessaging {
   def red(s: String): String = Console.RED + s + Console.RESET
   def white(s: String): String = Console.WHITE + s + Console.RESET
   def bold(s: String): String = Console.BOLD + s + Console.RESET
-  def bold_red(s: String): String = Console.BLACK + Console.RED_B + s + Console.RESET
   def highlight(s: String): String = Console.BLACK + Console.WHITE_B + s + Console.RESET
   def underlined(s: String): String = Console.UNDERLINED + s + Console.RESET
 }
