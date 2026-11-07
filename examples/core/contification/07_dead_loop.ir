@@ -1,0 +1,57 @@
+// A definition without callers returns to somewhere unknown, and so does every continuation in its body.
+// Otherwise `f` would return only to `k`, but `k` uses `f`, so `f` could not move behind it.
+
+def main = { (b: Bool) =>
+  def g(y: Int) = {
+    def f(x: Int) = {
+      return x: Int
+    }
+    val r = (f : (Int) => Int @ {})(y: Int);
+    (f : (Int) => Int @ {})(r: Int)
+  }
+  return 0
+}
+
+/// IDENTIFY
+
+def main(b: Bool) = {
+  def g(y: Int) = {
+    def f(x: Int) = {
+      return x: Int
+    }
+    def k(r: Int) = {
+      f: (Int) => Int @ {}(r: Int)
+    }
+    val r1 = f: (Int) => Int @ {}(y: Int);
+    k: (Int) => Int @ {}(r1: Int)
+  }
+  return 0
+}
+
+/// RETURNS_TO
+
+f ↦ ?, k
+g ↦ ?
+k ↦ ?
+
+/// CONTIFY
+
+def main(b: Bool) = {
+  def g(y: Int) = {
+    def f(x: Int) = {
+      return x: Int
+    }
+    def k(r: Int) = {
+      f: (Int) => Int @ {}(r: Int)
+    }
+    val r1 = f: (Int) => Int @ {}(y: Int);
+    k: (Int) => Int @ {}(r1: Int)
+  }
+  return 0
+}
+
+/// CLEANUP
+
+def main(b: Bool) = {
+  return 0
+}

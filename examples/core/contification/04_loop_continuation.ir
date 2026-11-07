@@ -1,0 +1,98 @@
+// A loop whose body calls a definition from outside: the definition sinks into the loop, right behind the continuation.
+
+def main = { (n: Bool) =>
+  def f(x: Bool) = {
+    if (x: Bool) {
+      return false
+    } else {
+      return true
+    }
+  }
+  def loop(b: Bool) = {
+    let c = n: Bool
+    val r = (f : (Bool) => Bool @ {})(b: Bool);
+    if (r: Bool) {
+      (loop : (Bool) => Int @ {})(c: Bool)
+    } else {
+      return 0
+    }
+  }
+  (loop : (Bool) => Int @ {})(n: Bool)
+}
+
+/// IDENTIFY
+
+def main(n: Bool) = {
+  def f(x: Bool) = {
+    if (x: Bool) {
+      return false
+    } else {
+      return true
+    }
+  }
+  def loop(b: Bool) = {
+    let c = n: Bool
+    def k(r: Bool) = {
+      if (r: Bool) {
+        loop: (Bool) => Int @ {}(c: Bool)
+      } else {
+        return 0
+      }
+    }
+    val r = f: (Bool) => Bool @ {}(b: Bool);
+    k: (Bool) => Int @ {}(r: Bool)
+  }
+  loop: (Bool) => Int @ {}(n: Bool)
+}
+
+/// RETURNS_TO
+
+f ↦ k
+k ↦ ?
+loop ↦ ?
+
+/// CONTIFY
+
+def main(n: Bool) = {
+  def loop(b: Bool) = {
+    let c = n: Bool
+    def k(r: Bool) = {
+      if (r: Bool) {
+        loop: (Bool) => Int @ {}(c: Bool)
+      } else {
+        return 0
+      }
+    }
+    def f(x: Bool) = {
+      if (x: Bool) {
+        k: (Bool) => Int @ {}(false)
+      } else {
+        k: (Bool) => Int @ {}(true)
+      }
+    }
+    f: (Bool) => Int @ {}(b: Bool)
+  }
+  loop: (Bool) => Int @ {}(n: Bool)
+}
+
+/// CLEANUP
+
+def main(n: Bool) = {
+  def loop(b: Bool) = {
+    let c = n: Bool
+    def k(r: Bool) = {
+      if (r: Bool) {
+        loop: (Bool) => Int @ {}(c: Bool)
+      } else {
+        return 0
+      }
+    }
+    let x = b: Bool
+    if (x: Bool) {
+      k: (Bool) => Int @ {}(false)
+    } else {
+      k: (Bool) => Int @ {}(true)
+    }
+  }
+  loop: (Bool) => Int @ {}(n: Bool)
+}

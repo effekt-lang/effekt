@@ -1,0 +1,63 @@
+// A definition called from two vals returns to two different continuations and stays as it is.
+
+def main = { (n: Bool) =>
+  def f(b: Bool) = {
+    return 1
+  }
+  val x = (f : (Bool) => Int @ {})(n: Bool);
+  val y = (f : (Bool) => Int @ {})(n: Bool);
+  return y: Int
+}
+
+/// IDENTIFY
+
+def main(n: Bool) = {
+  def f(b: Bool) = {
+    return 1
+  }
+  def k(x: Int) = {
+    def k(y: Int) = {
+      return y: Int
+    }
+    val r = f: (Bool) => Int @ {}(n: Bool);
+    k: (Int) => Int @ {}(r: Int)
+  }
+  val r = f: (Bool) => Int @ {}(n: Bool);
+  k: (Int) => Int @ {}(r: Int)
+}
+
+/// RETURNS_TO
+
+f ↦ k, k
+k ↦ ?
+k ↦ ?
+
+/// CONTIFY
+
+def main(n: Bool) = {
+  def f(b: Bool) = {
+    return 1
+  }
+  def k(x: Int) = {
+    def k(y: Int) = {
+      return y: Int
+    }
+    val r = f: (Bool) => Int @ {}(n: Bool);
+    k: (Int) => Int @ {}(r: Int)
+  }
+  val r = f: (Bool) => Int @ {}(n: Bool);
+  k: (Int) => Int @ {}(r: Int)
+}
+
+/// CLEANUP
+
+def main(n: Bool) = {
+  def f(b: Bool) = {
+    return 1
+  }
+  val r = f: (Bool) => Int @ {}(n: Bool);
+  let x = r: Int
+  val r = f: (Bool) => Int @ {}(n: Bool);
+  let y = r: Int
+  return y: Int
+}
