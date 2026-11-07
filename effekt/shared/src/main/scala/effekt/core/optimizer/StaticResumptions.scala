@@ -2,6 +2,7 @@ package effekt
 package core
 package optimizer
 
+import scala.annotation.tailrec
 import scala.util.boundary
 import scala.util.boundary.break
 
@@ -18,19 +19,88 @@ import scala.util.boundary.break
  */
 object StaticResumptions {
 
-  def apply(m: ModuleDecl): ModuleDecl = reduce.rewrite(m)
+  def apply(m: ModuleDecl): ModuleDecl = reduce(blocked(m)).rewrite(m)
 
-  object reduce extends Tree.Rewrite {
+  /**
+   * The rules below run the body of a shift where the shift stood, so its prompt stays installed.
+   * That is only sound if the body cannot resume another continuation to the same prompt: the machine
+   * does not allow a prompt twice on the stack (#1510). So we leave alone every prompt
+   *   - some shift to which lets its continuation escape, also through a block that closes over it,
+   *   - that occurs other than as the prompt of a shift, or
+   *   - that is a parameter, since we do not know which reset it stands for.
+   */
+  def blocked(m: ModuleDecl): Set[Id] = {
+    object blocking extends Tree.Query[Unit, Set[Id]] {
+      def empty = Set.empty
+      def combine = _ ++ _
+      override def stmt(using Unit) = {
+        case shift @ Stmt.Shift(Block.BlockVar(prompt, _, _), BlockParam(k, BlockType.Resume(result, _), _), body) =>
+          (if (Shift(shift, k, result).resumesOnly && !escapes(k, body)) Set.empty else Set(prompt)) ++ query(body)
+        case Stmt.Reset(BlockLit(_, _, _, _, body)) => query(body)
+      }
+      override def block(using Unit) = {
+        case Block.BlockVar(id, BlockType.Prompt(_), _) => Set(id)
+        case BlockLit(_, _, _, bparams, body) =>
+          bparams.collect { case BlockParam(id, BlockType.Prompt(_), _) => id }.toSet ++ query(body)
+      }
+    }
+    blocking.query(m)(using ())
+  }
+
+  /**
+   * Whether [[k]] escapes in [[stmt]]: it, or a local definition closing over it, occurs other than as
+   * the callee of a call, or in a block that is not bound by a definition.
+   */
+  private def escapes(k: Id, stmt: Stmt): Boolean = {
+    object definitions extends Tree.Query[Unit, Map[Id, Block]] {
+      def empty = Map.empty
+      def combine = _ ++ _
+      override def stmt(using Unit) = {
+        case Stmt.Def(id, block, rest) => Map(id -> block) ++ query(block) ++ query(rest)
+      }
+    }
+    val defined = definitions.query(stmt)(using ())
+
+    @tailrec def closing(over: Set[Id]): Set[Id] = {
+      val next = over ++ defined.collect { case (id, block) if block.free.freeIds.exists(over) => id }
+      if next == over then over else closing(next)
+    }
+    val closed = closing(Set(k))
+
+    object escaping extends Tree.Query[Unit, Boolean] {
+      def empty = false
+      def combine = _ || _
+      override def stmt(using Unit) = {
+        case Stmt.Def(id, BlockLit(_, _, _, _, body), rest) => query(body) || query(rest)
+        case Stmt.App(Block.BlockVar(f, _, _), _, vargs, bargs) => all(vargs, query) || all(bargs, query)
+        case Stmt.Resume(Block.BlockVar(_, _, _), resumed) => query(resumed)
+        case Stmt.Reset(BlockLit(_, _, _, _, body)) => query(body)
+        case Stmt.Region(BlockLit(_, _, _, _, body)) => query(body)
+      }
+      override def block(using Unit) = {
+        case Block.BlockVar(id, _, _) => closed.contains(id)
+        case block: BlockLit => block.free.freeIds.exists(closed)
+        case block: Block.New => block.free.freeIds.exists(closed)
+      }
+      override def clause(using Unit) = {
+        case (tag, block) => query(block.body)
+      }
+    }
+    escaping.query(stmt)(using ())
+  }
+
+  class reduce(blocked: Set[Id]) extends Tree.Rewrite {
     override def rewrite(stmt: Stmt): Stmt = stmt match {
       // 0) a shift whose context is unknown (inside a call or a closure), inner shifts first:
       //    [[ shift(p) { {k} => B[resume(k){s}] } ]] ~> B[s]   if every exit resumes
-      case Shift(shift) =>
+      case Shift(shift) if !blocked.contains(shift.stmt.prompt.id) =>
         val inner = shift.withBody(rewrite(shift.body))
         reuse(inner, atPrompt = false).getOrElse { inner.stmt }
 
-      case Stmt.Reset(BlockLit(tparams, cparams, vparams, List(prompt @ BlockParam(_, BlockType.Prompt(answer), _)), body)) =>
+      case Stmt.Reset(BlockLit(tparams, cparams, vparams, List(prompt @ BlockParam(_, BlockType.Prompt(answer), _)), body))
+          if !blocked.contains(prompt.id) =>
         Stmt.Reset(BlockLit(tparams, cparams, vparams, List(prompt),
-          reduceShifts(Prompt(prompt, cparams.head, answer), rewrite(body), joinable = true)))
+          reduceShifts(Prompt(prompt, cparams.head, answer), rewrite(body), joinable = true, blocked)))
 
       case other => super.rewrite(other)
     }
@@ -171,13 +241,13 @@ object StaticResumptions {
    *
    * @param joinable no `var` or `region` lies between [[d]] and here, so frames can still be copied
    */
-  def reduceShifts(prompt: Prompt, stmt: Stmt, joinable: Boolean): Stmt = stmt match {
+  def reduceShifts(prompt: Prompt, stmt: Stmt, joinable: Boolean, blocked: Set[Id]): Stmt = stmt match {
     // 1) a shift to `prompt`, with nothing left between it and the prompt
     case prompt.Shift(shift) =>
       // 1a) in place, since any exit is the answer already
       reuse(shift, atPrompt = true)
         // 1b) else copied into a joinpoint, if no `var` or `region` lies above
-        .orElse(if (joinable) copy(Continuation(prompt, binder = None), shift) else None)
+        .orElse(if (joinable) copy(Continuation(prompt, binder = None), shift, blocked) else None)
         // 1c) else left alone
         .getOrElse(shift.stmt)
 
@@ -186,20 +256,20 @@ object StaticResumptions {
     //      ~> def j(y) = reset { p' => rest }; [[ E[ b[ resume(k){return e} := j(e) ] ] ]]
     //    where every other leaf `l` of `E` becomes `val y = l; j(y)`
     case Stmt.Val(ys, binding @ prompt.ShiftsWithin(shifts), rest) if joinable =>
-      joinpoint(Continuation(prompt, Some(ys -> rest)), binding.tpe, shifts) { jump =>
-        reduceShifts(prompt, jumpsToJoin(prompt, binding, jump), joinable = true)
-      }.getOrElse(Stmt.Val(ys, binding, reduceShifts(prompt, rest, joinable)))
+      joinpoint(Continuation(prompt, Some(ys -> rest)), binding.tpe, shifts, blocked) { jump =>
+        reduceShifts(prompt, jumpsToJoin(prompt, binding, jump), joinable = true, blocked)
+      }.getOrElse(Stmt.Val(ys, binding, reduceShifts(prompt, rest, joinable, blocked)))
 
     // 3) a `var` or `region` is popped by the answer, so the shifts below it still stand at the prompt;
     //    but it cannot be copied, so from here only 1a) applies
      //    [[ var x = e; s ]] ~> var x = e; [[ s ]]
      case Frame(frame) if !frame.isDelimiter =>
-      frame.rebuild(reduceShifts(prompt, frame.body, joinable = false))
+      frame.rebuild(reduceShifts(prompt, frame.body, joinable = false, blocked))
  
     // 4) anything else pushes nothing, so continue into its tail positions
      //    [[ T[s₁, …, sₙ] ]] ~> T[ [[ s₁ ]], …, [[ sₙ ]] ]
      case other => tailPositions(other) match {
-       case Some(positions) => positions.rewrite(reduceShifts(prompt, _, joinable))
+       case Some(positions) => positions.rewrite(reduceShifts(prompt, _, joinable, blocked))
        case None => other
      }
    }
@@ -244,9 +314,9 @@ object StaticResumptions {
     }
 
   /** [[ shift(p) { {k} => b } ]] ~> def j(y) = reset { p' => return y }; b[ resume(k){return e} := j(e) ]   if `k` is only resumed */
-  private def copy(continuation: Continuation, shift: Shift): Option[Stmt] =
+  private def copy(continuation: Continuation, shift: Shift, blocked: Set[Id]): Option[Stmt] =
     if (shift.resumesOnly) {
-      joinpoint(continuation, shift.result, List(shift)) { jump =>
+      joinpoint(continuation, shift.result, List(shift), blocked) { jump =>
         shift.replaceResumptions(jump)
       }
     } else {
@@ -263,7 +333,7 @@ object StaticResumptions {
    *
    * @param shifts the shifts whose shifts jump here, which decide the form it takes
    */
-  private def joinpoint(continuation: Continuation, result: List[ValueType], shifts: List[Shift])
+  private def joinpoint(continuation: Continuation, result: List[ValueType], shifts: List[Shift], blocked: Set[Id])
                        (scope: (Stmt => Stmt) => Stmt): Option[Stmt] = boundary {
     val fresh: Map[Id, Id] = continuation.prompt.names.map { id => id -> Id(id) }.toMap
     object renaming extends Tree.Rewrite {
@@ -282,7 +352,7 @@ object StaticResumptions {
     def frames(filled: Stmt): Stmt = {
       val code = continuation.fill(filled)
       if (knowsOldName(code)) break(None)
-      reduce.rewrite(renaming.rewrite(code))
+      reduce(blocked).rewrite(renaming.rewrite(code))
     }
 
     /** Nothing may enter the join point carrying a name the copy renamed. */

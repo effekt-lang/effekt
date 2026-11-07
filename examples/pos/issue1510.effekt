@@ -1,0 +1,25 @@
+effect save(): Unit
+effect retry(): Int
+
+def checkpointing { program: () => Int / {save, retry} }: Int = {
+  var saved = None()
+  try {
+    program()
+  } with save { () =>
+    saved = Some(box resume)
+    resume(())
+  } with retry { () =>
+    if (saved is Some(resumption)) { resumption(()) } else { 0 }
+  }
+}
+
+def main() = {
+  var i = 0
+  val result = checkpointing {
+    var unused = 0
+    do save()
+    i = i + 1
+    if (i == 1) { do retry() } else { 42 }
+  }
+  println(result)
+}
