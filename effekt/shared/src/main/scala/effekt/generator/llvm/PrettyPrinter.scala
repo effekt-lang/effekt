@@ -12,9 +12,9 @@ object PrettyPrinter {
     definitions.map(show).mkString("\n\n")
 
   def show(definition: Definition)(using C: Context): LLVMString = definition match {
-    case Function(linkage, callingConvention, returnType, name, parameters, basicBlocks) =>
+    case Function(linkage, callingConvention, returnType, name, parameters, basicBlocks, prefix) =>
       s"""
-define ${show(linkage)} ${show(callingConvention)} ${show(returnType)} ${globalName(name)}(${commaSeparated(parameters.map(show))})${attributes(callingConvention)} {
+define ${show(linkage)} ${show(callingConvention)} ${show(returnType)} ${globalName(name)}(${commaSeparated(parameters.map(show))})${attributes(callingConvention)}${prefix.map(p => s" prefix ${show(p)}").getOrElse("")} {
     ${indentedLines(basicBlocks.map(show).mkString)}
 }
 """
@@ -151,6 +151,7 @@ ${indentedLines(instructions.map(show).mkString("\n"))}
     case ConstantNull(tpe)                  => (tpe, "null")
     case ConstantArray(memberType, members) => (ArrayType(members.length, memberType), s"[${commaSeparated(members.map(show))}]")
     case ConstantInteger8(b)                => (IntegerType8(), s"$b")
+    case ConstantOffset(target, origin)     => (IntegerType64(), s"sub (i64 ptrtoint (ptr ${globalName(target)} to i64), i64 ptrtoint (ptr ${globalName(origin)} to i64))")
   }
 
   def show(operand: Operand): LLVMString = {
