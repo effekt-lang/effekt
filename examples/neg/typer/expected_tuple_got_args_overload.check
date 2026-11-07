@@ -1,0 +1,12 @@
+[error] examples/neg/typer/expected_tuple_got_args_overload.effekt:5:11: Cannot typecheck call.
+There are multiple overloads, which all fail to check:
+
+Possible overload: expected_tuple_got_args_overload::foo of type Tuple2[Int, String] => Int
+  Did you mean to call foo with a single tuple argument instead of separate arguments?
+  Wrong number of arguments to foo: expected 1 value argument, but got 2 value arguments
+
+Possible overload: expected_tuple_got_args_overload::foo of type (Int, Int) => Int
+  Expected Int but got String.
+
+  val _ = foo(42, "hello")
+          ^^^^^^^^^^^^^^^^

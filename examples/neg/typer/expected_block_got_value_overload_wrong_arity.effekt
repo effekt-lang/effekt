@@ -1,0 +1,6 @@
+def twice { f: Int => Int }: Int = f(f(0))
+def twice(a: Int, b: Int): Int = a + b
+
+def main() = {
+  val _ = twice(box { (x: Int) => x + 1 })
+}
