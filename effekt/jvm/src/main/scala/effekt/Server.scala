@@ -206,9 +206,11 @@ class Server(config: EffektConfig, compileOnChange: Boolean=false) extends Drive
   override def afterCompilation(source: Source, config: EffektConfig)(implicit C: Context): Unit = {
     // Publish LSP diagnostics
     val messages = C.messaging.buffer
-    val groups = messages.groupBy(msg => msg.sourceName.getOrElse(""))
+    val groups = messages.groupBy(msg => msg.range.map(_.from.source.name).getOrElse(""))
     for ((name, msgs) <- groups) {
-      publishDiagnostics(name, msgs.distinct.map(Convert.messageToDiagnostic(lspMessaging)))
+      publishDiagnostics(name, msgs.distinct.map { msg =>
+        Convert.diagnostic(msg.range, lspMessaging.formatContent(msg), KiamaMessages.toKiama(msg.severity))
+      })
     }
     try {
       publishIR(source, config)

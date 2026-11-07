@@ -4,9 +4,9 @@ package core
 import effekt.source.{FeatureFlag, Span}
 import effekt.symbols.builtins
 import effekt.util.UByte
-import effekt.util.messages.{ErrorReporter, ParseError}
+import effekt.util.messages.{ErrorReporter, ParseError, Severity}
 import kiama.parsing.{NoSuccess, ParseResult, Parsers, Success}
-import kiama.util.{Position, Range, Severities, Source, StringSource}
+import kiama.util.{Position, Range, Source, StringSource}
 
 class Names(private var knownNames: Map[String, Id]) {
   private val Suffix = """^(.*)\$(\d+)$""".r
@@ -260,7 +260,7 @@ class CoreParsers(names: Names) extends EffektLexers {
       case res: NoSuccess =>
         val input = res.next
         val range = Range(input.position, input.nextPosition)
-        C.report(ParseError(res.message, Some(range), Severities.Error))
+        C.report(ParseError(res.message, Some(range), Severity.Error))
         None
     }
 

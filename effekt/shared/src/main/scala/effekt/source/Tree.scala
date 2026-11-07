@@ -255,7 +255,7 @@ case class MissingExternBody(name: String, definedFor: List[FeatureFlag], span: 
   def report(supported: List[String])(using E: util.messages.ErrorReporter): Unit = {
     val range = if (span.origin == Origin.Missing) None else Some(span.range)
     val text = s"${explanation(supported)} A call to `${name}` stops the program."
-    E.report(util.messages.PlainTextError(text, range, kiama.util.Severities.Warning))
+    E.report(util.messages.PlainTextError(text, range, util.messages.Severity.Warning))
   }
 
   private def listed(items: List[String], conjunction: String): String = items.map(i => s"`${i}`") match {

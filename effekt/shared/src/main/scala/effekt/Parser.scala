@@ -8,7 +8,7 @@ import effekt.source.*
 import effekt.source.Origin.Synthesized
 import effekt.util.VirtualSource
 import kiama.parsing.{Input, ParseResult}
-import kiama.util.Severities.Severity
+import effekt.util.messages.Severity
 import kiama.util.{Position, Range, Source}
 
 import scala.annotation.{tailrec, targetName}
@@ -65,7 +65,7 @@ class Parser(tokens: Seq[Token], source: Source) {
 
   var recoverableDiagnostics: ListBuffer[RecoverableDiagnostic] = ListBuffer[RecoverableDiagnostic]()
 
-  private def report(msg: String, fromPosition: Int, toPosition: Int, severity: Severity = kiama.util.Severities.Error, source: Source = source)(using C: Context) = {
+  private def report(msg: String, fromPosition: Int, toPosition: Int, severity: Severity = Severity.Error, source: Source = source)(using C: Context) = {
     val from = source.offsetToPosition(tokens(fromPosition).start)
     val to = source.offsetToPosition(tokens(toPosition).end + 1)
     val range = Range(from, to)
@@ -89,7 +89,7 @@ class Parser(tokens: Seq[Token], source: Source) {
       reportRecoverableDiagnostics()
       // Don't fret unless we had a recoverable error
       if recoverableDiagnostics.forall { d =>
-        d.kind != kiama.util.Severities.Error
+        d.kind != Severity.Error
       } then res else None
     } catch {
       case Fail(msg, pos) =>
@@ -1798,10 +1798,10 @@ class Parser(tokens: Seq[Token], source: Source) {
     throw Fail(msg, position)
 
   def softFail(message: String, start: Int, end: Int): Unit =
-    recoverableDiagnostics += RecoverableDiagnostic(kiama.util.Severities.Error, message, start, end)
+    recoverableDiagnostics += RecoverableDiagnostic(Severity.Error, message, start, end)
 
   def warn(message: String, start: Int, end: Int): Unit =
-    recoverableDiagnostics += RecoverableDiagnostic(kiama.util.Severities.Warning, message, start, end)
+    recoverableDiagnostics += RecoverableDiagnostic(Severity.Warning, message, start, end)
 
   inline def softFailWith[T](inline message: String)(inline p: => T): T = {
     val startPosition = position

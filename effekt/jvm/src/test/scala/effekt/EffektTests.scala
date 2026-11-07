@@ -2,8 +2,7 @@ package effekt
 
 import effekt.util.PlainMessaging
 import effekt.util.messages.Diagnostic
-import kiama.util.Severities
-import kiama.util.Severities.Severity
+import effekt.util.messages.Severity
 
 import java.io.File
 import sbt.io.*
@@ -148,12 +147,12 @@ trait EffektTests extends munit.FunSuite {
       val couldFind = messageWithFormat.exists {
         case (msg, formatted) =>
           def rightSeverity = msg.severity == severity
-          def rightLine = msg.startPosition.exists(p => p.line == lineNo)
+          def rightLine = msg.range.exists(r => r.from.line == lineNo)
           def containsText = formatted.contains(contents.strip)
           rightSeverity && rightLine && containsText
       }
       assert(couldFind,
-        s"""Could not find an message [${Severities.severityToWord(severity)}] line ${lineNo}: ${contents}
+        s"""Could not find an message [${severity.toString.toLowerCase}] line ${lineNo}: ${contents}
            |
            |Compilation resulted in the following messages
            |----------------------------------------------
@@ -164,8 +163,8 @@ trait EffektTests extends munit.FunSuite {
       case (line, no) =>
         rx.findFirstMatchIn(line).foreach { res =>
           val severity = res.group(1) match {
-            case "ERROR" => Severities.Error
-            case "WARN" => Severities.Warning
+            case "ERROR" => Severity.Error
+            case "WARN" => Severity.Warning
             case _ => fail("Internal error: Should not happen")
           }
           findError(severity, no + 1, res.group(2))
