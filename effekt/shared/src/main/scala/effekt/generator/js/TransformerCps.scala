@@ -403,6 +403,10 @@ object TransformerCps extends Transformer {
         stmts.toList
       }
 
+    case cps.Stmt.App(callee @ cps.BlockVar(f), vargs, bargs, ks, k) if tailCallToEnclosing(f, k) =>
+      pure(js.Return(maybeThunking(js.Call(toJS(callee), vargs.map(toJS) ++ bargs.map(argumentToJS) ++ List(toJS(ks),
+        requiringThunk { toJS(k) })))) :: Nil)
+
     case cps.Stmt.App(callee, vargs, bargs, ks, k) =>
       pure(js.Return(js.Call(toJS(callee), vargs.map(toJS) ++ bargs.map(argumentToJS) ++ List(toJS(ks),
         requiringThunk { toJS(k) }))) :: Nil)
@@ -642,6 +646,13 @@ object TransformerCps extends Transformer {
 
   // Thunking
   // --------
+
+  /** Whether a call to [[f]] with [[k]] is a tail call of the innermost function to one enclosing it (#1515). */
+  private def tailCallToEnclosing(f: Id, k: Cont)(using D: TransformerContext): Boolean = (D.scope, k) match {
+    case ((_, cps.BlockLit(_, _, _, innermost, _)) :: enclosing, Cont.ContVar(kid)) =>
+      kid == innermost && enclosing.exists { case (id, _) => id == f }
+    case _ => false
+  }
 
   def thunked(stmt: js.Stmt): js.Stmt = js.Return(js.Lambda(Nil, stmt))
   def thunked(expr: js.Expr): js.Expr = js.Lambda(Nil, expr)
