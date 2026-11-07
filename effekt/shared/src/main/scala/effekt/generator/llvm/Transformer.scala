@@ -654,11 +654,12 @@ object Transformer {
       kind match {
         case ObjectEraser =>
           val eraser = ConstantGlobal(freshName("eraser"));
-          defineFunction(eraser.name, List(Parameter(environmentType, "environment"))) {
+          defineFunction(eraser.name, List(Parameter(environmentType, "environment"), Parameter(objectType, "object"))) {
             emit(Comment(s"${kind} eraser, ${freshEnvironment.length} free variables"))
 
             // TODO avoid unnecessary loads
             loadEnvironmentAt(LocalReference(environmentType, "environment"), freshEnvironment, Object);
+            emit(Call("_", Ccc(), VoidType(), free, List(LocalReference(objectType, "object"))));
             eraseValues(freshEnvironment, Set());
             RetVoid()
           };
@@ -867,6 +868,7 @@ object Transformer {
   val eraseFrames = ConstantGlobal("eraseFrames");
 
   val freeStack = ConstantGlobal("freeStack")
+  val free = ConstantGlobal("free")
 
   val hole = ConstantGlobal("hole");
   val unmatchedTag = ConstantGlobal("unmatched_tag");

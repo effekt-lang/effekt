@@ -22,7 +22,7 @@ extern type Array[T] =
 ///    +--------------+------+------------+
 /// ```
 extern llvm """
-define void @array_erase_fields(ptr %array_pointer) {
+define void @array_erase_fields(ptr %array_pointer, ptr %object) {
 entry:
     %data_pointer = getelementptr inbounds i64, ptr %array_pointer, i64 1
     %size = load i64, ptr %array_pointer, align 8
@@ -39,6 +39,7 @@ loop:
     %cmp = icmp ult i64 %inc, %size
     br i1 %cmp, label %loop, label %exit
 exit:
+    call void @free(ptr %object)
     ret void
 }
 """

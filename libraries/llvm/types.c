@@ -5,11 +5,12 @@ typedef int64_t Int;
 typedef double Double;
 typedef uint8_t Byte;
 typedef void* CObject;
-typedef void (*Eraser)(void*);
+// an eraser gets an object's environment _and_ the object, and frees it
+typedef void (*Eraser)(void* environment, void* object);
 
 struct Header {
     uint64_t rc;
-    void (*eraser)(void *);
+    Eraser eraser;
 };
 
 struct Pos {

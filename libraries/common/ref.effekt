@@ -10,8 +10,9 @@ extern js """
 """
 
 extern llvm """
-define void @c_ref_erase_field(ptr %0) {
+define void @c_ref_erase_field(ptr %0, ptr %object) {
   %field = load %Pos, ptr %0, align 8
+  call void @free(ptr %object)
   tail call void @erasePositive(%Pos %field)
   ret void
 }
