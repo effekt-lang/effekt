@@ -29,7 +29,7 @@ trait ColoredMessaging extends EffektMessaging {
       case Hint        => "hint"
     }
 
-  override def formatMessage(message: EffektError): String =
+  override def formatMessage(message: Diagnostic): String =
     (message.startPosition, message.finishPosition) match {
       case (Some(from), Some(to)) if from.line == to.line => formatMessage(message, from, to)
       case (Some(from), _) => formatMessage(message, from)
@@ -38,10 +38,10 @@ trait ColoredMessaging extends EffektMessaging {
         s"[$severity] ${formatContent(message)}\n"
     }
 
-  def formatMessage(message: EffektError, from: Position): String =
+  def formatMessage(message: Diagnostic, from: Position): String =
     formatMessage(message, from, from.copy(column = from.column + 1))
 
-  def formatMessage(message: EffektError, from: Position, to: Position): String = {
+  def formatMessage(message: Diagnostic, from: Position, to: Position): String = {
     val severity = severityToWord(message.severity)
     val context = from.source.optLineContents(from.line).map { src =>
       util.AnsiHighlight(src) + "\n" + (" " * (from.column - 1)) + ("^" * (to.column - from.column))
@@ -54,7 +54,7 @@ trait ColoredMessaging extends EffektMessaging {
   override def formatMessages(messages: Messages): String =
     messages.sorted.map(formatMessage).distinct.mkString("")
 
-  override def formatContent(err: EffektError): String = err match {
+  override def formatContent(err: Diagnostic): String = err match {
     case ParseError(msg, range, severity)     => msg
     case PlainTextError(msg, range, severity) => msg
     case StructuredError(StructuredMessage(sc, args), _, _) => sc.s(args.map {
@@ -66,7 +66,7 @@ trait ColoredMessaging extends EffektMessaging {
       case t: Captures         => highlight(TypePrinter.show(t))
       case t: Effects          => highlight(TypePrinter.show(t))
       case n: Int              => highlight(n.toString)
-      case nested: EffektError => formatContent(nested)
+      case nested: Diagnostic  => formatContent(nested)
       case other               => other.toString
     }*)
     case AmbiguousOverloadError(matches, range) =>
@@ -133,12 +133,12 @@ class PlainMessaging extends ColoredMessaging {
   def underlined(s: String): String = s
 
   // Don't show context in plain messaging.
-  override def formatMessage(message: EffektError, from: Position): String = {
+  override def formatMessage(message: Diagnostic, from: Position): String = {
     val severity = severityToWord(message.severity)
     s"[$severity] ${homogenizePath(from.format)} ${formatContent(message)}\n"
   }
 
-  override def formatMessage(message: EffektError, from: Position, to: Position): String =
+  override def formatMessage(message: Diagnostic, from: Position, to: Position): String =
     formatMessage(message, from)
 }
 

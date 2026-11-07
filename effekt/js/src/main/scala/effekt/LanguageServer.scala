@@ -3,7 +3,7 @@ package effekt
 import effekt.Intelligence.CaptureInfo
 import effekt.context.{Context, VirtualFileSource, VirtualModuleDB}
 import effekt.util.{PlainMessaging, getOrElseAborting}
-import effekt.util.messages.{BufferedMessaging, EffektError, EffektMessaging, FatalPhaseError}
+import effekt.util.messages.{BufferedMessaging, Diagnostic, EffektMessaging, FatalPhaseError}
 import effekt.util.paths.*
 import effekt.generator.js.JavaScriptWeb
 import kiama.util.{Messaging, Position, Severities, Source, StringSource}
@@ -135,7 +135,7 @@ class LanguageServer extends Intelligence {
   // to an output file.
   private val compileCached = Phase.cached("compile-cached") { compileWhole }
 
-  private def messageToDiagnostic(m: EffektError) = {
+  private def messageToDiagnostic(m: Diagnostic) = {
     val from = m.startPosition.map(toLSPPosition).orNull
     val to = m.finishPosition.map(toLSPPosition).orNull
     val text = context.messaging.formatContent(m)

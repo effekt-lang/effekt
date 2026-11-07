@@ -1,7 +1,7 @@
 package effekt
 
 import effekt.util.PlainMessaging
-import effekt.util.messages.EffektError
+import effekt.util.messages.Diagnostic
 import kiama.util.Severities
 import kiama.util.Severities.Severity
 
@@ -81,7 +81,7 @@ trait EffektTests extends munit.FunSuite {
     compiler.compileFile(input.getPath, configs)
     configs.stringEmitter.result()
 
-  def compile(input: File): List[EffektError] =
+  def compile(input: File): List[Diagnostic] =
     val compiler = new effekt.Driver {}
     val configs = compiler.createConfig(Seq(
       "--Koutput", "string",
@@ -135,7 +135,7 @@ trait EffektTests extends munit.FunSuite {
         }
     }
 
-  def validateErrors(f: File, messages: List[EffektError]): Unit =
+  def validateErrors(f: File, messages: List[Diagnostic]): Unit =
     import scala.util.matching.Regex
     val messaging = new PlainMessaging
     val messageWithFormat = messages.map { msg => (msg, messaging.formatContent(msg)) }

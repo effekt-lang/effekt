@@ -5,12 +5,12 @@ import effekt.source.*
 import effekt.context.{Context, IOModuleDB}
 import effekt.symbols.{BlockSymbol, DeclPrinter, ErrorMessageInterpolator, Module, ValueSymbol, isSynthetic}
 import effekt.util.{AnsiColoredMessaging, AnsiHighlight, VirtualSource, getOrElseAborting}
-import effekt.util.messages.EffektError
+import effekt.util.messages.Diagnostic
 import effekt.util.Version.effektVersion
 import kiama.util.{Console, REPL, Range, Source, StringSource}
 import kiama.parsing.{NoSuccess, ParseResult, Success, Input}
 
-class Repl(driver: Driver) extends REPL[Tree, EffektConfig, EffektError] {
+class Repl(driver: Driver) extends REPL[Tree, EffektConfig, Diagnostic] {
 
   private implicit lazy val context: Context & IOModuleDB = driver.context
 

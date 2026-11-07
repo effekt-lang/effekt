@@ -1601,7 +1601,7 @@ object Typer extends Phase[NameResolved, Typechecked] {
     (successes, errors)
   }
 
-  def iterativeDeepening[R](start: Int, max: Int)(f: Int => R)(shouldDeepen: util.messages.EffektError => Boolean)(using Context): R = {
+  def iterativeDeepening[R](start: Int, max: Int)(f: Int => R)(shouldDeepen: util.messages.Diagnostic => Boolean)(using Context): R = {
     @tailrec
     def go(d: Int): R = {
       val oldTyperstate = Context.backupTyperstate()
