@@ -112,22 +112,17 @@ object Task { build =>
   def update[K, V](target: Target[K, V], trace: Trace[V])(using C: Context): Unit =
     C.cache.update(coerce(target), coerce(trace))
 
-  /**
-   * A trace recording information about computed targets
-   */
-  private var trace: List[Info] = Nil
-
-  def clearTrace(): List[Info] = {
-    val before = trace
-    trace = Nil
+  def clearTrace()(using C: Context): List[Info] = {
+    val before = C.trace
+    C.trace = Nil
     before
   }
-  def restoreTrace(tr: List[Info]) = {
-    trace = tr
+  def restoreTrace(tr: List[Info])(using C: Context) = {
+    C.trace = tr
   }
-  def appendToTrace(t: List[Info]) = {
-    val extended = trace ++ t
-    trace = extended.distinct
+  def appendToTrace(t: List[Info])(using C: Context) = {
+    val extended = C.trace ++ t
+    C.trace = extended.distinct
   }
 
   def compute[K, V](target: Target[K, V])(using C: Context): Option[V] = {
@@ -140,7 +135,7 @@ object Task { build =>
     }
     C.messaging.append(msgs)
 
-    val tr = Trace(Info(target, target.fingerprint), trace, res, msgs)
+    val tr = Trace(Info(target, target.fingerprint), C.trace, res, msgs)
     build.update(target, tr)
 
     // for the potential parent task, we append our trace to the existing one
