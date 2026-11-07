@@ -3,6 +3,7 @@ package core
 package optimizer
 
 import scala.annotation.tailrec
+import scala.collection.mutable
 
 import effekt.util.DB
 import effekt.core.substitutions.{ Substitution, substitute }
@@ -71,15 +72,78 @@ def identify(m: ModuleDecl): ModuleDecl = {
   identification.rewrite(m)
 }
 
-/** The result type of the continuation [[k]]. */
-def result(k: BlockVar): List[ValueType] = k.annotatedTpe match {
-  case BlockType.Function(_, _, _, _, result) => result
-  case _ => sys error "A continuation needs a function type"
+// Returns to
+// ----------
+
+enum Target {
+  case Known(k: Id)
+  case Unknown
 }
 
-/** Whether `val ids = s; k(vargs)` is a frame `val r = s; k(r)`. */
-def isFrame(ids: List[Id], vargs: List[Expr]): Boolean =
-  vargs.size == ids.size && vargs.collect { case ValueVar(x, _) => x } == ids
+/**
+ * Where each local definition returns to, in one pass: the context is what a tail call in the current position
+ * returns to.
+ *
+ * A call in the binding of a frame `val r = s; k(r)` returns to `k`; a tail call in the body of a local definition `g`
+ * returns wherever `g` returns to; any other occurrence, a tail call under a delimiter or in a block literal,
+ * or a use other than as the callee of a call, returns to somewhere unknown.
+ *
+ * The rest of a definition comes before its body, so that the body sees all the callers of the definition.
+ * When the body calls the definition itself other than in tail position, it has added to where the definition
+ * returns to, so we look at the body once more.
+ */
+def returnsTo(m: ModuleDecl): Map[Id, Set[Target]] = {
+  val targets = mutable.Map.empty[Id, Set[Target]]
+
+  object collecting extends Tree.Query[Set[Target], Unit] {
+    def empty = ()
+    def combine = (_, _) => ()
+    override def stmt(using tail: Set[Target]) = {
+      case Stmt.Def(id, block: BlockLit, rest) =>
+        targets(id) = Set.empty
+        query(rest)
+        val before = targets(id)
+        query(block.body)(using before)
+        if targets(id) != before then query(block.body)(using targets(id))
+      case Stmt.Val(ids, binding, Stmt.App(BlockVar(k, _, _), Nil, vargs, Nil)) if isFrame(ids, vargs) =>
+        query(binding)(using Set(Target.Known(k)))
+        targets.updateWith(k)(_.map(_ ++ tail))
+      case Stmt.Val(ids, binding, body) =>
+        query(binding)(using Set(Target.Unknown))
+        query(body)
+      case Stmt.App(BlockVar(f, _, _), targs, vargs, bargs) =>
+        targets.updateWith(f)(_.map(_ ++ tail))
+        all(vargs, query)
+        all(bargs, query)
+      case Stmt.Var(ref, init, capture, body) =>
+        query(init)
+        query(body)(using Set(Target.Unknown))
+      case Stmt.Region(block) => query(block.body)(using Set(Target.Unknown))
+      case Stmt.Reset(block) => query(block.body)(using Set(Target.Unknown))
+      case Stmt.Shift(prompt, k, body) => query(body)(using Set(Target.Unknown))
+      case Stmt.Resume(k, body) => query(body)(using Set(Target.Unknown))
+    }
+    override def block(using Set[Target]) = {
+      case BlockVar(id, _, _) => targets.updateWith(id)(_.map(_ + Target.Unknown))
+      case block: BlockLit => query(block.body)(using Set(Target.Unknown))
+      case Block.New(impl) => all(impl.operations, operation => query(operation.body)(using Set(Target.Unknown)))
+    }
+    override def clause(using Set[Target]) = {
+      case (tag, block) => query(block.body)
+    }
+  }
+  collecting.query(m)(using Set(Target.Unknown))
+
+  targets.toMap
+}
+
+
+// Contify
+// -------
+
+/** Lets every local definition that returns to exactly one continuation jump there, wherever it stands. */
+def contify(m: ModuleDecl, analysis: Map[Id, Set[Target]]): ModuleDecl =
+  Contification(contified(analysis), localDefinitions(m)).rewrite(m)
 
 /**
  * [[s]] where every exit jumps to [[k]], except tail calls to definitions that already jump there themselves:
@@ -112,105 +176,6 @@ def jump(k: BlockVar, jumpsTo: Id => Boolean, s: Stmt): Stmt = {
   }
   go(s)
 }
-
-// Returns to
-// ----------
-
-enum Target {
-  case Known(k: Id)
-  case Unknown
-}
-
-/** What a call in some position returns to: a target, or wherever the enclosing definition returns to. */
-private enum Source {
-  case Exactly(target: Target)
-  case Like(definition: Id)
-}
-
-/** Where each local definition in [[definitions]] returns to. */
-case class ReturnsTo(targets: Map[Id, Set[Target]], definitions: Map[Id, BlockLit]) {
-
-  /** The continuation [[f]] always returns to, if there is exactly one. */
-  def target(f: Id): Option[Id] = targets.getOrElse(f, Set.empty).toList match {
-    case List(Target.Known(k)) => Some(k)
-    case _ => None
-  }
-
-  /** The definitions that return to exactly one continuation, with that continuation. */
-  def contified: Map[Id, Id] = definitions.keySet.flatMap { f => target(f).map(f -> _) }.toMap
-
-  def show: String = definitions.keys.toList.sortBy(_.name.name).map { f =>
-    val shown = targets.getOrElse(f, Set.empty).toList.map {
-      case Target.Known(k) => k.name.name
-      case Target.Unknown => "?"
-    }.sorted
-    s"${f.name.name} ↦ ${shown.mkString(", ")}"
-  }.mkString("\n")
-}
-
-/**
- * Where each local definition returns to.
- *
- * A call in the binding of a frame `val r = s; k(r)` returns to `k`; a tail call in the body of a local definition `g`
- * returns wherever `g` returns to; any other occurrence, a tail call under a delimiter or in a block literal,
- * or a use other than as the callee of a call, returns to somewhere unknown.
- */
-def returnsTo(m: ModuleDecl): ReturnsTo = {
-  val definitions = localDefinitions(m)
-  val allCalls = calls(m, definitions.keySet)
-
-  @tailrec def leastFixedPoint(targets: Map[Id, Set[Target]]): Map[Id, Set[Target]] = {
-    val next = allCalls.groupMapReduce(_._1) {
-      case (_, Source.Exactly(target)) => Set(target)
-      case (_, Source.Like(definition)) => targets.getOrElse(definition, Set.empty)
-    }(_ ++ _)
-    if next == targets then targets else leastFixedPoint(next)
-  }
-
-  ReturnsTo(leastFixedPoint(Map.empty).filter { case (f, _) => definitions.contains(f) }, definitions)
-}
-
-
-/**
- * The calls in [[m]], each with what it returns to; [[local]] are the local definitions that can be continuations.
- * The context is what a tail call in the current position returns to.
- */
-private def calls(m: ModuleDecl, local: Set[Id]): List[(Id, Source)] = {
-  val unknown = Source.Exactly(Target.Unknown)
-  object collecting extends Tree.Query[Source, List[(Id, Source)]] {
-    def empty = Nil
-    def combine = _ ++ _
-    override def stmt(using tail: Source) = {
-      case Stmt.Def(id, block: BlockLit, rest) => query(block.body)(using Source.Like(id)) ++ query(rest)
-      case Stmt.Val(ids, binding, Stmt.App(BlockVar(k, _, _), Nil, vargs, Nil)) if isFrame(ids, vargs) && local.contains(k) =>
-        query(binding)(using Source.Exactly(Target.Known(k))) ++ List(k -> tail)
-      case Stmt.Val(ids, binding, body) => query(binding)(using unknown) ++ query(body)
-      case Stmt.App(BlockVar(f, _, _), targs, vargs, bargs) => (f -> tail) :: all(vargs, query) ++ all(bargs, query)
-      case Stmt.Var(ref, init, capture, body) => query(init) ++ query(body)(using unknown)
-      case Stmt.Region(block) => query(block.body)(using unknown)
-      case Stmt.Reset(block) => query(block.body)(using unknown)
-      case Stmt.Shift(prompt, k, body) => query(body)(using unknown)
-      case Stmt.Resume(k, body) => query(body)(using unknown)
-    }
-    override def block(using Source) = {
-      case BlockVar(id, _, _) => List(id -> unknown)
-      case block: BlockLit => query(block.body)(using unknown)
-      case Block.New(impl) => all(impl.operations, operation => query(operation.body)(using unknown))
-    }
-    override def clause(using Source) = {
-      case (tag, block) => query(block.body)
-    }
-  }
-  collecting.query(m)(using unknown)
-}
-
-
-// Contify
-// -------
-
-/** Lets every local definition that returns to exactly one continuation jump there, wherever it stands. */
-def contify(m: ModuleDecl, analysis: ReturnsTo): ModuleDecl =
-  Contification(analysis.contified, analysis.definitions).rewrite(m)
 
 /** Lets each definition in [[targets]] jump to its continuation, retyping its occurrences accordingly. */
 private case class Contification(targets: Map[Id, Id], definitions: Map[Id, BlockLit]) extends Tree.Rewrite {
@@ -266,8 +231,8 @@ private case class Contification(targets: Map[Id, Id], definitions: Map[Id, Bloc
  * Sinks every contified definition right behind the continuation `k` it returns to;
  * if `k` uses it, it sinks to the place of `k` and takes `k` into its body. The rest of the statements first.
  */
-def sink(m: ModuleDecl, analysis: ReturnsTo): ModuleDecl = {
-  val targets = analysis.contified
+def sink(m: ModuleDecl, analysis: Map[Id, Set[Target]]): ModuleDecl = {
+  val targets = contified(analysis)
   object sinking extends Tree.Rewrite {
     override def rewrite(s: Stmt): Stmt = s match {
       case Stmt.Def(f, block: BlockLit, rest) if targets.contains(f) =>
@@ -390,5 +355,23 @@ private object callCounting extends Counting {
 private object occurrenceCounting extends Counting {
   override def block(using Unit) = {
     case BlockVar(f, _, _) => Map(f -> 1)
+  }
+}
+
+/** The result type of the continuation [[k]]. */
+def result(k: BlockVar): List[ValueType] = k.annotatedTpe match {
+  case BlockType.Function(_, _, _, _, result) => result
+  case _ => sys error "A continuation needs a function type"
+}
+
+/** Whether `val ids = s; k(vargs)` is a frame `val r = s; k(r)`. */
+def isFrame(ids: List[Id], vargs: List[Expr]): Boolean =
+  vargs.size == ids.size && vargs.collect { case ValueVar(x, _) => x } == ids
+
+/** The definitions that return to exactly one continuation, with that continuation. */
+def contified(analysis: Map[Id, Set[Target]]): Map[Id, Id] = analysis.flatMap { case (f, targets) =>
+  targets.toList match {
+    case List(Target.Known(k)) => Some(f -> k)
+    case _ => None
   }
 }

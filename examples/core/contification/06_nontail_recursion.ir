@@ -1,0 +1,49 @@
+// A definition calling itself other than in tail position adds a continuation of its own body to where it returns to,
+// and a tail call in that body returns there as well.
+
+def main = { (b: Bool, n: Int) =>
+  def f(x: Int) = {
+    return x: Int
+  }
+  def g(m: Int) = {
+    if (b: Bool) {
+      (f : (Int) => Int @ {})(m: Int)
+    } else {
+      val r = (g : (Int) => Int @ {})(m: Int);
+      return r: Int
+    }
+  }
+  val y = (g : (Int) => Int @ {})(n: Int);
+  return y: Int
+}
+
+/// IDENTIFY
+
+def main(b: Bool, n: Int) = {
+  def f(x: Int) = {
+    return x: Int
+  }
+  def g(m: Int) = {
+    if (b: Bool) {
+      f: (Int) => Int @ {}(m: Int)
+    } else {
+      def k1(r: Int) = {
+        return r: Int
+      }
+      val r1 = g: (Int) => Int @ {}(m: Int);
+      k1: (Int) => Int @ {}(r1: Int)
+    }
+  }
+  def k2(y: Int) = {
+    return y: Int
+  }
+  val r2 = g: (Int) => Int @ {}(n: Int);
+  k2: (Int) => Int @ {}(r2: Int)
+}
+
+/// RETURNS_TO
+
+f ↦ k, k
+g ↦ k, k
+k ↦ ?
+k ↦ k, k

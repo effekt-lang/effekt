@@ -3,7 +3,7 @@ package core
 
 import java.io.File
 
-import effekt.core.optimizer.{ ReturnsTo, cleanup, contify, identify, returnsTo, sink }
+import effekt.core.optimizer.{ Target, cleanup, contify, identify, returnsTo, sink }
 
 class ContificationTests extends CoreTests {
 
@@ -13,12 +13,20 @@ class ContificationTests extends CoreTests {
     result
   }
 
-  private var analysis: ReturnsTo = null
+  private var analysis: Map[Id, Set[Target]] = null
+
+  private def show(analysis: Map[Id, Set[Target]]): String = analysis.keys.toList.map { f =>
+    val shown = analysis(f).toList.map {
+      case Target.Known(k) => k.name.name
+      case Target.Unknown => "?"
+    }.sorted
+    s"${f.name.name} ↦ ${shown.mkString(", ")}"
+  }.sorted.mkString("\n")
 
   registerCoreIRTests(
     new File("examples/core/contification"),
     CoreIRTransform("IDENTIFY", checked(identify)),
-    CoreIRAnalysis("RETURNS_TO", input => { analysis = returnsTo(input); analysis.show }),
+    CoreIRAnalysis("RETURNS_TO", input => { analysis = returnsTo(input); show(analysis) }),
     CoreIRTransform("CONTIFY", contify(_, analysis)),
     CoreIRTransform("SINK", checked(sink(_, analysis))),
     CoreIRTransform("CLEANUP", checked(cleanup))
