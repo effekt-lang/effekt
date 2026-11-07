@@ -100,6 +100,7 @@ declare ptr @realloc(ptr, i64)
 declare noalias ptr @calloc(i64, i64)
 declare ptr @memcpy(ptr, ptr, i64)
 declare i64 @llvm.ctlz.i64 (i64 , i1)
+declare i64 @llvm.cttz.i64 (i64 , i1)
 declare i64 @llvm.fshr.i64(i64, i64, i64)
 declare double @llvm.sqrt.f64(double)
 declare double @llvm.round.f64(double)
@@ -323,7 +324,7 @@ realloc:
     %nextSize = add i64 %size, %n
     %newSize = call i64 @nextPowerOfTwo(i64 %nextSize)
 
-    %newStack = call ptr @realloc(ptr %stack, i64 %newSize)
+    %newStack = call ptr @growStack(%Stack %stack, i64 %size, i64 %newSize)
     %newLimit = getelementptr i8, %Base %newStack, i64 %newSize
     %newStackPointer = getelementptr i8, %Base %newStack, i64 %size
 
@@ -374,14 +375,102 @@ define private void @assumeFrameHeaderWasPopped(%Stack %stack, %StackPointer %st
     ret void
 }
 
+; Small stack allocator
+;
+; A stack is small if its capacity (`limit - base`) is at most 64kB. Free small stacks are kept for reuse
+; in one list per capacity, linked through their first word, and are never returned to the system
+; allocator. Large stacks use the system allocator, whose `realloc` can grow them without copying.
+
+; Indexed by log_2(capacity): only 2^7 (a fresh stack) up to 2^16 (the largest small stack) are used,
+; keeping entries 0 to 6 empty (cheaper than subtracting 7 every time).
+@freeSmallStacks = private global [17 x ptr] zeroinitializer
+
+define private i1 @isSmallStack(i64 %capacity) alwaysinline {
+    %isSmall = icmp ule i64 %capacity, 65536 ; 2^16, the last entry of @freeSmallStacks
+    ret i1 %isSmall
+}
+
+define private ptr @freeSmallStackList(i64 %capacity) alwaysinline {
+    ; log_2(capacity) via trailing zeros: 7 for a fresh stack, and at most 16
+    %class = call i64 @llvm.cttz.i64(i64 %capacity, i1 true)
+    %list = getelementptr [17 x ptr], ptr @freeSmallStacks, i64 0, i64 %class
+    ret ptr %list
+}
+
+define private ptr @acquireStack(i64 %capacity) alwaysinline {
+entry:
+    %isSmall = call i1 @isSmallStack(i64 %capacity)
+    br i1 %isSmall, label %small, label %allocate
+
+small:
+    %list = call ptr @freeSmallStackList(i64 %capacity)
+    %head = load ptr, ptr %list
+    %isEmpty = icmp eq ptr %head, null
+    br i1 %isEmpty, label %allocate, label %reuse
+
+reuse:
+    %next = load ptr, ptr %head
+    store ptr %next, ptr %list
+    ret ptr %head
+
+allocate:
+    %stack = call ptr @malloc(i64 %capacity)
+    ret ptr %stack
+}
+
+define private void @releaseStack(%Stack %stack, i64 %capacity) alwaysinline {
+entry:
+    %isSmall = call i1 @isSmallStack(i64 %capacity)
+    br i1 %isSmall, label %small, label %large
+
+small:
+    %list = call ptr @freeSmallStackList(i64 %capacity)
+    %head = load ptr, ptr %list
+    store ptr %head, ptr %stack
+    store ptr %stack, ptr %list
+    ret void
+
+large:
+    call void @free(ptr %stack)
+    ret void
+}
+
+define private i64 @stackCapacity(%Stack %stack) alwaysinline {
+    %limit_pointer = getelementptr %StackValue, %Stack %stack, i64 0, i32 2
+    %limit = load %Limit, ptr %limit_pointer, !alias.scope !11, !noalias !21
+    %intLimit = ptrtoint %Limit %limit to i64
+    %intBase = ptrtoint %Stack %stack to i64
+    %capacity = sub i64 %intLimit, %intBase
+    ret i64 %capacity
+}
+
+; A small stack's used part moves into a new stack of the new capacity and the old one is released.
+; A large stack is `realloc`ed.
+define private ptr @growStack(%Stack %stack, i64 %used, i64 %newCapacity) noinline {
+entry:
+    %capacity = call i64 @stackCapacity(%Stack %stack)
+    %isSmall = call i1 @isSmallStack(i64 %capacity)
+    br i1 %isSmall, label %small, label %large
+
+large:
+    %reallocated = call ptr @realloc(ptr %stack, i64 %newCapacity)
+    ret ptr %reallocated
+
+small:
+    %newStack = call ptr @acquireStack(i64 %newCapacity)
+    %copied = call ptr @memcpy(ptr %newStack, ptr %stack, i64 %used)
+    call void @releaseStack(ptr %stack, i64 %capacity)
+    ret ptr %newStack
+}
+
 ; Meta-stack management
 
 define private %Stack @freshStack(%Stack %rest) {
 
     %prompt = call %Prompt @freshPrompt()
 
-    %size = shl i64 1, 7
-    %stack = call ptr @malloc(i64 %size)
+    %size = shl i64 1, 7 ; the smallest stack capacity, the first used entry of @freeSmallStacks
+    %stack = call ptr @acquireStack(i64 %size)
     %stackPointer = getelementptr %StackValue, %Stack %stack, i64 1
     %limit = getelementptr i8, ptr %stack, i64 %size
 
@@ -530,7 +619,8 @@ define private %Stack @finishStack(%Stack %stack) {
     store %Stack null, ptr %promptStack_pointer, !alias.scope !13, !noalias !23
 
     call void @erasePrompt(%Prompt %prompt)
-    call void @free(%Stack %stack)
+    %capacity = call i64 @stackCapacity(%Stack %stack)
+    call void @releaseStack(ptr %stack, i64 %capacity)
 
     ret %Stack %rest
 }
@@ -560,7 +650,7 @@ define private %Stack @copyStack(%Stack %stack) alwaysinline {
     %used = sub i64 %intStackPointer, %intBase
     %size = sub i64 %intLimit, %intBase
 
-    %newStack = call ptr @malloc(i64 %size)
+    %newStack = call ptr @acquireStack(i64 %size)
     %newStackPointer = getelementptr i8, %Stack %newStack, i64 %used
     %newLimit = getelementptr i8, %Stack %newStack, i64 %size
 
@@ -708,7 +798,8 @@ define private void @eraseFrames(%StackPointer %stackPointer) alwaysinline {
 
 define private void @freeStack(%StackPointer %stackPointer) alwaysinline {
     %base = getelementptr %StackValue, %StackPointer %stackPointer, i64 -1
-    call void @free(%Base %base)
+    %capacity = call i64 @stackCapacity(%Stack %base)
+    call void @releaseStack(ptr %base, i64 %capacity)
     ret void
 }
 
