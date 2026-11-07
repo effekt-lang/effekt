@@ -7,16 +7,16 @@ import kiama.util.{Message, Messaging, Range, Severities}
 
 object messages {
 
-  type EffektMessages = Vector[EffektError]
+  type EffektMessages = Vector[Diagnostic]
 
-  sealed trait EffektError extends Message
-  case class ParseError(message: String, range: Option[Range], severity: Severity) extends EffektError
-  case class AmbiguousOverloadError(matches: List[(symbols.BlockSymbol, symbols.FunctionType)], range: Option[Range]) extends EffektError { val severity = Error }
-  case class FailedOverloadError(failedAttempts: List[(symbols.BlockSymbol, symbols.FunctionType, EffektMessages)], range: Option[Range]) extends EffektError { val severity = Error }
-  case class ImplicitInstantiationError(stencil: source.GenerateImplicitArgs.Error, tpe: symbols.Type, range: Option[Range]) extends EffektError { val severity = Error }
-  case class ImplicitMaxRecursionError(msg: String, range: Option[Range]) extends EffektError { val severity = Error }
-  case class PlainTextError(content: String, range: Option[Range], severity: Severity) extends EffektError
-  case class StructuredError(content: StructuredMessage, range: Option[Range], severity: Severity) extends EffektError
+  sealed trait Diagnostic extends Message
+  case class ParseError(message: String, range: Option[Range], severity: Severity) extends Diagnostic
+  case class AmbiguousOverloadError(matches: List[(symbols.BlockSymbol, symbols.FunctionType)], range: Option[Range]) extends Diagnostic { val severity = Error }
+  case class FailedOverloadError(failedAttempts: List[(symbols.BlockSymbol, symbols.FunctionType, EffektMessages)], range: Option[Range]) extends Diagnostic { val severity = Error }
+  case class ImplicitInstantiationError(stencil: source.GenerateImplicitArgs.Error, tpe: symbols.Type, range: Option[Range]) extends Diagnostic { val severity = Error }
+  case class ImplicitMaxRecursionError(msg: String, range: Option[Range]) extends Diagnostic { val severity = Error }
+  case class PlainTextError(content: String, range: Option[Range], severity: Severity) extends Diagnostic
+  case class StructuredError(content: StructuredMessage, range: Option[Range], severity: Severity) extends Diagnostic
 
   case class StructuredMessage(stringContext: StringContext, args: Seq[Any])
 
@@ -29,14 +29,14 @@ object messages {
    *
    * Messages are part of the reporting pipeline and can be backtracked by Typer
    */
-  case class FatalPhaseError(message: EffektError) extends Exception(message.toString)
+  case class FatalPhaseError(message: Diagnostic) extends Exception(message.toString)
 
   /**
    * Error that aborts the whole compilation and shows a stack trace
    *
    * Should be used for unexpected internal compiler errors
    */
-  case class CompilerPanic(message: EffektError) extends Exception {
+  case class CompilerPanic(message: Diagnostic) extends Exception {
     override def toString = message.toString // TODO render!
   }
 
@@ -78,7 +78,7 @@ object messages {
     def buffer_=(msgs: Messages): Unit = messages = msgs
   }
 
-  trait EffektMessaging extends BufferedMessaging[EffektError] {
+  trait EffektMessaging extends BufferedMessaging[Diagnostic] {
 
     /**
      * To allow uniform testing on all platforms, we homogenize the paths to Unix-style.
@@ -88,11 +88,11 @@ object messages {
     def homogenizePath(label: String): String =
       label.replace('\\', '/')
 
-    def message(range: Option[Range], content: String, severity: Severity): EffektError = PlainTextError(content, range, severity)
+    def message(range: Option[Range], content: String, severity: Severity): Diagnostic = PlainTextError(content, range, severity)
   }
 
   class DebugMessaging extends EffektMessaging {
-    def formatContent(msg: EffektError): String = msg.toString
+    def formatContent(msg: Diagnostic): String = msg.toString
   }
 
   /**
@@ -104,20 +104,20 @@ object messages {
 
     def currentRange: Option[Range] = rangeOf(focus)
 
-    val messaging: BufferedMessaging[EffektError]
+    val messaging: BufferedMessaging[Diagnostic]
 
-    def plainMessage(text: String, severity: Severity): EffektError =
+    def plainMessage(text: String, severity: Severity): Diagnostic =
       PlainTextError(text, rangeOf(focus), severity)
 
-    def structuredMessage(content: StructuredMessage, severity: Severity): EffektError =
+    def structuredMessage(content: StructuredMessage, severity: Severity): Diagnostic =
       StructuredError(content, rangeOf(focus), severity)
 
-    def report(msg: EffektError): Unit = messaging.append(msg)
+    def report(msg: Diagnostic): Unit = messaging.append(msg)
 
     def error(msg: String): Unit = report(plainMessage(msg, Error))
     def error(msg: StructuredMessage): Unit = report(structuredMessage(msg, Error))
 
-    def panic(msg: EffektError): Nothing = throw CompilerPanic(msg)
+    def panic(msg: Diagnostic): Nothing = throw CompilerPanic(msg)
     def panic(msg: String): Nothing = panic(plainMessage(msg, Error))
     def panic(msg: StructuredMessage): Nothing = panic(structuredMessage(msg, Error))
 
@@ -127,7 +127,7 @@ object messages {
     def info(msg: String): Unit = report(plainMessage(msg, Information))
     def info(msg: StructuredMessage): Unit = report(structuredMessage(msg, Information))
 
-    def abort(msg: EffektError): Nothing = throw FatalPhaseError(msg)
+    def abort(msg: Diagnostic): Nothing = throw FatalPhaseError(msg)
     def abort(msg: String): Nothing = abort(plainMessage(msg, Error))
     def abort(msg: StructuredMessage): Nothing = abort(structuredMessage(msg, Error))
 
