@@ -1,0 +1,13 @@
+[error] examples/neg/typer/expected_block_got_value_overload.effekt:5:11: Cannot typecheck call.
+There are multiple overloads, which all fail to check:
+
+Possible overload: expected_block_got_value_overload::twice of type {Int => Int} => Int
+  Did you mean to pass 1 value argument as a block (computation)? 
+  Wrong number of arguments to twice: expected 0 value arguments and 1 block argument, but got 1 value argument and 0 block arguments
+
+Possible overload: expected_block_got_value_overload::twice of type String => Int
+  Expected String but got Int => Int at ?C.
+  Expected String but got Int => Int at ?C.
+
+  val _ = twice(box { (x: Int) => x + 1 })
+          ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^

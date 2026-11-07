@@ -1,0 +1,12 @@
+[error] examples/neg/typer/expected_value_got_block_overload.effekt:5:11: Cannot typecheck call.
+There are multiple overloads, which all fail to check:
+
+Possible overload: expected_value_got_block_overload::apply of type (Int => Int at {}) => Int
+  Did you mean to pass 1 block argument as a value? e.g. box it using `box { ... }`
+  Wrong number of arguments to apply: expected 1 value argument and 0 block arguments, but got 0 value arguments and 1 block argument
+
+Possible overload: expected_value_got_block_overload::apply of type {String => Int} => Int
+  Type Int does not match the declared type String.
+
+  val _ = apply { (x: Int) => x + 1 }
+          ^^^^^^^^^^^^^^^^^^^^^^^^^^^

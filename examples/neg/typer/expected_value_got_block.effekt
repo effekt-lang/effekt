@@ -1,0 +1,5 @@
+def apply(f: Int => Int at {}): Int = f(0)
+
+def main() = {
+  val _ = apply { (x: Int) => x + 1 }
+}
