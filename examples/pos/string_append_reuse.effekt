@@ -1,0 +1,32 @@
+// see #1506
+effect flip(): Bool
+
+def main() = {
+  // sharing the left string
+  val a = "abc" ++ "def"
+  val b = a ++ "!"
+  val c = a ++ "?"
+  println(a ++ " " ++ b ++ " " ++ c)
+
+  // a uniquely owned accumulator string can grow in place
+  def go(n: Int, acc: String): String = if (n == 0) acc else go(n - 1, acc ++ "x")
+  val d = go(5, "start-")
+  println(d)
+
+  // check a case where the left part is the smaller part
+  println("<" ++ d ++ ">")
+
+  // a ByteArray alias keeps the string shared
+  val e = "byte" ++ "array"
+  val arr = fromString(e)
+  val f = e ++ "!"
+  println(f ++ " " ++ arr.toString)
+
+  // two resumptions share the string captured before the effect
+  println(try {
+    val s = "ab" ++ "cd"
+    if (do flip()) s ++ "-left" else s ++ "-right"
+  } with flip {
+    resume(true) ++ " | " ++ resume(false)
+  })
+}
