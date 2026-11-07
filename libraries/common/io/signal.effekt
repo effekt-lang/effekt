@@ -12,8 +12,7 @@ extern type Signal[A, B] =
 extern llvm """
 %Signal = type { %Header, i64, ptr, %Pos }
 
-define void @signal_erase(ptr %envPtr, ptr %object) {
-    %base = getelementptr %Header, ptr %envPtr, i64 -1
+define void @signal_erase(ptr %base) {
     %statePtr = getelementptr %Signal, ptr %base, i64 0, i32 1
     %stackPtr = getelementptr %Signal, ptr %base, i64 0, i32 2
     %valuePtr = getelementptr %Signal, ptr %base, i64 0, i32 3
@@ -24,10 +23,10 @@ define void @signal_erase(ptr %envPtr, ptr %object) {
     %value = load %Pos, ptr %valuePtr
     call void @erasePositive(%Pos %value)
     call void @eraseStack(%Stack %stack)
-    call void @free(ptr %object)
+    call void @free(ptr %base)
     ret void
   none:
-    call void @free(ptr %object)
+    call void @free(ptr %base)
     ret void
 }
 """

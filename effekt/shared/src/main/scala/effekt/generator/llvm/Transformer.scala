@@ -654,13 +654,22 @@ object Transformer {
       kind match {
         case ObjectEraser =>
           val eraser = ConstantGlobal(freshName("eraser"));
-          defineFunction(eraser.name, List(Parameter(environmentType, "environment"), Parameter(objectType, "object"))) {
+          defineFunction(eraser.name, List(Parameter(objectType, "object"))) {
             emit(Comment(s"${kind} eraser, ${freshEnvironment.length} free variables"))
 
+            val environment = LocalReference(environmentType, freshName("environment"))
+            emit(Call(environment.name, Ccc(), environmentType, objectEnvironment, List(LocalReference(objectType, "object"))));
             // TODO avoid unnecessary loads
-            loadEnvironmentAt(LocalReference(environmentType, "environment"), freshEnvironment, Object);
+            loadEnvironmentAt(environment, freshEnvironment, Object);
             emit(Call("_", Ccc(), VoidType(), free, List(LocalReference(objectType, "object"))));
-            eraseValues(freshEnvironment, Set());
+            // the last field that holds an object is erased by a guaranteed tail call (see eraseObject in rts.ll)
+            val last = freshEnvironment.findLast { value => value.tpe == machine.Positive() || value.tpe == machine.Negative() }
+            eraseValues(freshEnvironment, last.toSet)
+            last.foreach { value =>
+              val lastObject = LocalReference(objectType, freshName("object"))
+              emit(ExtractValue(lastObject.name, transform(value), 1))
+              emit(Call("_", Ccc(), VoidType(), eraseObject, List(lastObject), musttail = true))
+            }
             RetVoid()
           };
           eraser

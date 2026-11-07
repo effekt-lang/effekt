@@ -202,8 +202,7 @@ define private void @eraseObject(%Object %object) alwaysinline {
     free:
     %objectEraser = getelementptr %Header, ptr %object, i64 0, i32 1
     %eraser = load %Eraser, ptr %objectEraser, !alias.scope !14, !noalias !24
-    %environment = call %Environment @objectEnvironment(%Object %object)
-    tail call void %eraser(%Environment %environment, %Object %object)
+    musttail call void %eraser(%Object %object)
     ret void
 
     done:

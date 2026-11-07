@@ -246,7 +246,7 @@ extern js """
 """
 
 extern llvm """
-define void @bytearray_erase(ptr readnone %0, ptr %object) {
+define void @bytearray_erase(ptr %object) {
   call void @free(ptr %object)
   ret void
 }
