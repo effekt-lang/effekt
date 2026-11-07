@@ -60,6 +60,9 @@ abstract class Context
   // cache used by tasks to save their results (in addition to information in the AnnotationsDB)
   var cache: util.Task.Cache = util.Task.emptyCache
 
+  // the targets computed by the task currently running, per context
+  var trace: List[util.Task.Info] = Nil
+
   // We assume the backend never changes
   lazy val backend = config.backend()
   lazy val compiler = backend.compiler
