@@ -60,7 +60,7 @@ class JavaScript(additionalFeatureFlags: List[String] = Nil) extends Compiler[St
       (mainSymbol, mainFile, core, contified)
   }
 
-  lazy val Compile = CPSTransformed map {
+  lazy val Compile = CPSTransformed `andThen` Phase("js") {
     case (mainSymbol, mainFile, core, cps) =>
       val doc = pretty(TransformerCps.compile(cps, core, mainSymbol).commonjs)
       (Map(mainFile -> doc.layout), mainFile)
@@ -69,7 +69,7 @@ class JavaScript(additionalFeatureFlags: List[String] = Nil) extends Compiler[St
   /**
    * Like [[Compile]], but uses module layout [[js.Module.virtual]]
    */
-  lazy val CompileWeb = CPSTransformed map {
+  lazy val CompileWeb = CPSTransformed `andThen` Phase("js") {
     case (mainSymbol, mainFile, core, cps) =>
       val doc = pretty(TransformerCps.compile(cps, core, mainSymbol).virtual)
       (Map(mainFile -> doc.layout), mainFile)
@@ -78,7 +78,7 @@ class JavaScript(additionalFeatureFlags: List[String] = Nil) extends Compiler[St
   /**
    * Like [[Compile]], but shows only the generated javascript functions (no externs, no declarations)
    */
-  lazy val CompileLSP = CPSTransformed map {
+  lazy val CompileLSP = CPSTransformed `andThen` Phase("js") {
     case (mainSymbol, mainFile, core, cps) =>
       TransformerCps.compileLSP(cps, core)
   }

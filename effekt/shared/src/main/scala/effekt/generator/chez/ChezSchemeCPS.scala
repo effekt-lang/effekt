@@ -50,7 +50,7 @@ class ChezSchemeCPS extends Compiler[String] {
       (mainSymbol, mainFile, core, cpsTransformed)
   }
 
-  lazy val Chez = CPSTransformed map {
+  lazy val Chez = CPSTransformed `andThen` Phase("chez") {
     case (mainSymbol, mainFile, core, cps) =>
       val compiled = TransformerCPS.compile(cps, mainSymbol)
       val doc = pretty(chez.Let(Nil, compiled))
@@ -58,7 +58,7 @@ class ChezSchemeCPS extends Compiler[String] {
   }
 
   // TODO: Only show generated code
-  lazy val LSP = CPSTransformed map {
+  lazy val LSP = CPSTransformed `andThen` Phase("chez") {
     case (mainSymbol, mainFile, core, cps) =>
       val compiled = TransformerCPS.compileLSP(cps, mainSymbol)
       pretty(chez.Let(Nil, compiled))

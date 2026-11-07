@@ -40,7 +40,7 @@ class LLVM extends Compiler[String] {
   // The Compilation Pipeline
   // ------------------------
   // Source => Core => Machine => LLVM
-  lazy val Compile = steps.afterCore `andThen` Machine map {
+  lazy val Compile = steps.afterCore `andThen` Machine `andThen` Phase("llvm") {
     case (mod, main, prog) => (mod, llvm.Transformer.transform(prog))
   }
 
@@ -55,7 +55,7 @@ class LLVM extends Compiler[String] {
     // intermediate steps for VSCode
     val afterCore = allToCore(Core) `andThen` Aggregate `andThen` optimizer.Deadcode `andThen` core.Mono `andThen` core.Show `andThen` core.LambdaSets `andThen` core.ArityRaising `andThen` optimizer.Optimizer
     val afterMachine = afterCore `andThen` Machine map { case (mod, main, prog) => prog }
-    val afterLLVM = afterMachine map {
+    val afterLLVM = afterMachine `andThen` Phase("llvm") {
       case machine.Program(decls, defns, entry) =>
         // we don't print declarations here.
         llvm.Transformer.transform(machine.Program(Nil, defns, entry))
