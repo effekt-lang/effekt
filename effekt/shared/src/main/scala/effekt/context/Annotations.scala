@@ -639,7 +639,7 @@ trait SymbolAnnotations { self: Context =>
     annotationOption(Annotations.References, sym)
       .getOrElse(Nil)
       .asInstanceOf[List[source.Reference]]
-      .distinctBy(r => System.identityHashCode(r))
+      .distinctBy { r => Annotations.Key(r) }
 
   def captureOf(sym: symbols.BlockSymbol): symbols.Captures =
     annotationOption(Annotations.Captures, sym)
