@@ -27,7 +27,7 @@ def flushableStringBuffer[A] { program: () => A / { write, flush } }: A = {
   try {
     program()
   } with write { string =>
-    val bytes = fromString(string)
+    val bytes = unsafeFromString(string)
     val n = bytes.size
     ensureCapacity(n)
     // safe: `ensureCapacity` just established the target range

@@ -1,0 +1,34 @@
+effect flip(): Bool
+
+def greeting(): String = "hello" ++ "!"
+
+def keyword(s: String): Int = s match {
+  case "def" => 1
+  case "val" => 2
+  case _     => 0
+}
+
+def main() = {
+  // the "hello" is the larger left part of `++`, which appends in-place when not shared
+  println(greeting())
+  println(greeting())
+
+  // evaluated and released many times
+  def count(i: Int, n: Int): Int = if (i == 0) n else count(i - 1, n + "abc".length)
+  println(count(1000, 0))
+
+  // stored in lists that are released again
+  def lists(i: Int, n: Int): Int = if (i == 0) n else lists(i - 1, n + ["x", "y", "x"].size)
+  println(lists(100, 0))
+
+  // consumed
+  println(keyword("val") + keyword("other"))
+
+  // two resumptions share the literal
+  println(try {
+    val s = "left"
+    if (do flip()) s else s ++ "-right"
+  } with flip {
+    resume(true) ++ " " ++ resume(false)
+  })
+}

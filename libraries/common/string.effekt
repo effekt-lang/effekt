@@ -260,7 +260,7 @@ extern def utf8ByteLength(str: String) at {io, global}: Int =
 /// Compares two strings lexicographically by code point.
 /// Identical on every backend.
 extern def compareStringBytes(left: String, right: String) at {}: Ordering =
-  llvm { compareByteArray(fromString(left), fromString(right)) }
+  llvm { compareByteArray(unsafeFromString(left), unsafeFromString(right)) }
   default { internal::compareCodePoints(left, right) }
 
 def charAt(str: String, index: Int): Char / Exception[OutOfBounds] =
@@ -282,7 +282,7 @@ extern def unsafeCharAt(str: String, n: Int) at {}: Char =
 // ---------
 
 def feed[R](string: String) { driver: () => R / next[Char] } =
-  feed(string.fromString) { decodeUTF8 { driver() } }
+  feed(string.unsafeFromString) { decodeUTF8 { driver() } }
 
 def each(string: String): Unit / emit[Char] =
   feed(string) {

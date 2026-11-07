@@ -11,6 +11,7 @@ enum Definition {
   case VerbatimFunction(callingConvention: CallingConvention, returnType: Type, name: String, parameters: List[Parameter], body: String)
   case Verbatim(content: String)
   case GlobalConstant(name: String, initializer: Operand) // initializer should be constant
+  case GlobalVariable(name: String, initializer: Operand, alignment: Int) // initializer should be constant
 }
 export Definition.*
 
@@ -102,6 +103,7 @@ object Operand {
   case class ConstantGlobal(name: String) extends Operand
   case class ConstantNull(tpe: Type) extends Operand
   case class ConstantArray(memberType: Type, members: List[Operand]) extends Operand // members should be homogeneous
+  case class ConstantStruct(tpe: Type, members: List[Operand]) extends Operand
   case class ConstantInteger8(b: Byte) extends Operand
   case class ConstantOffset(target: String, origin: String) extends Operand // distance from global `origin` to global `target` as an `i64`
 }
