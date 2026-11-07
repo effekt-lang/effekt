@@ -335,6 +335,8 @@ object LLVMRunner extends Runner[String] {
 
   def target(using C: Context): Target = C.config.clangTarget.toOption.map(Target(_)).getOrElse(defaultTarget)
 
+  lazy val lldCmd = discoverExecutable(List("ld64.lld"), List("--version"))
+
   def checkSetup(): Either[String, Unit] =
     clangCmd.getOrElseAborting { return Left("Cannot find clang. This is required to use the LLVM backend.") }
     Right(())
@@ -403,6 +405,26 @@ object LLVMRunner extends Runner[String] {
     }
 
   /**
+   * As of #1524, the sharer/eraser of a return address are stored right before its code (`frameDescriptor` in the LLVM Transformer).
+   * However, the `ld64` in nixpkgs used by default splits them for functions it deems cold, and thus miscompiles them.
+   * Therefore, we use LLD on MacOS.
+   */
+  def linkWithLLD(using C: Context): Seq[String] = {
+    if (!target.isDarwin) return Seq()
+
+    lldCmd match {
+      case Some(_) if useLTO && target.isAArch64 =>
+        // when using LTO, pass the `cpu` flag, otherwise LLD generates code for a generic CPU...
+        val cpu = if (C.config.native()) "native" else "apple-m1" // M1 is the lowest possible bound
+        Seq("-fuse-ld=lld", "-Xlinker", "-mllvm", "-Xlinker", s"-mcpu=$cpu")
+      case Some(_) => Seq("-fuse-ld=lld")
+      case None =>
+        C.warning("Cannot find LLD (ld64.lld)! Linking with clang's default linker, which may cause a crash at run time. Please install LLD.")
+        Seq()
+    }
+  }
+
+  /**
    * Compile the LLVM source file (`<...>.ll`) to an executable
    *
    * Requires LLVM and GCC to be installed on the machine.
@@ -446,6 +468,7 @@ object LLVMRunner extends Runner[String] {
     if (target.triple.isEmpty) C.warning("Cannot determine clang's target triple: using no target-specific options.")
     clangArgs ++= disableShrinkWrapping
     clangArgs ++= reserveCalleeSavedRegisters
+    clangArgs ++= linkWithLLD
 
     if (useLTO) {
       clangArgs ++= Seq("-O3", "-flto=full")

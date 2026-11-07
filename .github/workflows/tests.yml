@@ -94,10 +94,18 @@ jobs:
           command: sbt testWindowsSmoke
 
   macos-llvm-tests:
-    name: "macOS LLVM Smoke Tests"
+    name: "macOS LLVM (${{ matrix.configuration }})"
     needs: build-and-compile
     runs-on: macos-15
     timeout-minutes: 120
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - configuration: default
+            envvars: ''
+          - configuration: debug
+            envvars: 'EFFEKT_DEBUG=1'
     steps:
       - uses: actions/checkout@v7
         with:
@@ -106,17 +114,18 @@ jobs:
       - uses: ./.github/actions/setup-effekt
         with:
           install-dependencies: 'true'
+          llvm-version: '21'
 
       - name: Compile project
         run: sbt Test/compile
 
-      - name: Run macOS LLVM smoke tests (with debug)
+      - name: Run macOS LLVM tests (${{ matrix.configuration }})
         uses: nick-fields/retry@v3
         with:
           timeout_minutes: 120
           max_attempts: ${{ inputs.max-attempts }}
           retry_on: error
-          command: EFFEKT_DEBUG=1 sbt "effektJVM/testOnly effekt.LLVMTests"
+          command: ${{ matrix.envvars }} sbt "effektJVM/testOnly effekt.LLVMTests"
 
   js-tests:
     name: "JS Backend"

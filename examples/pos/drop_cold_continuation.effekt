@@ -1,0 +1,15 @@
+effect abort(): Nothing
+
+// recursive, so that it's not inlined
+def f(n: Int): Int / abort = 
+  if (n == 0) do abort() else f(n - 1)
+
+def main() = try {
+  val x = f(3)
+  // the continuation only panics, so LLVM considers it cold
+  panic("unexpected: " ++ x.show)
+  ()
+} with abort { 
+  // drops the resumption, `erase`ing its frames
+  println("aborted") 
+}

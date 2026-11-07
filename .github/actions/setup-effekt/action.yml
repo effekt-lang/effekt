@@ -80,4 +80,11 @@ runs:
     - name: Install libuv (macOS)
       if: ${{ inputs.install-dependencies == 'true' && runner.os == 'macOS' }}
       run: brew install libuv
+      shell: bash
+
+    - name: Install LLD ${{ inputs.llvm-version }} (macOS)
+      if: ${{ inputs.install-dependencies == 'true' && runner.os == 'macOS' }}
+      run: |
+        brew install lld@${{ inputs.llvm-version }}
+        echo "$(brew --prefix lld@${{ inputs.llvm-version }})/bin" >> $GITHUB_PATH
       shell: bash 
