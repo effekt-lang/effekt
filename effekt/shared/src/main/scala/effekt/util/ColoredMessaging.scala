@@ -1,7 +1,6 @@
 package effekt
 package util
 
-import effekt.symbols.{Capture, Captures, Effects, ErrorMessageInterpolator, Name, QualifiedName, TypePrinter}
 import effekt.util.messages.*
 import kiama.util.Position
 
@@ -49,73 +48,7 @@ trait ColoredMessaging extends EffektMessaging with Style {
     s"[$severity] ${homogenizePath(from.format)} ${formatContent(message)}\n$context\n"
   }
 
-  override def formatContent(err: Diagnostic): String = err match {
-    case ParseError(msg, range, severity)     => msg
-    case PlainTextError(msg, range, severity) => msg
-    case StructuredError(StructuredMessage(sc, args), _, _) => sc.s(args.map {
-      case id: source.IdDef    => code(TypePrinter.show(id))
-      case id: source.IdRef    => code(TypePrinter.show(id))
-      case name: Name          => code(name.name)
-      case t: symbols.Type     => code(TypePrinter.show(t))
-      case t: Capture          => code(TypePrinter.show(t))
-      case t: Captures         => code(TypePrinter.show(t))
-      case t: Effects          => code(TypePrinter.show(t))
-      case n: Int              => code(n.toString)
-      case nested: Diagnostic  => formatContent(nested)
-      case other               => other.toString
-    }*)
-    case AmbiguousOverloadError(matches, range) =>
-      val title = this.title("Ambiguous overload.\n")
-      val mainMessage = s"${title}There are multiple overloads, which all would type check:"
-
-      val longestNameLength = matches.map { case (sym, tpe) => fullname(sym.name).size }.max
-
-      val explanations = matches map {
-        case (sym, tpe) =>
-          val name = fullname(sym.name)
-          val padding = " " * (longestNameLength - name.size)
-          pp"- ${code(name)}: ${padding}${tpe}"
-      }
-
-      mainMessage + "\n" + explanations.mkString("\n")
-    case FailedOverloadError(failedAttempts, range) =>
-      val title = this.title("Cannot typecheck call.\n")
-      val mainMessage = s"${title}There are multiple overloads, which all fail to check:"
-
-      val explanations = failedAttempts map {
-        case (sym, tpe, msgs) =>
-          val nestedErrors = msgs.map { msg => formatContent(msg) }.mkString("\n")
-
-          val header = candidate(pp"Possible overload: ${code(fullname(sym.name))}") + candidate(pp" of type ${tpe}")
-          s"$header\n${indent(nestedErrors)}"
-      }
-
-      mainMessage + "\n\n" + explanations.mkString("\n\n") + "\n"
-    case ImplicitMaxRecursionError(msg, range) => msg
-    case ImplicitInstantiationError(err, tpe, range) =>
-      def formatIndex(i: Int): String = i match {
-        case 0 => "1st"
-        case 1 => "2nd"
-        case 2 => "3rd"
-        case n => s"${n + 1}th"
-      }
-      val title = this.title("Cannot instantiate implicit argument.\n")
-      val prettyIndex = formatIndex(err.index)
-      val prettyTpe = TypePrinter.show(tpe)
-      val mainMessage = candidate(s"Cannot instantiate ${prettyIndex} ${err.kind} ${err.name} of type ${prettyTpe}.")
-      val info = err.explanation match {
-        case Some(e) => indent(e) + "\n"
-        case None => ""
-      }
-      val nestedErrors = indent(err.msgs.map { msg => formatContent(msg) }.mkString("\n"))
-
-      title + mainMessage + "\n" + info + nestedErrors + "\n"
-  }
-
-  def fullname(n: Name): String = n match {
-    case n: QualifiedName => n.qualifiedName
-    case n: Name          => n.name
-  }
+  override def formatContent(err: Diagnostic): String = content(err)
 }
 
 class PlainMessaging extends ColoredMessaging {

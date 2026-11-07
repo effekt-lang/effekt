@@ -1,7 +1,8 @@
 package effekt
 package util
 
-import effekt.source.{Origin, Tree}
+import effekt.source.{Origin, Span, Tree}
+import effekt.symbols.{Capture, Captures, Effects, ErrorMessageInterpolator, Name, QualifiedName, TypePrinter}
 import kiama.util.Range
 
 object messages {
@@ -10,17 +11,16 @@ object messages {
 
   enum Severity { case Error, Warning, Info, Hint }
 
-  sealed trait Diagnostic {
-    def severity: Severity
-    def range: Option[Range]
+  case class Label(span: Span)
+
+  case class Diagnostic(severity: Severity, primary: Option[Label], reason: Reason) {
+    def range: Option[Range] = primary.map(_.span.range)
   }
-  case class ParseError(message: String, range: Option[Range], severity: Severity) extends Diagnostic
-  case class AmbiguousOverloadError(matches: List[(symbols.BlockSymbol, symbols.FunctionType)], range: Option[Range]) extends Diagnostic { val severity = Severity.Error }
-  case class FailedOverloadError(failedAttempts: List[(symbols.BlockSymbol, symbols.FunctionType, EffektMessages)], range: Option[Range]) extends Diagnostic { val severity = Severity.Error }
-  case class ImplicitInstantiationError(stencil: source.GenerateImplicitArgs.Error, tpe: symbols.Type, range: Option[Range]) extends Diagnostic { val severity = Severity.Error }
-  case class ImplicitMaxRecursionError(msg: String, range: Option[Range]) extends Diagnostic { val severity = Severity.Error }
-  case class PlainTextError(content: String, range: Option[Range], severity: Severity) extends Diagnostic
-  case class StructuredError(content: StructuredMessage, range: Option[Range], severity: Severity) extends Diagnostic
+
+  /** The exact (open) kind of an issue of a diagnostic. */
+  trait Reason {
+    def render(using Style): String
+  }
 
   /** Semantic style for parts of error messages, leaving the styling to each output. */
   trait Style {
@@ -29,12 +29,99 @@ object messages {
     def candidate(s: String): String
 
     def indent(s: String): String = s.linesIterator.map(l => "  " + l).mkString("\n")
+
+    def content(d: Diagnostic): String = d.reason.render(using this)
   }
 
   case class StructuredMessage(stringContext: StringContext, args: Seq[Any])
 
   implicit class ErrorMessageReifier(private val sc: StringContext) extends AnyVal {
     def pretty(args: Any*): StructuredMessage = StructuredMessage(sc, args)
+  }
+
+  case class Message(text: StructuredMessage) extends Reason {
+    def render(using S: Style): String = text.stringContext.s(text.args.map {
+      case id: source.IdDef    => S.code(TypePrinter.show(id))
+      case id: source.IdRef    => S.code(TypePrinter.show(id))
+      case name: Name          => S.code(name.name)
+      case t: symbols.Type     => S.code(TypePrinter.show(t))
+      case t: Capture          => S.code(TypePrinter.show(t))
+      case t: Captures         => S.code(TypePrinter.show(t))
+      case t: Effects          => S.code(TypePrinter.show(t))
+      case n: Int              => S.code(n.toString)
+      case nested: Diagnostic  => S.content(nested)
+      case other               => other.toString
+    }*)
+  }
+  object Message {
+    def apply(text: String): Message = Message(pretty"${text}")
+  }
+
+  private def fullname(n: Name): String = n match {
+    case n: QualifiedName => n.qualifiedName
+    case n: Name          => n.name
+  }
+
+  case class AmbiguousOverload(matches: List[(symbols.BlockSymbol, symbols.FunctionType)]) extends Reason {
+    def render(using S: Style): String = {
+      val title = S.title("Ambiguous overload.\n")
+      val mainMessage = s"${title}There are multiple overloads, which all would type check:"
+
+      val longestNameLength = matches.map { case (sym, tpe) => fullname(sym.name).size }.max
+
+      val explanations = matches map {
+        case (sym, tpe) =>
+          val name = fullname(sym.name)
+          val padding = " " * (longestNameLength - name.size)
+          pp"- ${S.code(name)}: ${padding}${tpe}"
+      }
+
+      mainMessage + "\n" + explanations.mkString("\n")
+    }
+  }
+
+  case class FailedOverload(failedAttempts: List[(symbols.BlockSymbol, symbols.FunctionType, EffektMessages)]) extends Reason {
+    def render(using S: Style): String = {
+      val title = S.title("Cannot typecheck call.\n")
+      val mainMessage = s"${title}There are multiple overloads, which all fail to check:"
+
+      val explanations = failedAttempts map {
+        case (sym, tpe, msgs) =>
+          val nestedErrors = msgs.map(S.content).mkString("\n")
+
+          val header = S.candidate(pp"Possible overload: ${S.code(fullname(sym.name))}") + S.candidate(pp" of type ${tpe}")
+          s"$header\n${S.indent(nestedErrors)}"
+      }
+
+      mainMessage + "\n\n" + explanations.mkString("\n\n") + "\n"
+    }
+  }
+
+  // Iterative deepening of the implicit search matches on this class.
+  case class ImplicitMaxRecursion(text: String) extends Reason {
+    def render(using Style): String = text
+  }
+
+  case class ImplicitInstantiation(stencil: source.GenerateImplicitArgs.Error, tpe: symbols.Type) extends Reason {
+    def render(using S: Style): String = {
+      def formatIndex(i: Int): String = i match {
+        case 0 => "1st"
+        case 1 => "2nd"
+        case 2 => "3rd"
+        case n => s"${n + 1}th"
+      }
+      val title = S.title("Cannot instantiate implicit argument.\n")
+      val prettyIndex = formatIndex(stencil.index)
+      val prettyTpe = TypePrinter.show(tpe)
+      val mainMessage = S.candidate(s"Cannot instantiate ${prettyIndex} ${stencil.kind} ${stencil.name} of type ${prettyTpe}.")
+      val info = stencil.explanation match {
+        case Some(e) => S.indent(e) + "\n"
+        case None => ""
+      }
+      val nestedErrors = S.indent(stencil.msgs.map(S.content).mkString("\n"))
+
+      title + mainMessage + "\n" + info + nestedErrors + "\n"
+    }
   }
 
   /**
@@ -55,17 +142,17 @@ object messages {
 
   def TODO(msg: String = ""): Nothing =
     val explanation = if (msg.isEmpty) "Not implemented, yet" else s"Not implemented, yet: ${msg}"
-    throw CompilerPanic(PlainTextError(explanation, None, Severity.Error))
+    throw CompilerPanic(Diagnostic(Severity.Error, None, Message(explanation)))
 
   def FIXME[A](a: A, msg: String = ""): A = a
 
   def NOT_SUPPORTED(msg: String = ""): Nothing =
     val explanation = if (msg.isEmpty) "Currently not supported" else s"Currently not supported: ${msg}"
-    throw CompilerPanic(PlainTextError(explanation, None, Severity.Error))
+    throw CompilerPanic(Diagnostic(Severity.Error, None, Message(explanation)))
 
   def INTERNAL_ERROR(msg: String = ""): Nothing =
     val explanation = if (msg.isEmpty) "Internal compiler error" else s"Internal compiler error: ${msg}"
-    throw CompilerPanic(PlainTextError(explanation, None, Severity.Error))
+    throw CompilerPanic(Diagnostic(Severity.Error, None, Message(explanation)))
 
   /**
    * Stores messages in a mutable field
@@ -126,15 +213,20 @@ object messages {
 
     var focus: Tree // the current focus of the compiler
 
-    def currentRange: Option[Range] = rangeOf(focus)
-
     val messaging: BufferedMessaging
 
+    def diagnostic(reason: Reason, severity: Severity, at: Option[Span]): Diagnostic =
+      // spans with a missing origin give no position
+      Diagnostic(severity, at.filter { s => s.origin != Origin.Missing }.map(Label(_)), reason)
+
+    def diagnostic(reason: Reason, severity: Severity): Diagnostic =
+      diagnostic(reason, severity, spanOf(focus))
+
     def plainMessage(text: String, severity: Severity): Diagnostic =
-      PlainTextError(text, rangeOf(focus), severity)
+      diagnostic(Message(text), severity)
 
     def structuredMessage(content: StructuredMessage, severity: Severity): Diagnostic =
-      StructuredError(content, rangeOf(focus), severity)
+      diagnostic(Message(content), severity)
 
     def report(msg: Diagnostic): Unit = messaging.append(msg)
 
@@ -154,6 +246,7 @@ object messages {
     def abort(msg: Diagnostic): Nothing = throw FatalPhaseError(msg)
     def abort(msg: String): Nothing = abort(plainMessage(msg, Severity.Error))
     def abort(msg: StructuredMessage): Nothing = abort(structuredMessage(msg, Severity.Error))
+    def abort(reason: Reason): Nothing = abort(diagnostic(reason, Severity.Error))
 
     def reraise(msg: EffektMessages): Unit = messaging.append(msg)
 
@@ -183,16 +276,6 @@ object messages {
     def focusing[T <: Tree, R](t: T)(f: T => R): R =
       at(t) { f(t) }
 
-    def rangeOf(t: Tree): Option[Range] = {
-      if (t == null) {
-        return None
-      }
-      val s = t.span
-      if (s.origin == Origin.Missing) {
-        None
-      } else {
-        Some(s.range)
-      }
-    }
+    def spanOf(t: Tree): Option[Span] = Option(t).map(_.span)
   }
 }

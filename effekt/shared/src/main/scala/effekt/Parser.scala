@@ -9,7 +9,7 @@ import effekt.source.Origin.Synthesized
 import effekt.util.VirtualSource
 import kiama.parsing.{Input, ParseResult}
 import effekt.util.messages.Severity
-import kiama.util.{Position, Range, Source}
+import kiama.util.{Position, Source}
 
 import scala.annotation.{tailrec, targetName}
 import scala.collection.mutable.ListBuffer
@@ -66,10 +66,8 @@ class Parser(tokens: Seq[Token], source: Source) {
   var recoverableDiagnostics: ListBuffer[RecoverableDiagnostic] = ListBuffer[RecoverableDiagnostic]()
 
   private def report(msg: String, fromPosition: Int, toPosition: Int, severity: Severity = Severity.Error, source: Source = source)(using C: Context) = {
-    val from = source.offsetToPosition(tokens(fromPosition).start)
-    val to = source.offsetToPosition(tokens(toPosition).end + 1)
-    val range = Range(from, to)
-    C.report(effekt.util.messages.ParseError(msg, Some(range), severity))
+    val span = Span(source, tokens(fromPosition).start, tokens(toPosition).end + 1)
+    C.report(C.diagnostic(effekt.util.messages.Message(msg), severity, Some(span)))
   }
 
   def parse(input: Input)(using C: Context): Option[ModuleDecl] = {

@@ -1295,7 +1295,7 @@ object Typer extends Phase[NameResolved, Typechecked] {
       // Ambiguous reference
       case results =>
         val successfulOverloads = results.map { case (sym, res, st) => (sym, findFunctionTypeFor(sym)._1) }
-        Context.abort(AmbiguousOverloadError(successfulOverloads, Context.rangeOf(id)))
+        Context.abort(Context.diagnostic(AmbiguousOverload(successfulOverloads), Severity.Error, Context.spanOf(id)))
     }
 
     failures match {
@@ -1309,7 +1309,7 @@ object Typer extends Phase[NameResolved, Typechecked] {
       case failed =>
         // reraise all and abort
         val failures = failed.map { case (block, msgs) => (block, findFunctionTypeFor(block)._1, msgs) }
-        Context.abort(FailedOverloadError(failures, Context.currentRange))
+        Context.abort(FailedOverload(failures))
     }
   }
 

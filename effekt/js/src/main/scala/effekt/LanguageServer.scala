@@ -77,7 +77,7 @@ class LanguageServer extends Intelligence {
   def typecheck(path: String): js.Array[lsp.Diagnostic] = {
     context.messaging.clear()
     context.compiler.runFrontend(VirtualFileSource(path))
-    context.messaging.buffer.distinct.map(messageToDiagnostic).toJSArray
+    context.messaging.buffer.distinctBy { m => (m.range, m.reason, m.severity) }.map(messageToDiagnostic).toJSArray // deduplicate equivalent
   }
 
   @JSExport

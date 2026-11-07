@@ -208,7 +208,8 @@ class Server(config: EffektConfig, compileOnChange: Boolean=false) extends Drive
     val messages = C.messaging.buffer
     val groups = messages.groupBy(msg => msg.range.map(_.from.source.name).getOrElse(""))
     for ((name, msgs) <- groups) {
-      publishDiagnostics(name, msgs.distinct.map { msg =>
+      val distinct = msgs.distinctBy { msg => (msg.range, msg.reason, msg.severity) } // deduplicate equivalent
+      publishDiagnostics(name, distinct.map { msg =>
         Convert.diagnostic(msg.range, lspMessaging.formatContent(msg), KiamaMessages.toKiama(msg.severity))
       })
     }

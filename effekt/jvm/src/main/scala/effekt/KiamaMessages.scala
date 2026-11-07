@@ -1,6 +1,7 @@
 package effekt
 
-import effekt.util.messages.{Diagnostic, PlainTextError, Severity}
+import effekt.source.Span
+import effekt.util.messages.{Diagnostic, Label, Message, Severity}
 import kiama.util.{Range, Severities}
 
 /** Shim converting between Effekt's and Kiama's messages (for the REPL and so on) */
@@ -28,8 +29,15 @@ object KiamaMessages {
   /** [[kiama.util.Messaging]] over [[KiamaMessage]], rendering through Effekt's custom messaging. */
   class KiamaMessaging(effekt: util.messages.EffektMessaging) extends kiama.util.Messaging[KiamaMessage] {
 
-    def message(range: Option[Range], content: String, severity: Severities.Severity): KiamaMessage =
-      KiamaMessage(PlainTextError(content, range, fromKiama(severity)))
+    def message(range: Option[Range], content: String, severity: Severities.Severity): KiamaMessage = {
+      val span = range.flatMap { r =>
+        for {
+          from <- r.from.source.positionToOffset(r.from)
+          to   <- r.to.source.positionToOffset(r.to)
+        } yield Span(r.from.source, from, to)
+      }
+      KiamaMessage(Diagnostic(fromKiama(severity), span.map(Label(_)), Message(content)))
+    }
 
     def formatContent(msg: KiamaMessage): String = effekt.formatContent(msg.diagnostic)
 
