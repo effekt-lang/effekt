@@ -5,16 +5,16 @@ import effekt.source.*
 import effekt.context.{Context, IOModuleDB}
 import effekt.symbols.{BlockSymbol, DeclPrinter, ErrorMessageInterpolator, Module, ValueSymbol, isSynthetic}
 import effekt.util.{AnsiColoredMessaging, AnsiHighlight, VirtualSource, getOrElseAborting}
-import effekt.util.messages.Diagnostic
+import effekt.KiamaMessages.{KiamaMessage, KiamaMessaging}
 import effekt.util.Version.effektVersion
 import kiama.util.{Console, REPL, Range, Source, StringSource}
 import kiama.parsing.{NoSuccess, ParseResult, Success, Input}
 
-class Repl(driver: Driver) extends REPL[Tree, EffektConfig, Diagnostic] {
+class Repl(driver: Driver) extends REPL[Tree, EffektConfig, KiamaMessage] {
 
   private implicit lazy val context: Context & IOModuleDB = driver.context
 
-  val messaging = new AnsiColoredMessaging
+  val messaging = new KiamaMessaging(new AnsiColoredMessaging)
 
   val logo =
     """|  _____     ______  __  __     _    _
@@ -244,14 +244,14 @@ class Repl(driver: Driver) extends REPL[Tree, EffektConfig, Diagnostic] {
     context.setup(config)
     val src = VirtualSource(ast, source)
     context.compiler.runFrontend(src) map { f } getOrElse {
-      report(source, context.messaging.buffer, context.config)
+      report(source, context.messaging.buffer.map(KiamaMessage(_)), context.config)
     }
   }
 
   private def runParsingFrontend(source: Source, config: EffektConfig)(f: Module => Unit): Unit = {
     context.setup(config)
     context.compiler.runFrontend(source) map { f } getOrElse {
-      report(source, context.messaging.buffer, context.config)
+      report(source, context.messaging.buffer.map(KiamaMessage(_)), context.config)
     }
   }
 

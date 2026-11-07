@@ -5,7 +5,7 @@ package effekt
 
 import effekt.context.{Context, IOModuleDB}
 import effekt.source.ModuleDecl
-import effekt.util.messages.{CompilerPanic, FatalPhaseError}
+import effekt.util.messages.{CompilerPanic, EffektMessages, FatalPhaseError}
 import effekt.util.paths.file
 import effekt.util.{AnsiColoredMessaging, JSONDocumentationGenerator, MarkdownSource}
 import kiama.output.PrettyPrinterTypes.Document
@@ -161,8 +161,8 @@ trait Driver { outer =>
       sys.exit(1)
   }
 
-  def report(source: Source, messages: messaging.Messages, config: EffektConfig): Unit = {
-    messaging.report(source, messages, config.output())
+  def report(source: Source, messages: EffektMessages, config: EffektConfig): Unit = {
+    messaging.report(messages, config.output())
   }
 
   def compileString(name: String, input: String, config: EffektConfig): Unit = {

@@ -3,10 +3,10 @@ package effekt
 import effekt.Intelligence.CaptureInfo
 import effekt.context.{Context, VirtualFileSource, VirtualModuleDB}
 import effekt.util.{PlainMessaging, getOrElseAborting}
-import effekt.util.messages.{BufferedMessaging, Diagnostic, EffektMessaging, FatalPhaseError}
+import effekt.util.messages.{BufferedMessaging, Diagnostic, EffektMessaging, FatalPhaseError, Severity}
 import effekt.util.paths.*
 import effekt.generator.js.JavaScriptWeb
-import kiama.util.{Messaging, Position, Severities, Source, StringSource}
+import kiama.util.{Position, Source, StringSource}
 
 import scala.scalajs.js
 import scala.scalajs.js.JSConverters.*
@@ -77,7 +77,7 @@ class LanguageServer extends Intelligence {
   def typecheck(path: String): js.Array[lsp.Diagnostic] = {
     context.messaging.clear()
     context.compiler.runFrontend(VirtualFileSource(path))
-    context.messaging.buffer.distinct.map(messageToDiagnostic).toJSArray
+    context.messaging.buffer.distinctBy { m => (m.range, m.reason, m.severity) }.map(messageToDiagnostic).toJSArray // deduplicate equivalent
   }
 
   @JSExport
@@ -136,8 +136,8 @@ class LanguageServer extends Intelligence {
   private val compileCached = Phase.cached("compile-cached") { compileWhole }
 
   private def messageToDiagnostic(m: Diagnostic) = {
-    val from = m.startPosition.map(toLSPPosition).orNull
-    val to = m.finishPosition.map(toLSPPosition).orNull
+    val from = m.range.map { r => toLSPPosition(r.from) }.orNull
+    val to = m.range.map { r => toLSPPosition(r.to) }.orNull
     val text = context.messaging.formatContent(m)
     new lsp.Diagnostic(new lsp.Range(from, to), convertSeverity(m.severity), text)
   }
@@ -153,11 +153,11 @@ class LanguageServer extends Intelligence {
     case _ => None
   }
 
-  private def convertSeverity(s: Severities.Severity): lsp.DiagnosticSeverity = s match {
-    case Severities.Error       => lsp.DiagnosticSeverity.Error
-    case Severities.Warning     => lsp.DiagnosticSeverity.Warning
-    case Severities.Information => lsp.DiagnosticSeverity.Information
-    case Severities.Hint        => lsp.DiagnosticSeverity.Hint
+  private def convertSeverity(s: Severity): lsp.DiagnosticSeverity = s match {
+    case Severity.Error   => lsp.DiagnosticSeverity.Error
+    case Severity.Warning => lsp.DiagnosticSeverity.Warning
+    case Severity.Info    => lsp.DiagnosticSeverity.Information
+    case Severity.Hint    => lsp.DiagnosticSeverity.Hint
   }
 }
 

@@ -99,7 +99,7 @@ object GenerateImplicitArgs {
       case source.BlockLiteral(_, _, _, source.Return(source.Call(source.IdTarget(id), _, _, _, _), _), _) =>
         val (depth, lastSize) = recursionStack.value.getOrElse((id.name), (0, tpeSize))
         if (tpeSize >= lastSize && depth > currentMaxRecurse.value) {
-          Context.abort(util.messages.ImplicitMaxRecursionError(s"Aborted recursive generation of implicit parameter ${id.name} after ${currentMaxRecurse.value} levels with non-decreasing types at the same name.", Context.rangeOf(Context.focus)))
+          Context.abort(util.messages.ImplicitMaxRecursion(s"Aborted recursive generation of implicit parameter ${id.name} after ${currentMaxRecurse.value} levels with non-decreasing types at the same name."))
         }
         recursionStack.value.updated((id.name), (if tpeSize >= lastSize then depth + 1 else depth, tpeSize))
       case _ => recursionStack.value
@@ -112,14 +112,14 @@ object GenerateImplicitArgs {
           } match {
             case Left(msgs) =>
               // Note: Recursion
-              Context.abort(util.messages.ImplicitInstantiationError(
-                Error(stencil, index, msgs), tpe, Context.rangeOf(Context.focus)))
+              Context.abort(util.messages.ImplicitInstantiation(
+                Error(stencil, index, msgs), tpe))
             case Right(r) => r
           }
         }
       }
     }{
-      case util.messages.ImplicitMaxRecursionError(_, _) => true
+      case util.messages.Diagnostic(_, _, util.messages.ImplicitMaxRecursion(_)) => true
       case _ => false
     }
   }
@@ -235,8 +235,7 @@ object GenerateImplicitArgs {
     if(!Context.messaging.hasErrors) {
       (b, tpe) match {
         case (e @ Error(s, i, msgs), _) =>
-          Context.abort(util.messages.ImplicitInstantiationError(
-            e, tpe, Context.rangeOf(Context.focus)))
+          Context.abort(util.messages.ImplicitInstantiation(e, tpe))
 
         case (ImplicitBlockLiteral(name, sym),
           symbols.BlockType.FunctionType(tps, cps, vps, bps, res, effs)) =>
@@ -294,8 +293,7 @@ object GenerateImplicitArgs {
 
     v match {
       case e @ Error(s, i, msgs) =>
-        Context.abort(util.messages.ImplicitInstantiationError(
-          e, tpe, Context.rangeOf(Context.focus)))
+        Context.abort(util.messages.ImplicitInstantiation(e, tpe))
 
       case ImplicitVar(kind, name, Some(sym)) =>
         val content = Var(IdRef(Nil, name, span.synthesized), span.synthesized)

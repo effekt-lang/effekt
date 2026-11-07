@@ -144,8 +144,6 @@ def Context(using C: Context): C.type = C
  * are reported
  */
 def Try[T](block: => T)(using C: Context): Either[EffektMessages, T] = {
-  import kiama.util.Severities.Error
-
   val (msgs, optRes) = Context withMessages {
     try {
       Some(block)
@@ -156,7 +154,7 @@ def Try[T](block: => T)(using C: Context): Either[EffektMessages, T] = {
     }
   }
 
-  if (msgs.exists { m => m.severity == Error } || optRes.isEmpty) {
+  if (msgs.exists { m => m.severity == util.messages.Severity.Error } || optRes.isEmpty) {
     Left(msgs)
   } else {
     Right(optRes.get)
