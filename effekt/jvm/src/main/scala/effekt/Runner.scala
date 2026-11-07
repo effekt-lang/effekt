@@ -7,6 +7,29 @@ import effekt.util.{getOrElseAborting, escape, OS, os}
 import kiama.util.IO
 
 /**
+ * Ensure that when an executable is written, no process starts.
+ * This is to get rid of the 'Text file busy.' flaky errors when testing.
+ */
+object Processes {
+  import scala.sys.process.{BasicIO, Process, ProcessBuilder, ProcessIO}
+
+  private val lock = new Object
+
+  def writeExecutable(path: String, content: String): Unit =
+    lock.synchronized { IO.createFile(path, content, executable = true) }
+
+  def start(process: ProcessBuilder, io: ProcessIO): Process =
+    lock.synchronized { process.run(io) }
+
+  /** Like `process.!!`: the result is the stdout, throwing on nonzero exit */
+  def output(process: ProcessBuilder): String = {
+    val buffer = new StringBuffer
+    val exitCode = start(process, BasicIO(false, buffer, None)).exitValue()
+    if (exitCode == 0) buffer.toString else scala.sys.error(s"Nonzero exit value: $exitCode")
+  }
+}
+
+/**
  * Interface used by [[Driver]] and [[EffektTests]] to run a compiled program.
  *
  * @tparam Executable the executable, as produced by [[BackendCompiler.compile]].
@@ -58,7 +81,7 @@ trait Runner[Executable] {
         """# Determine the directory of the script
           |SCRIPT_DIR=$(dirname "$(realpath "$0")")
           |""".stripMargin
-      IO.createFile(name, s"#!/bin/sh\n${computeScriptDir}\n${command.mkString(" ")} \"$$@\"", true)
+      Processes.writeExecutable(name, s"#!/bin/sh\n${computeScriptDir}\n${command.mkString(" ")} \"$$@\"")
       name
     case OS.Windows =>
       val computeScriptDir =
@@ -102,9 +125,9 @@ trait Runner[Executable] {
     // Check if the output is a stdout one. TODO use a different method for tests and remove the default case
     val exitCode = C.config.output() match {
       case _: kiama.util.OutputEmitter =>
-        process.!< // we are not capturing the output, so forward directly
+        Processes.start(process, BasicIO.standard(connectInput = true)).exitValue() // we are not capturing the output, so forward directly
       case outs =>
-        process.run(new ProcessLogger {
+        Processes.start(process, BasicIO(true, new ProcessLogger {
 
           override def out(s: => String): Unit = {
             outs.emitln(s)
@@ -114,7 +137,7 @@ trait Runner[Executable] {
 
           override def buffer[T](f: => T): T = f
 
-        }, connectInput = true).exitValue()
+        })).exitValue()
     }
 
     if (exitCode != 0) {
@@ -125,15 +148,14 @@ trait Runner[Executable] {
 
   def canRunExecutable(command: String*): Boolean =
     try {
-      Process(command).run(ProcessIO(out => (), in => (), err => ())).exitValue() == 0
+      Processes.start(Process(command), ProcessIO(out => (), in => (), err => ())).exitValue() == 0
     } catch { case _ => false }
 
   /**
    * Helper function to run an executable
    */
   def exec(command: String*)(using C: Context): Unit = try {
-    val p = Process(command)
-    C.config.output().emit(p.!!)
+    C.config.output().emit(Processes.output(Process(command)))
   } catch {
     case FatalPhaseError(e) => C.report(e)
   }
@@ -145,7 +167,7 @@ trait Runner[Executable] {
   def discoverExecutable(progs0: List[String], args: Seq[String]): Option[String] = {
     def go(progs: List[String]): Option[String] = progs match {
       case prog :: progs =>
-        try { Process(prog +: args).!!; Some(prog) }
+        try { Processes.output(Process(prog +: args)); Some(prog) }
         catch case ioe => go(progs)
       case _ => None
     }
@@ -188,7 +210,7 @@ object JSNodeRunner extends Runner[String] {
       case OS.POSIX =>
         val shebang = "#!/usr/bin/env node"
         val jsScriptFilePath = jsFilePath.stripSuffix(s".$extension")
-        IO.createFile(jsScriptFilePath, s"$shebang\n$jsScript", true)
+        Processes.writeExecutable(jsScriptFilePath, s"$shebang\n$jsScript")
         Some(jsScriptFilePath)
 
       case OS.Windows =>
@@ -308,7 +330,7 @@ object LLVMRunner extends Runner[String] {
   }
 
   lazy val defaultTarget: Target = Target(clangCmd.flatMap { clang =>
-    try Some(scala.sys.process.Process(Seq(clang, "-print-target-triple")).!!.trim) catch { case _: Exception => None }
+    try Some(Processes.output(scala.sys.process.Process(Seq(clang, "-print-target-triple"))).trim) catch { case _: Exception => None }
   }.getOrElse(""))
 
   def target(using C: Context): Target = C.config.clangTarget.toOption.map(Target(_)).getOrElse(defaultTarget)
