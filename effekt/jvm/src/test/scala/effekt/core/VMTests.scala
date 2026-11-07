@@ -690,19 +690,19 @@ class VMTests extends munit.FunSuite {
     )),
 
     examplesDir / "casestudies" / "scheduler.effekt.md" -> Some(Summary(
-      staticDispatches = 70,
+      staticDispatches = 60,
       dynamicDispatches = 7,
       patternMatches = 53,
       branches = 41,
-      pushedFrames = 51,
-      poppedFrames = 51,
+      pushedFrames = 57,
+      poppedFrames = 58,
       allocations = 28,
       closures = 7,
       variableReads = 71,
       variableWrites = 57,
-      resets = 0,
-      shifts = 0,
-      resumes = 0
+      resets = 1,
+      shifts = 7,
+      resumes = 7
     )),
 
     examplesDir / "casestudies" / "lexer.effekt.md" -> Some(Summary(
@@ -1568,19 +1568,19 @@ class VMTests extends munit.FunSuite {
     )),
 
     examplesDir / "pos" / "resume_after_handler.effekt" -> Some(Summary(
-      staticDispatches = 8,
+      staticDispatches = 5,
       dynamicDispatches = 2,
       patternMatches = 8,
       branches = 4,
-      pushedFrames = 4,
-      poppedFrames = 4,
+      pushedFrames = 7,
+      poppedFrames = 7,
       allocations = 3,
       closures = 2,
       variableReads = 20,
       variableWrites = 16,
-      resets = 0,
-      shifts = 0,
-      resumes = 0
+      resets = 1,
+      shifts = 2,
+      resumes = 2
     )),
 
     examplesDir / "pos" / "resume_closing_over_prompt.effekt" -> Some(Summary(
@@ -1600,19 +1600,19 @@ class VMTests extends munit.FunSuite {
     )),
 
     examplesDir / "pos" / "lambdas" / "scheduler.effekt" -> Some(Summary(
-      staticDispatches = 70,
+      staticDispatches = 60,
       dynamicDispatches = 7,
       patternMatches = 53,
       branches = 41,
-      pushedFrames = 50,
-      poppedFrames = 50,
+      pushedFrames = 56,
+      poppedFrames = 57,
       allocations = 28,
       closures = 7,
       variableReads = 71,
       variableWrites = 57,
-      resets = 0,
-      shifts = 0,
-      resumes = 0
+      resets = 1,
+      shifts = 7,
+      resumes = 7
     )),
 
     examplesDir / "pos" / "with_val_else.effekt" -> Some(Summary(
