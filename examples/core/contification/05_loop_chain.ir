@@ -56,6 +56,32 @@ g ↦ k
 k ↦ ?
 loop ↦ ?
 
+/// CONTIFY
+
+def main(n: Bool) = {
+  def g(y: Bool) = {
+    if (y: Bool) {
+      k: (Bool) => Int @ {}(false)
+    } else {
+      k: (Bool) => Int @ {}(true)
+    }
+  }
+  def f(x: Bool) = {
+    g: (Bool) => Int @ {}(x: Bool)
+  }
+  def loop(b: Bool) = {
+    if (b: Bool) {
+      def k(r: Bool) = {
+        loop: (Bool) => Int @ {}(r: Bool)
+      }
+      f: (Bool) => Int @ {}(b: Bool)
+    } else {
+      return 0
+    }
+  }
+  loop: (Bool) => Int @ {}(n: Bool)
+}
+
 /// SINK
 
 def main(n: Bool) = {

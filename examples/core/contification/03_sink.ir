@@ -36,6 +36,23 @@ def main(b: Bool, c: Int) = {
 f ↦ k
 k ↦ ?
 
+/// CONTIFY
+
+def main(b: Bool, c: Int) = {
+  def f(x: Bool) = {
+    if (b: Bool) {
+      k: (Int) => Int @ {}(1)
+    } else {
+      k: (Int) => Int @ {}(c: Int)
+    }
+  }
+  let i = 9
+  def k(y: Int) = {
+    return i: Int
+  }
+  f: (Bool) => Int @ {}(b: Bool)
+}
+
 /// SINK
 
 def main(b: Bool, c: Int) = {

@@ -32,6 +32,23 @@ f ↦ k, k
 k ↦ ?
 k ↦ ?
 
+/// CONTIFY
+
+def main(n: Bool) = {
+  def f(b: Bool) = {
+    return 1
+  }
+  def k(x: Int) = {
+    def k(y: Int) = {
+      return y: Int
+    }
+    val r = f: (Bool) => Int @ {}(n: Bool);
+    k: (Int) => Int @ {}(r: Int)
+  }
+  val r = f: (Bool) => Int @ {}(n: Bool);
+  k: (Int) => Int @ {}(r: Int)
+}
+
 /// SINK
 
 def main(n: Bool) = {

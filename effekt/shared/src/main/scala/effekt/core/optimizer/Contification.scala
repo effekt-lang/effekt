@@ -9,11 +9,15 @@ import effekt.core.substitutions.{ Substitution, substitute }
 
 /**
  * Turns statically known continuations into jumps:
- * [[identify]] names the body of every `val`, [[returnsTo]] computes where each local definition returns to,
- * [[sinking]] replaces the returns of those returning to a single continuation by jumps there and sinks them behind it,
+ * [[identify]] names the body of every `val`, [[contify]] uses [[returnsTo]] to replace the returns of definitions
+ * returning to a single continuation by jumps there, [[sink]] moves them into the scope of that continuation,
  * and [[cleanup]] removes unused definitions and inlines those used once.
  */
-def contification(m: ModuleDecl): ModuleDecl = cleanup(sinking(identify(m)))
+def contification(m: ModuleDecl): ModuleDecl = {
+  val identified = identify(m)
+  val analysis = returnsTo(identified)
+  cleanup(sink(contify(identified, analysis), analysis))
+}
 
 
 // Identify
@@ -22,45 +26,69 @@ def contification(m: ModuleDecl): ModuleDecl = cleanup(sinking(identify(m)))
 /**
  * Names the body of every `val` and lets every exit of its binding jump there:
  *
- *   [[ val x = s; body ]]  =  def k(x) = [[ body ]]; jump(k, [[ s ]])
+ *   [[ val x = s; body ]]    =  def k(x) = [[ body ]]; [[ s ]]_k
  *
- * Afterwards, the only `val`s left are frames `val r = s; k(r)` around exits that cannot jump themselves,
- * such as calls or delimiters.
+ *   [[ val x = s; body ]]_k  =  def k'(x) = [[ body ]]_k; [[ s ]]_k'
+ *   [[ return v ]]_k         =  k(v)
+ *   [[ s ]]_k                =  val r = [[ s ]]; k(r)    for any other exit, such as calls or delimiters
+ *
+ * Afterwards, the only `val`s left are frames `val r = s; k(r)`.
  */
 def identify(m: ModuleDecl): ModuleDecl = {
   object identification extends Tree.Rewrite {
     override def rewrite(s: Stmt): Stmt = s match {
       case Stmt.Val(ids, binding, body) =>
-        val rewrittenBinding = rewrite(binding)
-        val continuation = BlockLit(Nil, Nil, (ids zip rewrittenBinding.tpe).map(ValueParam.apply), Nil, rewrite(body))
+        val continuation = BlockLit(Nil, Nil, (ids zip binding.tpe).map(ValueParam.apply), Nil, rewrite(body))
         val k = Id("k")
-        Stmt.Def(k, continuation, jump(BlockVar(k, continuation.tpe, continuation.capt), _ => false, rewrittenBinding))
+        Stmt.Def(k, continuation, identified(binding, BlockVar(k, continuation.tpe, continuation.capt)))
       case other => super.rewrite(other)
+    }
+
+    def identified(s: Stmt, k: BlockVar): Stmt = s match {
+      case Stmt.Return(exprs) => Stmt.App(k, Nil, exprs.map(rewrite), Nil)
+      case Stmt.Val(ids, binding, body) =>
+        val continuation = BlockLit(Nil, Nil, (ids zip binding.tpe).map(ValueParam.apply), Nil, identified(body, k))
+        val k2 = Id("k")
+        Stmt.Def(k2, continuation, identified(binding, BlockVar(k2, continuation.tpe, continuation.capt)))
+      case Stmt.Def(id, block, rest) => Stmt.Def(id, rewrite(block), identified(rest, k))
+      case Stmt.Let(id, binding, rest) => Stmt.Let(id, rewrite(binding), identified(rest, k))
+      case Stmt.ImpureApp(id, callee, targs, vargs, bargs, rest) =>
+        Stmt.ImpureApp(id, callee, targs, vargs.map(rewrite), bargs.map(rewrite), identified(rest, k))
+      case Stmt.If(cond, thn, els) => Stmt.If(rewrite(cond), identified(thn, k), identified(els, k))
+      case Stmt.Match(scrutinee, tpe, clauses, default) =>
+        Stmt.Match(rewrite(scrutinee), result(k),
+          clauses.map { case (id, block) => (id, block.copy(body = identified(block.body, k))) },
+          default.map(identified(_, k)))
+      case Stmt.Alloc(id, init, region, rest) => Stmt.Alloc(id, rewrite(init), region, identified(rest, k))
+      case Stmt.Get(id, tpe, ref, capt, rest) => Stmt.Get(id, tpe, ref, capt, identified(rest, k))
+      case Stmt.Put(ref, capt, value, rest) => Stmt.Put(ref, capt, rewrite(value), identified(rest, k))
+      case Stmt.Hole(tpe, span) => Stmt.Hole(result(k), span)
+      case other =>
+        val results = other.tpe.map { _ => Id("r") }
+        Stmt.Val(results, rewrite(other), Stmt.App(k, Nil, (results zip other.tpe).map(ValueVar.apply), Nil))
     }
   }
   identification.rewrite(m)
 }
 
+/** The result type of the continuation [[k]]. */
+def result(k: BlockVar): List[ValueType] = k.annotatedTpe match {
+  case BlockType.Function(_, _, _, _, result) => result
+  case _ => sys error "A continuation needs a function type"
+}
+
 /** Whether `val ids = s; k(vargs)` is a frame `val r = s; k(r)`. */
 def isFrame(ids: List[Id], vargs: List[Expr]): Boolean =
-  vargs.collect { case ValueVar(x, _) => x } == ids && vargs.size == ids.size
+  vargs.size == ids.size && vargs.collect { case ValueVar(x, _) => x } == ids
 
 /**
- * [[s]] where every exit jumps to [[k]]:
+ * [[s]] where every exit jumps to [[k]], except tail calls to definitions that already jump there themselves:
  *
- *   [[ return v ]]  =  k(v)
- *   [[ f(a) ]]      =  f(a)               if [[jumpsTo]](f), since `f` jumps to `k` itself
- *   [[ shift(p) { {k0} => b } ]]  =  shift(p) { {k0} => b[ resume(k0){ s } := resume(k0){ [[ s ]] } ] }
- *                                     if `k0` occurs only resumed, since the frame is part of what `k0` captures
- *                                     (TODO: maybe move this to another phase, the Normalizer already pushes frames
- *                                     into shifts that do not resume)
- *   [[ s ]]         =  val r = s; k(r)    for any other exit, including delimiters like `var` and `reset`
+ *   [[ return v ]]_k  =  k(v)
+ *   [[ f(a) ]]_k      =  f(a)               if [[jumpsTo]](f)
+ *   [[ s ]]_k         =  val r = s; k(r)    for any other exit
  */
 def jump(k: BlockVar, jumpsTo: Id => Boolean, s: Stmt): Stmt = {
-  val result = k.annotatedTpe match {
-    case BlockType.Function(_, _, _, _, result) => result
-    case _ => sys error "A continuation needs a function type"
-  }
   def go(s: Stmt): Stmt = s match {
     case Stmt.Return(exprs) => Stmt.App(k, Nil, exprs, Nil)
     case Stmt.App(BlockVar(f, _, _), _, _, _) if jumpsTo(f) => s
@@ -71,26 +99,19 @@ def jump(k: BlockVar, jumpsTo: Id => Boolean, s: Stmt): Stmt = {
     case Stmt.Val(ids, binding, rest) => Stmt.Val(ids, binding, go(rest))
     case Stmt.If(cond, thn, els) => Stmt.If(cond, go(thn), go(els))
     case Stmt.Match(scrutinee, tpe, clauses, default) =>
-      Stmt.Match(scrutinee, result,
+      Stmt.Match(scrutinee, result(k),
         clauses.map { case (id, block) => (id, block.copy(body = go(block.body))) },
         default.map(go))
     case Stmt.Alloc(id, init, region, rest) => Stmt.Alloc(id, init, region, go(rest))
     case Stmt.Get(id, tpe, ref, capt, rest) => Stmt.Get(id, tpe, ref, capt, go(rest))
     case Stmt.Put(ref, capt, value, rest) => Stmt.Put(ref, capt, value, go(rest))
-    case Stmt.Hole(tpe, span) => Stmt.Hole(result, span)
-    case shift @ Stmt.Shift(prompt, BlockParam(resumption, BlockType.Resume(resumed, answer), captures), _)
-        if StaticResumptions.Shift(shift, resumption, resumed).resumesOnly =>
-      val retyped = BlockParam(resumption, BlockType.Resume(result, answer), captures)
-      Stmt.Shift(prompt, retyped, StaticResumptions.Shift(shift, resumption, resumed).replaceResumptions { s =>
-        Stmt.Resume(BlockVar(resumption, retyped.tpe, retyped.capt), go(s))
-      })
+    case Stmt.Hole(tpe, span) => Stmt.Hole(result(k), span)
     case other =>
       val results = other.tpe.map { _ => Id("r") }
       Stmt.Val(results, other, Stmt.App(k, Nil, (results zip other.tpe).map(ValueVar.apply), Nil))
   }
   go(s)
 }
-
 
 // Returns to
 // ----------
@@ -114,6 +135,9 @@ case class ReturnsTo(targets: Map[Id, Set[Target]], definitions: Map[Id, BlockLi
     case List(Target.Known(k)) => Some(k)
     case _ => None
   }
+
+  /** The definitions that return to exactly one continuation, with that continuation. */
+  def contified: Map[Id, Id] = definitions.keySet.flatMap { f => target(f).map(f -> _) }.toMap
 
   def show: String = definitions.keys.toList.sortBy(_.name.name).map { f =>
     val shown = targets.getOrElse(f, Set.empty).toList.map {
@@ -184,6 +208,10 @@ private def calls(m: ModuleDecl, local: Set[Id]): List[(Id, Source)] = {
 // Contify
 // -------
 
+/** Lets every local definition that returns to exactly one continuation jump there, wherever it stands. */
+def contify(m: ModuleDecl, analysis: ReturnsTo): ModuleDecl =
+  Contification(analysis.contified, analysis.definitions).rewrite(m)
+
 /** Lets each definition in [[targets]] jump to its continuation, retyping its occurrences accordingly. */
 private case class Contification(targets: Map[Id, Id], definitions: Map[Id, BlockLit]) extends Tree.Rewrite {
 
@@ -235,17 +263,11 @@ private case class Contification(targets: Map[Id, Id], definitions: Map[Id, Bloc
 // ----
 
 /**
- * Contifies every local definition that returns to exactly one continuation `k`, wherever it stands, and then sinks
- * it right behind `k`; if `k` uses it, it sinks to the place of `k` and takes `k` into its body.
+ * Sinks every contified definition right behind the continuation `k` it returns to;
+ * if `k` uses it, it sinks to the place of `k` and takes `k` into its body. The rest of the statements first.
  */
-def sinking(m: ModuleDecl): ModuleDecl = {
-  val analysis = returnsTo(m)
-  val targets = analysis.definitions.keySet.flatMap { f => analysis.target(f).map(f -> _) }.toMap
-  sink(Contification(targets, analysis.definitions).rewrite(m), targets)
-}
-
-/** Sinks each definition in [[targets]] right behind its continuation, the rest of the statements first. */
-private def sink(m: ModuleDecl, targets: Map[Id, Id]): ModuleDecl = {
+def sink(m: ModuleDecl, analysis: ReturnsTo): ModuleDecl = {
+  val targets = analysis.contified
   object sinking extends Tree.Rewrite {
     override def rewrite(s: Stmt): Stmt = s match {
       case Stmt.Def(f, block: BlockLit, rest) if targets.contains(f) =>

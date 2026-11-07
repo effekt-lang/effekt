@@ -32,6 +32,22 @@ def main(n: Bool) = {
 f ↦ ?
 k ↦ ?
 
+/// CONTIFY
+
+def main(n: Bool) = {
+  def f(b: Bool) = {
+    return 1
+  }
+  def k(x: Int) = {
+    return x: Int
+  }
+  val r = {
+    var r @ c = 0;
+    f: (Bool) => Int @ {}(n: Bool)
+  };
+  k: (Int) => Int @ {}(r: Int)
+}
+
 /// SINK
 
 def main(n: Bool) = {
