@@ -142,87 +142,58 @@ def returnsTo(m: ModuleDecl): Map[Id, Set[Target]] = {
 // -------
 
 /** Lets every local definition that returns to exactly one continuation jump there, wherever it stands. */
-def contify(m: ModuleDecl, analysis: Map[Id, Set[Target]]): ModuleDecl =
-  Contification(contified(analysis), localDefinitions(m)).rewrite(m)
+def contify(m: ModuleDecl, analysis: Map[Id, Set[Target]]): ModuleDecl = {
+  val chains = contified(analysis)
+  val definitions = localDefinitions(m)
+  val reached = chains.map { case (f, chain) => f -> chain.toSet }
+  val results = chains.map { case (f, chain) => f -> result(definitions(chain.last)) }
+  val captures = chains.map { case (f, chain) => f -> chain.flatMap(definitions(_).capt).toSet }
 
-/**
- * [[s]] where every exit jumps to [[k]], except tail calls to definitions that already jump there themselves:
- *
- *   [[ return v ]]_k  =  k(v)
- *   [[ f(a) ]]_k      =  f(a)               if [[jumpsTo]](f)
- *   [[ s ]]_k         =  val r = s; k(r)    for any other exit
- */
-def jump(k: BlockVar, jumpsTo: Id => Boolean, s: Stmt): Stmt = {
-  def go(s: Stmt): Stmt = s match {
-    case Stmt.Return(exprs) => Stmt.App(k, Nil, exprs, Nil)
-    case Stmt.App(BlockVar(f, _, _), _, _, _) if jumpsTo(f) => s
-    case Stmt.Def(id, block, rest) => Stmt.Def(id, block, go(rest))
-    case Stmt.Let(id, binding, rest) => Stmt.Let(id, binding, go(rest))
-    case Stmt.ImpureApp(id, callee, targs, vargs, bargs, rest) =>
-      Stmt.ImpureApp(id, callee, targs, vargs, bargs, go(rest))
-    case Stmt.Val(ids, binding, rest) => Stmt.Val(ids, binding, go(rest))
-    case Stmt.If(cond, thn, els) => Stmt.If(cond, go(thn), go(els))
-    case Stmt.Match(scrutinee, tpe, clauses, default) =>
-      Stmt.Match(scrutinee, result(k),
-        clauses.map { case (id, block) => (id, block.copy(body = go(block.body))) },
-        default.map(go))
-    case Stmt.Alloc(id, init, region, rest) => Stmt.Alloc(id, init, region, go(rest))
-    case Stmt.Get(id, tpe, ref, capt, rest) => Stmt.Get(id, tpe, ref, capt, go(rest))
-    case Stmt.Put(ref, capt, value, rest) => Stmt.Put(ref, capt, value, go(rest))
-    case Stmt.Hole(tpe, span) => Stmt.Hole(result(k), span)
-    case other =>
-      val results = other.tpe.map { _ => Id("r") }
-      Stmt.Val(results, other, Stmt.App(k, Nil, (results zip other.tpe).map(ValueVar.apply), Nil))
-  }
-  go(s)
-}
-
-/** Lets each definition in [[targets]] jump to its continuation, retyping its occurrences accordingly. */
-private case class Contification(targets: Map[Id, Id], definitions: Map[Id, BlockLit]) extends Tree.Rewrite {
-
-  /** [[f]] and the continuations it jumps to, one after the other, until one does not jump or they would repeat. */
-  def path(f: Id): List[Id] = {
-    @tailrec def go(visited: List[Id]): List[Id] = targets.get(visited.head) match {
-      case Some(k) if !visited.contains(k) => go(k :: visited)
-      case _ => visited.reverse
+  object contification extends Tree.Rewrite {
+    override def rewrite(b: BlockVar): BlockVar = b match {
+      case BlockVar(f, BlockType.Function(tparams, cparams, vparams, bparams, _), capt) if chains.contains(f) =>
+        BlockVar(f, BlockType.Function(tparams, cparams, vparams, bparams, results(f)), capt ++ captures(f))
+      case other => super.rewrite(other)
     }
-    go(List(f))
+
+    override def rewrite(s: Stmt): Stmt = s match {
+      case Stmt.Val(ids, binding, Stmt.App(BlockVar(k, _, _), Nil, vargs, Nil)) if isFrame(ids, vargs) && definitions.contains(k) =>
+        go(rewrite(binding), rewrite(definitions(k)))
+      case Stmt.Def(f, BlockLit(tparams, cparams, vparams, bparams, body), rest) if chains.contains(f) =>
+        Stmt.Def(f, BlockLit(tparams, cparams, vparams, bparams, go(rewrite(body), rewrite(definitions(chains(f).head)))), rewrite(rest))
+      case other => super.rewrite(other)
+    }
+
+    /**
+     *   [[ return v ]]_k  =  k(v)
+     *   [[ f(a) ]]_k      =  f(a)               if `f` reaches `k`, since it jumps there itself
+     *   [[ s ]]_k         =  val r = s; k(r)    for any other exit
+     */
+    def go(s: Stmt, k: BlockVar): Stmt = s match {
+      case Stmt.Return(exprs) => Stmt.App(k, Nil, exprs, Nil)
+      case Stmt.App(BlockVar(f, _, _), _, _, _) if reached.get(f).exists(_.contains(k.id)) => s
+      case Stmt.Def(id, block, rest) => Stmt.Def(id, block, go(rest, k))
+      case Stmt.Let(id, binding, rest) => Stmt.Let(id, binding, go(rest, k))
+      case Stmt.ImpureApp(id, callee, targs, vargs, bargs, rest) =>
+        Stmt.ImpureApp(id, callee, targs, vargs, bargs, go(rest, k))
+      case Stmt.Val(ids, binding, rest) => Stmt.Val(ids, binding, go(rest, k))
+      case Stmt.If(cond, thn, els) => Stmt.If(cond, go(thn, k), go(els, k))
+      case Stmt.Match(scrutinee, tpe, clauses, default) =>
+        Stmt.Match(scrutinee, result(k),
+          clauses.map { case (id, block) => (id, block.copy(body = go(block.body, k))) },
+          default.map(go(_, k)))
+      case Stmt.Alloc(id, init, region, rest) => Stmt.Alloc(id, init, region, go(rest, k))
+      case Stmt.Get(id, tpe, ref, capt, rest) => Stmt.Get(id, tpe, ref, capt, go(rest, k))
+      case Stmt.Put(ref, capt, value, rest) => Stmt.Put(ref, capt, value, go(rest, k))
+      case Stmt.Hole(tpe, span) => Stmt.Hole(result(k), span)
+      case other =>
+        val results = other.tpe.map { _ => Id("r") }
+        Stmt.Val(results, other, Stmt.App(k, Nil, (results zip other.tpe).map(ValueVar.apply), Nil))
+    }
   }
 
-  /** The result type of [[f]] after the transformation: that of the continuation it finally jumps to. */
-  def result(f: Id): List[ValueType] = definitions(path(f).last).tpe match {
-    case BlockType.Function(_, _, _, _, result) => result
-    case _ => sys error "A local definition needs a function type"
-  }
-
-  /** The captures of [[f]] after the transformation, including those of the continuations it jumps to. */
-  def captures(f: Id): Captures = path(f).flatMap(definitions(_).capt).toSet
-
-  /** Whether [[g]] jumps to [[k]], directly or through the continuations it jumps to. */
-  def reaches(g: Id, k: Id): Boolean = {
-    val visited = path(g)
-    visited.tail.contains(k) || targets.get(visited.last).contains(k)
-  }
-
-  def continuation(k: Id): BlockVar = rewrite(BlockVar(k, definitions(k).tpe, definitions(k).capt): BlockVar)
-
-  override def rewrite(b: BlockVar): BlockVar = b match {
-    case BlockVar(f, BlockType.Function(tparams, cparams, vparams, bparams, _), capt) if targets.contains(f) =>
-      BlockVar(f, BlockType.Function(tparams, cparams, vparams, bparams, result(f)), capt ++ captures(f))
-    case other => super.rewrite(other)
-  }
-
-  override def rewrite(s: Stmt): Stmt = s match {
-    case Stmt.Val(ids, binding, Stmt.App(BlockVar(k, _, _), Nil, vargs, Nil)) if isFrame(ids, vargs) && definitions.contains(k) =>
-      jump(continuation(k), reaches(_, k), rewrite(binding))
-    case Stmt.Def(f, BlockLit(tparams, cparams, vparams, bparams, body), rest) if targets.contains(f) =>
-      val k = targets(f)
-      val jumped = jump(continuation(k), reaches(_, k), rewrite(body))
-      Stmt.Def(f, BlockLit(tparams, cparams, vparams, bparams, jumped), rewrite(rest))
-    case other => super.rewrite(other)
-  }
+  contification.rewrite(m)
 }
-
 
 // Sink
 // ----
@@ -232,7 +203,7 @@ private case class Contification(targets: Map[Id, Id], definitions: Map[Id, Bloc
  * if `k` uses it, it sinks to the place of `k` and takes `k` into its body. The rest of the statements first.
  */
 def sink(m: ModuleDecl, analysis: Map[Id, Set[Target]]): ModuleDecl = {
-  val targets = contified(analysis)
+  val targets = contified(analysis).view.mapValues(_.head).toMap
   object sinking extends Tree.Rewrite {
     override def rewrite(s: Stmt): Stmt = s match {
       case Stmt.Def(f, block: BlockLit, rest) if targets.contains(f) =>
@@ -327,13 +298,13 @@ private def bind(block: BlockLit, targs: List[ValueType], vargs: List[Expr], bar
 // Shared
 // ------
 
-/** All local definitions of block literals in [[m]]. */
-private def localDefinitions(m: ModuleDecl): Map[Id, BlockLit] = {
-  object collector extends Tree.Query[Unit, Map[Id, BlockLit]] {
+/** All local definitions of block literals in [[m]], with their types and captures. */
+private def localDefinitions(m: ModuleDecl): Map[Id, BlockVar] = {
+  object collector extends Tree.Query[Unit, Map[Id, BlockVar]] {
     def empty = Map.empty
     def combine = _ ++ _
     override def stmt(using Unit) = {
-      case Stmt.Def(id, block: BlockLit, rest) => Map(id -> block) ++ query(block) ++ query(rest)
+      case Stmt.Def(id, block: BlockLit, rest) => Map[Id, BlockVar](id -> BlockVar(id, block.tpe, block.capt)) ++ query(block) ++ query(rest)
     }
   }
   collector.query(m)(using ())
@@ -368,10 +339,20 @@ def result(k: BlockVar): List[ValueType] = k.annotatedTpe match {
 def isFrame(ids: List[Id], vargs: List[Expr]): Boolean =
   vargs.size == ids.size && vargs.collect { case ValueVar(x, _) => x } == ids
 
-/** The definitions that return to exactly one continuation, with that continuation. */
-def contified(analysis: Map[Id, Set[Target]]): Map[Id, Id] = analysis.flatMap { case (f, targets) =>
-  targets.toList match {
-    case List(Target.Known(k)) => Some(f -> k)
-    case _ => None
+/**
+ * The definitions that return to exactly one continuation, each with the continuations it reaches:
+ * that one, the one it in turn returns to, and so on, until one does not jump or they would repeat.
+ */
+def contified(analysis: Map[Id, Set[Target]]): Map[Id, List[Id]] = {
+  val targets = analysis.flatMap { case (f, returns) =>
+    returns.toList match {
+      case List(Target.Known(k)) => Some(f -> k)
+      case _ => None
+    }
   }
+  @tailrec def chain(f: Id, reached: List[Id]): List[Id] = targets.get(f) match {
+    case Some(k) if !reached.contains(k) => chain(k, k :: reached)
+    case _ => reached.reverse
+  }
+  targets.map { case (f, _) => f -> chain(f, Nil) }
 }
