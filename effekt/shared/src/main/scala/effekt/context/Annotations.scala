@@ -97,7 +97,7 @@ object Annotations {
     override val hashCode = System.identityHashCode(key)
 
     override def equals(o: Any) = o match {
-      case k: Key[_] => hashCode == k.hashCode
+      case k: Key[_] => k.key.asInstanceOf[AnyRef] eq key.asInstanceOf[AnyRef]
       case _ => false
     }
   }
