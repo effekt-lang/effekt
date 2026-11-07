@@ -738,7 +738,7 @@ class VMTests extends munit.FunSuite {
     )),
 
     examplesDir / "casestudies" / "anf.effekt.md" -> Some(Summary(
-      staticDispatches = 5657,
+      staticDispatches = 5663,
       dynamicDispatches = 1002,
       patternMatches = 3355,
       branches = 7851,
@@ -754,14 +754,14 @@ class VMTests extends munit.FunSuite {
     )),
 
     examplesDir / "casestudies" / "inference.effekt.md" -> Some(Summary(
-      staticDispatches = 2076249,
-      dynamicDispatches = 2059064,
+      staticDispatches = 2076246,
+      dynamicDispatches = 2059069,
       patternMatches = 1198171,
       branches = 304507,
-      pushedFrames = 2942971,
-      poppedFrames = 2365709,
+      pushedFrames = 2942976,
+      poppedFrames = 2365714,
       allocations = 2915007,
-      closures = 289723,
+      closures = 289724,
       variableReads = 2969286,
       variableWrites = 1486923,
       resets = 288860,

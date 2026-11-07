@@ -296,7 +296,8 @@ object Normalizer { normal =>
       active(b) match {
         case n @ NormalizedBlock.Known(Block.New(impl), boundBy) =>
           selectOperation(impl, method) match {
-            case b: BlockLit if shouldInline(b, boundBy, vargs, bargs) => reduce(b, targs, vargs.map(normalize), bargs.map(normalize))
+            case b: BlockLit if LiftMethods.forwards(b.tparams, b.vparams, b.bparams, b.body) || shouldInline(b, boundBy, vargs, bargs) =>
+              reduce(b, targs, vargs.map(normalize), bargs.map(normalize))
             case _ => Stmt.Invoke(n.shared, method, methodTpe, targs, vargs.map(normalize), bargs.map(normalize))
           }
 
