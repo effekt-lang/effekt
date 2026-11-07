@@ -1,0 +1,7 @@
+def outer(i: Int, n: Int): Int = {
+  def inner(j: Int): Int =
+    if (j == 0) outer(i + 1, n) else inner(j - 1)
+  if (i < n) inner(1) else i
+}
+
+def main() = println(outer(0, 100000))
