@@ -66,7 +66,7 @@ object Transformer {
         val transformedParameters = parameters.map { case machine.Variable(name, tpe) => Parameter(transform(tpe), name) }
         if (async) {
           // receives only the stack, its stack pointer saved in it (see `ForeignJump`)
-          emit(VerbatimFunction(Tailcc(true), VoidType(), functionName, Parameter(stackType, "stack") :: transformedParameters, transform(body)))
+          emit(VerbatimFunction(Tailcc(), VoidType(), functionName, Parameter(stackType, "stack") :: transformedParameters, transform(body)))
         } else {
           emit(VerbatimFunction(Ccc(), transform(returnType), functionName, transformedParameters, transform(body)))
         }
@@ -409,7 +409,7 @@ object Transformer {
         // the foreign code receives the stack, so its stack pointer is saved in it
         val saved = LocalReference(stackType, freshName("saved"))
         emit(Call(saved.name, Ccc(), stackType, saveStackPointer, stackArguments))
-        emit(Call("_", Tailcc(true), VoidType(), ConstantGlobal(foreign), saved :: values.map(transform)))
+        emit(Call("_", Tailcc(), VoidType(), ConstantGlobal(foreign), saved :: values.map(transform), musttail = true))
         RetVoid()
 
       case machine.ForeignCall(variable @ machine.Variable(resultName, resultType), foreign, values, rest) =>
@@ -611,7 +611,7 @@ object Transformer {
     val instructions = BC.instructions; BC.instructions = null;
 
     val entryBlock = BasicBlock("entry", instructions, terminator);
-    val function = Function(Private(), Tailcc(true), VoidType(), name, stackParameters ++ parameters, entryBlock :: basicBlocks, prefix);
+    val function = Function(Private(), Tailcc(), VoidType(), name, stackParameters ++ parameters, entryBlock :: basicBlocks, prefix);
 
     emit(function)
   }
@@ -621,10 +621,10 @@ object Transformer {
     ConstantArray(IntegerType64(), List(ConstantOffset(sharer.name, returnAddressName), ConstantOffset(eraser.name, returnAddressName)))
 
   def callLabel(name: Operand, arguments: List[Operand])(using BlockContext): Instruction =
-    Call("_", Tailcc(true), VoidType(), name, stackArguments ++ arguments)
+    Call("_", Tailcc(), VoidType(), name, stackArguments ++ arguments, musttail = true)
 
   def callLabelTransition(name: Operand, arguments: List[Operand])(using BlockContext): Instruction =
-    Call("_", Tailcc(false), VoidType(), name, stackArguments ++ arguments)
+    Call("_", Tailcc(), VoidType(), name, stackArguments ++ arguments)
 
   def initialEnvironmentPointer = LocalReference(environmentType, "environment")
 
