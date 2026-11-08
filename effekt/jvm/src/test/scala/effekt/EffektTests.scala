@@ -45,7 +45,7 @@ trait EffektTests extends munit.FunSuite {
   def snapshotTest(input: File, mode: String, expected: Option[String])(obtained: => String): Unit =
     test(s"${input.getPath} (${mode})") {
       if (updateCheckFiles) {
-        CheckFiles.update(input, s"${getClass.getSimpleName} (${mode})", obtained, expected).foreach { conflict => fail(conflict) }
+        CheckFiles.update(input, getClass.getSimpleName, mode, obtained, expected).foreach { conflict => fail(conflict) }
       } else {
         assertNoDiff(obtained, expected.getOrElse { fail(s"Missing checkfile for ${input.getPath}") })
       }
@@ -206,18 +206,22 @@ def hasInlineExpectations(f: File): Boolean =
   IO.readLines(f).exists { line => inlineExpectation.findFirstIn(line).nonEmpty }
 
 object CheckFiles {
+  enum Kind { case Added, Updated }
+
+  private case class Change(suite: String, kind: Kind, checkfile: File)
+
   private val written = java.util.concurrent.ConcurrentHashMap[File, (String, String)]()
-  private case class Change(writer: String, kind: String, checkfile: File)
   private val changes = java.util.concurrent.ConcurrentLinkedQueue[Change]()
 
-  private def same(obtained: String, expected: String): Boolean = munit.diff.Diff(obtained, expected).isEmpty
+  private def same(obtained: String, expected: String): Boolean = 
+    munit.diff.Diff(obtained, expected).isEmpty
 
-  /** Writes the check file for `input` unless it already says `obtained`; returns a conflict, if any. */
-  def update(input: File, writer: String, obtained: String, expected: Option[String]): Option[String] = {
+  /** Writes the check file for `input` unless it already says `obtained`. Returns a conflict, if it occurred. */
+  def update(input: File, suite: String, mode: String, obtained: String, expected: Option[String]): Option[String] = {
+    val writer = s"${suite} (${mode})"
     val checkfile = checkFileFor(input).getCanonicalFile
     val content = obtained.replaceAll("\u001B\\[[;\\d]*m", "")
     val first = written.putIfAbsent(checkfile, (writer, content))
-
     if (first != null && !same(content, first._2)) {
       Some(s"${writer} and ${first._1} disagree on ${checkFileFor(input).getPath}; it keeps the output of ${first._1}")
     } else {
@@ -225,29 +229,27 @@ object CheckFiles {
         // keep the file's own ending, so that the diff shows only what the test compares
         val toWrite = expected.fold(content) { e => if (e.endsWith("\n")) content else content.replaceAll("\n+\\z", "") }
         IO.write(checkfile, toWrite)
-        changes.add(Change(writer, if (expected.isEmpty) "added" else "updated", checkFileFor(input)))
+        changes.add(Change(suite, if (expected.isEmpty) Kind.Added else Kind.Updated, checkFileFor(input)))
       }
       None
     }
   }
 
-  /** Prints which check files `suite` changed, and the prphaned check files in `dirs` (without a test). */
   def report(suite: String, dirs: Set[File]): Unit = {
-    import scala.jdk.CollectionConverters.*
-    changes.asScala
-      .filter { c => c.writer.startsWith(suite + " ") }
-      .map { c => s"${c.kind}: ${c.checkfile.getPath}" }
-      .toList.distinct.sorted.foreach(println)
+    changedBy(suite).foreach { (kind, checkfile) => println(s"${kind.toString.toLowerCase}: ${checkfile.getPath}") }
+    orphansIn(dirs).foreach { checkfile => println(s"orphaned: ${checkfile.getPath}") }
+  }
 
-    def orphans(f: File): List[File] =
-      if (f.isDirectory) {
-        f.listFiles.toList.flatMap(orphans)
-      } else {
-        val base = f.getPath.stripSuffix(".check")
-        if (f.getName.endsWith(".check") && !File(base + ".effekt").exists && !File(base + ".effekt.md").exists) List(f) else Nil
-      }
-    dirs.toList.flatMap(orphans).map(_.getPath)
-        .distinct.sorted.foreach { f => println(s"orphaned: $f") }
+  private def changedBy(suite: String): List[(Kind, File)] = {
+    import scala.jdk.CollectionConverters.*
+    changes.asScala.toList.collect { case Change(`suite`, kind, checkfile) => (kind, checkfile) }.distinct.sortBy { (_, f) => f.getPath }
+  }
+
+  private def orphansIn(dirs: Set[File]): List[File] = {
+    def hasTest(checkfile: File): Boolean = {
+      val base = checkfile.getPath.stripSuffix(".check")
+      File(base + ".effekt").exists || File(base + ".effekt.md").exists
+    }
+    dirs.toList.flatMap { dir => (dir ** "*.check").get() }.filterNot(hasTest).distinct.sortBy(_.getPath)
   }
 }
-
