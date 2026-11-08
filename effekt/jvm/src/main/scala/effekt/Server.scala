@@ -10,7 +10,7 @@ import effekt.symbols.Binder.{ValBinder, VarBinder}
 import effekt.symbols.BlockTypeConstructor.{ExternInterface, Interface}
 import effekt.symbols.TypeConstructor.{DataType, ExternType}
 import effekt.symbols.{Anon, Binder, Callable, Effects, ErrorMessageInterpolator, Module, Param, Symbol, TypeAlias, TypePrinter, UserFunction, ValueType, isSynthetic}
-import effekt.util.messages.{Diagnostic as EffektDiagnostic, Severity}
+import effekt.util.messages.{Diagnostic as EffektDiagnostic, Severity, Subdiagnostic}
 import effekt.util.{PlainMessaging, PrettyPrinter}
 import kiama.util.Collections.{mapToJavaMap, seqToJavaList}
 import kiama.util.Convert.*
@@ -21,7 +21,7 @@ import org.eclipse.lsp4j.jsonrpc.services.{JsonNotification, JsonRequest}
 import org.eclipse.lsp4j.jsonrpc.{Launcher, messages}
 import org.eclipse.lsp4j.launch.LSPLauncher
 import org.eclipse.lsp4j.services.*
-import org.eclipse.lsp4j.{CodeAction, CodeActionKind, CodeActionParams, Command, DefinitionParams, Diagnostic, DiagnosticSeverity, DidChangeConfigurationParams, DidChangeTextDocumentParams, DidChangeWatchedFilesParams, DidCloseTextDocumentParams, DidOpenTextDocumentParams, DidSaveTextDocumentParams, DocumentSymbol, DocumentSymbolParams, Hover, HoverParams, InitializeParams, InitializeResult, InitializedParams, InlayHint, InlayHintKind, InlayHintParams, Location, LocationLink, MarkupContent, MessageParams, MessageType, PublishDiagnosticsParams, ReferenceParams, SaveOptions, ServerCapabilities, SetTraceParams, SymbolInformation, SymbolKind, TextDocumentSyncKind, TextDocumentSyncOptions, TextEdit, WorkspaceEdit, Range as LSPRange}
+import org.eclipse.lsp4j.{CodeAction, CodeActionKind, CodeActionParams, Command, DefinitionParams, Diagnostic, DiagnosticRelatedInformation, DiagnosticSeverity, DidChangeConfigurationParams, DidChangeTextDocumentParams, DidChangeWatchedFilesParams, DidCloseTextDocumentParams, DidOpenTextDocumentParams, DidSaveTextDocumentParams, DocumentSymbol, DocumentSymbolParams, Hover, HoverParams, InitializeParams, InitializeResult, InitializedParams, InlayHint, InlayHintKind, InlayHintParams, Location, LocationLink, MarkupContent, MessageParams, MessageType, PublishDiagnosticsParams, ReferenceParams, SaveOptions, ServerCapabilities, SetTraceParams, SymbolInformation, SymbolKind, TextDocumentSyncKind, TextDocumentSyncOptions, TextEdit, WorkspaceEdit, Range as LSPRange}
 
 import java.io.{InputStream, OutputStream, PrintWriter}
 import java.net.ServerSocket
@@ -54,6 +54,9 @@ class Server(config: EffektConfig, compileOnChange: Boolean=false) extends Drive
   val getConfig: EffektConfig = config
 
   object lspMessaging extends PlainMessaging
+
+  // Whether the client shows `relatedInformation`, otherwise subdiagnostics stay part of the message.
+  private var relatedInformation: Boolean = false
 
   // LSP Lifecycle
   //
@@ -90,6 +93,11 @@ class Server(config: EffektConfig, compileOnChange: Boolean=false) extends Drive
     // or a bad user experience.
     if (params.getInitializationOptions != null)
       workspaceService.didChangeConfiguration(new DidChangeConfigurationParams(params.getInitializationOptions))
+
+    relatedInformation = Option(params.getCapabilities)
+      .flatMap { c => Option(c.getTextDocument) }
+      .flatMap { t => Option(t.getPublishDiagnostics) }
+      .exists { p => p.getRelatedInformation == java.lang.Boolean.TRUE } // argh, we should really have a Scala wrapper for this
 
     val result = new InitializeResult(capabilities)
     CompletableFuture.completedFuture(result)
@@ -204,9 +212,23 @@ class Server(config: EffektConfig, compileOnChange: Boolean=false) extends Drive
   //
   //
 
-  def toLSP(diagnostic: EffektDiagnostic): Diagnostic = {
-    val range = diagnostic.range.map(convertRange).getOrElse(emptyRange)
-    new Diagnostic(range, lspMessaging.contentWithSubdiagnostics(diagnostic), toLSP(diagnostic.severity), lspMessaging.lspSource(diagnostic))
+  def toLSP(diagnostic: EffektDiagnostic): Diagnostic = diagnostic.range match {
+    case Some(range) if relatedInformation && diagnostic.subdiagnostics.nonEmpty =>
+      val lspDiagnostic = new Diagnostic(convertRange(range), lspMessaging.content(diagnostic), toLSP(diagnostic.severity), lspMessaging.lspSource(diagnostic))
+      lspDiagnostic.setRelatedInformation(Collections.seqToJavaList(diagnostic.subdiagnostics.map { s => toLSP(s, range) }))
+      lspDiagnostic
+    case range =>
+      new Diagnostic(range.map(convertRange).getOrElse(emptyRange), lspMessaging.contentWithSubdiagnostics(diagnostic), toLSP(diagnostic.severity), lspMessaging.lspSource(diagnostic))
+  }
+
+  def toLSP(subdiagnostic: Subdiagnostic, diagnosticRange: Range): DiagnosticRelatedInformation = {
+    val (kind, range) = subdiagnostic match {
+      case Subdiagnostic.Note(_, at) => ("note", at.map(_.range).getOrElse(diagnosticRange))
+      case Subdiagnostic.Help(_)     => ("help", diagnosticRange)
+    }
+    new DiagnosticRelatedInformation(
+      new Location(Convert.toURI(range.from.source.name), convertRange(range)),
+      s"$kind: ${lspMessaging.subdiagnostic(subdiagnostic)}")
   }
 
   def toLSP(severity: Severity): DiagnosticSeverity = severity match {
