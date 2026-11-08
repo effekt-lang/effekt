@@ -279,6 +279,8 @@ object messages {
 
     def warning(msg: String): Unit = report(plainMessage(msg, Severity.Warning))
     def warning(msg: StructuredMessage): Unit = report(structuredMessage(msg, Severity.Warning))
+    def warning(msg: StructuredMessage)(subdiagnostics: Subdiagnostics ?=> Unit): Unit =
+      report(structuredMessage(msg, Severity.Warning).copy(subdiagnostics = Subdiagnostics(subdiagnostics)))
 
     def info(msg: String): Unit = report(plainMessage(msg, Severity.Info))
     def info(msg: StructuredMessage): Unit = report(structuredMessage(msg, Severity.Info))

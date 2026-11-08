@@ -8,7 +8,7 @@ import effekt.source.*
 import effekt.source.Origin.Synthesized
 import effekt.util.VirtualSource
 import kiama.parsing.{Input, ParseResult}
-import effekt.util.messages.Severity
+import effekt.util.messages.{ErrorMessageReifier, Severity, Subdiagnostics, help}
 import kiama.util.{Position, Source}
 
 import scala.annotation.{tailrec, targetName}
@@ -53,27 +53,28 @@ object Parser extends Phase[Source, Parsed] {
 }
 
 
-case class Fail(msg: String, position: Int) extends Throwable(null, null, false, false)
+case class Fail(msg: String, position: Int, helps: List[String] = Nil) extends Throwable(null, null, false, false)
 object Fail {
   def expectedButGot(expected: String, got: String, position: Int): Fail =
     Fail(s"Expected ${expected} but got ${got}", position)
 }
 
-case class RecoverableDiagnostic(kind: Severity, message: String, positionStart: Int, positionEnd: Int)
+case class RecoverableDiagnostic(kind: Severity, message: String, positionStart: Int, positionEnd: Int, helps: List[String] = Nil)
 
 class Parser(tokens: Seq[Token], source: Source) {
 
   var recoverableDiagnostics: ListBuffer[RecoverableDiagnostic] = ListBuffer[RecoverableDiagnostic]()
 
-  private def report(msg: String, fromPosition: Int, toPosition: Int, severity: Severity = Severity.Error, source: Source = source)(using C: Context) = {
+  private def report(msg: String, fromPosition: Int, toPosition: Int, severity: Severity = Severity.Error, source: Source = source, helps: List[String] = Nil)(using C: Context) = {
     val span = Span(source, tokens(fromPosition).start, tokens(toPosition).end + 1)
-    C.report(C.diagnostic(effekt.util.messages.Message(msg), severity, Some(span)))
+    val diagnostic = C.diagnostic(effekt.util.messages.Message(msg), severity, Some(span))
+    C.report(diagnostic.copy(subdiagnostics = Subdiagnostics { helps.foreach { h => help(pretty"${h}") } }))
   }
 
   def parse(input: Input)(using C: Context): Option[ModuleDecl] = {
     def reportRecoverableDiagnostics()(using C: Context): Unit =
       recoverableDiagnostics.foreach { d =>
-        report(d.message, d.positionStart, d.positionEnd, d.kind)
+        report(d.message, d.positionStart, d.positionEnd, d.kind, helps = d.helps)
       }
 
     try {
@@ -90,11 +91,11 @@ class Parser(tokens: Seq[Token], source: Source) {
         d.kind != Severity.Error
       } then res else None
     } catch {
-      case Fail(msg, pos) =>
+      case Fail(msg, pos, helps) =>
         // Don't forget soft fails!
         reportRecoverableDiagnostics()
 
-        report(msg, pos, pos, source = input.source)
+        report(msg, pos, pos, source = input.source, helps = helps)
         None
     }
   }
@@ -102,7 +103,7 @@ class Parser(tokens: Seq[Token], source: Source) {
   // here we need to convert to kiamas error format since REPL is defined in kiama
   def parseRepl(input: Input)(using C: Context): ParseResult[Tree] =
     try { kiama.parsing.Success(repl(), input) } catch {
-      case Fail(msg, pos) => kiama.parsing.Error(msg, input.copy(offset = pos))
+      case Fail(msg, pos, _) => kiama.parsing.Error(msg, input.copy(offset = pos))
     }
 
   var currentLabel: Option[String] = None
@@ -1160,7 +1161,7 @@ class Parser(tokens: Seq[Token], source: Source) {
                   val right = exprOuter(Some(op))
                   left = binaryOp(left, opToken, right)
                 case Precedence.Ambiguous =>
-                  fail(s"Ambiguous infix operator precedence for the usage of ${op}. Consider adding parentheses.")
+                  fail(s"Ambiguous infix operator precedence for the usage of ${op}.", List("Consider adding parentheses."))
               }
             case `match` =>
               left = matchExpr(left)
@@ -1792,11 +1793,11 @@ class Parser(tokens: Seq[Token], source: Source) {
   def fail(expected: String, got: TokenKind): Nothing =
     throw Fail.expectedButGot(currentLabel.getOrElse { expected }, explain(got), position)
 
-  def fail(msg: String): Nothing =
-    throw Fail(msg, position)
+  def fail(msg: String, helps: List[String] = Nil): Nothing =
+    throw Fail(msg, position, helps)
 
-  def softFail(message: String, start: Int, end: Int): Unit =
-    recoverableDiagnostics += RecoverableDiagnostic(Severity.Error, message, start, end)
+  def softFail(message: String, start: Int, end: Int, helps: List[String] = Nil): Unit =
+    recoverableDiagnostics += RecoverableDiagnostic(Severity.Error, message, start, end, helps)
 
   def warn(message: String, start: Int, end: Int): Unit =
     recoverableDiagnostics += RecoverableDiagnostic(Severity.Warning, message, start, end)
@@ -1826,7 +1827,7 @@ class Parser(tokens: Seq[Token], source: Source) {
     val labelBefore = currentLabel
     val recoverableBefore = recoverableDiagnostics.clone()
     try { Maybe.Some(p, span(tokens(before).end)) } catch {
-      case Fail(_, _) => {
+      case Fail(_, _, _) => {
         position = before
         previous = beforePrevious
         currentLabel = labelBefore
@@ -1888,8 +1889,9 @@ class Parser(tokens: Seq[Token], source: Source) {
         components += p()
       } else if (failOnSingleton && components.size == 1) {
         // NOTE(jiribenes, 2026-07-31): As of the time of writing, this is exclusively fired for the tuple/grouping overload, so the message is phrased for tuples.
-        softFail(s"There are no one-element tuples. Remove the trailing `${explain(sep)}` to group, or add another element.",
-          position - 1, position - 1) // `position - 1` is the `sep` we just consumed
+        softFail("There are no one-element tuples.",
+          position - 1, position - 1, // `position - 1` is the `sep` we just consumed
+          List(s"Remove the trailing `${explain(sep)}` to group.", "Add another element."))
       }
     }
     consume(after)

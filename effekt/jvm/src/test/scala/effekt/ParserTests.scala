@@ -84,7 +84,7 @@ class ParserTests extends munit.FunSuite {
       assert(p.peek(TokenKind.EOF), s"Did not consume everything: ${p.peek}")
       result
     } catch {
-      case Fail(msg, pos) =>
+      case Fail(msg, pos, _) =>
         fail(s"Unexpected parse error (token index ${pos}): ${msg}")
     }
 
