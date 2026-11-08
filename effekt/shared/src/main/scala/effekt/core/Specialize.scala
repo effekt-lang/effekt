@@ -6,6 +6,8 @@ import effekt.PhaseResult.CoreTransformed
 import effekt.core.substitutions.{ Substitution, substitute }
 import effekt.util.DB
 
+import scala.collection.mutable
+
 /**
  * Specializes definitions to the local definitions passed to them as blocks, placing each copy right after the last
  * of these definitions, where it sees everything all of them see:
@@ -62,13 +64,13 @@ type Key = (Id, List[Option[Id]])
 
 /**
  * What is in scope: the local definitions of literals and objects, the aliases `def x = y`, the copies, and the
- * definitions whose bodies we are in.
+ * keys of the copies we are in, by where their names come from.
  */
 case class Scope(
   definitions: Map[Id, Block],
   aliases: Map[Id, Id],
   copies: Map[Key, Id],
-  within: Set[Id]
+  within: Set[Key]
 ) {
   def resolve(id: Id): Id = aliases.get(id).map(resolve).getOrElse(id)
 }
@@ -82,15 +84,25 @@ case class Scope(
  * where `g` is a local definition and `h` is not.
  * A copy asking for another copy with blocks defined outside of it, which is not in scope, gets it at its beginning,
  * so that mutual recursion `ping(…){g}`, `pong(…){g}` ends up nested.
- * A definition is not specialized within its own body, be it the definition itself or a copy of it, so that a block
- * built up recursively stays a block.
+ * A copy of `f` for blocks defined at the same places as the blocks of a copy of `f` we are in is built up
+ * recursively, so we do not make it.
  */
 def specialize(m: ModuleDecl): ModuleDecl = {
   val toplevel: Map[Id, BlockLit] = m.definitions.collect {
     case Toplevel.Def(id, block: BlockLit) => id -> block
   }.toMap
 
-  def fresh(block: BlockLit): BlockLit = Renamer.rename(block)._1
+  val origin = mutable.Map.empty[Id, Id]
+  def originOf(id: Id): Id = origin.get(id).map(originOf).getOrElse(id)
+  def originsOf(key: Key): Key = key match {
+    case (f, arguments) => (originOf(f), arguments.map(_.map(originOf)))
+  }
+
+  def fresh(block: BlockLit): BlockLit = {
+    val (renamed, renaming) = Renamer.rename(block)
+    renaming.foreach { case (fresh, old) => origin(fresh) = old }
+    renamed
+  }
 
   /** The definition taking blocks that [[f]] stands for. */
   def callee(f: Id, scope: Scope): Option[BlockLit] =
@@ -144,7 +156,7 @@ def specialize(m: ModuleDecl): ModuleDecl = {
     val requests = calls(s, scope).toList.collect {
       case (f, arguments) if !arguments.flatten.exists(later.contains) => key(f, arguments, scope)
     }.flatten.distinct.filter { k =>
-      !scope.copies.contains(k) && wanted(k) && !scope.within.contains(k._1)
+      !scope.copies.contains(k) && wanted(k) && !scope.within.contains(originsOf(k))
     }
     val named = requests.map { case k @ (f, arguments) =>
       k -> Id((f.name.name :: arguments.flatten.map(_.name.name)).mkString("_"))
@@ -164,7 +176,7 @@ def specialize(m: ModuleDecl): ModuleDecl = {
       DB.from(passed.map { case (_, capture, variable) => capture -> variable.capt }), DB.empty,
       DB.from(passed.map { case (param, _, variable) => param.id -> variable })))
     val kept = (block.bparams zip block.cparams zip arguments).collect { case ((param, capture), None) => (param, capture) }
-    val inner = scope.copy(within = scope.within + f)
+    val inner = scope.copy(within = scope.within + originsOf(k))
     val (outside, withOutside) = provide(body, inner) { _ => true }
     BlockLit(block.tparams, kept.map(_._2), block.vparams, kept.map(_._1),
       bind(outside, withOutside, specializing.rewrite(body)(using withOutside)))
@@ -190,7 +202,7 @@ def specialize(m: ModuleDecl): ModuleDecl = {
       case Stmt.Def(id, block @ (_: BlockLit | _: Block.New), body) =>
         val defined = scope.copy(definitions = scope.definitions + (id -> block))
         val (named, withCopies) = provide(body, defined) { case (f, arguments) => f == id || arguments.contains(Some(id)) }
-        Stmt.Def(id, rewrite(block)(using defined.copy(within = defined.within + id)), bind(named, withCopies, rewrite(body)(using withCopies)))
+        Stmt.Def(id, rewrite(block)(using defined), bind(named, withCopies, rewrite(body)(using withCopies)))
 
       case Stmt.App(callee @ Block.BlockVar(f, _, capt), targs, vargs, bargs) if bargs.nonEmpty =>
         val arguments = bargs.map {
@@ -217,7 +229,7 @@ def specialize(m: ModuleDecl): ModuleDecl = {
 
   val empty = Scope(Map.empty, Map.empty, Map.empty, Set.empty)
   m.copy(definitions = m.definitions.map {
-    case Toplevel.Def(id, block) => Toplevel.Def(id, specializing.rewrite(block)(using empty.copy(within = Set(id))))
+    case Toplevel.Def(id, block) => Toplevel.Def(id, specializing.rewrite(block)(using empty))
     case Toplevel.Val(id, binding) => Toplevel.Val(id, specializing.rewrite(binding)(using empty))
   })
 }
