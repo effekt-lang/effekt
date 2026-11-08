@@ -138,7 +138,7 @@ class LanguageServer extends Intelligence {
   private def messageToDiagnostic(m: Diagnostic) = {
     val from = m.range.map { r => toLSPPosition(r.from) }.orNull
     val to = m.range.map { r => toLSPPosition(r.to) }.orNull
-    val text = context.messaging.formatContent(m)
+    val text = context.messaging.contentWithSubdiagnostics(m)
     new lsp.Diagnostic(new lsp.Range(from, to), convertSeverity(m.severity), text)
   }
 

@@ -119,7 +119,7 @@ object GenerateImplicitArgs {
         }
       }
     }{
-      case util.messages.Diagnostic(_, _, util.messages.ImplicitMaxRecursion(_), _) => true
+      case util.messages.Diagnostic(_, _, _, util.messages.ImplicitMaxRecursion(_), _) => true
       case _ => false
     }
   }

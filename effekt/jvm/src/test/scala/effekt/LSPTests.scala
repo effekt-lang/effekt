@@ -296,6 +296,38 @@ class LSPTests extends FunSuite {
     }
   }
 
+  test("a diagnostic's help is part of the diagnostic itself in LSP") {
+    withClientAndServer { (client, server) =>
+      val (textDoc, range) = raw"""
+                       |def bar(f: (Int, Int) => Bool) = ()
+                       |           ↑                ↑
+                       |""".textDocumentAndRange
+
+      val didOpenParams = new DidOpenTextDocumentParams()
+      didOpenParams.setTextDocument(textDoc)
+      server.didOpen(didOpenParams)
+
+      val diagnostic = new Diagnostic()
+      diagnostic.setRange(range)
+      diagnostic.setSeverity(DiagnosticSeverity.Error)
+      diagnostic.setSource("effekt")
+      diagnostic.setMessage(
+        """Expected value type, but got a second-class function type (Int, Int) => Bool.
+          |Did you mean to use braces in order to receive a block type `(Int, Int) => Bool`?
+          |Did you mean to use a first-class, boxed function type `(Int, Int) => Bool at {}`?""".stripMargin)
+
+      val diagnosticsWithError = new util.ArrayList[Diagnostic]()
+      diagnosticsWithError.add(diagnostic)
+
+      val expected = List(
+        new PublishDiagnosticsParams("file://test.effekt", new util.ArrayList[Diagnostic]()),
+        new PublishDiagnosticsParams("file://test.effekt", diagnosticsWithError)
+      )
+
+      assertEquals(client.receivedDiagnostics(), expected)
+    }
+  }
+
   test("didChange yields empty diagnostics") {
     withClientAndServer { (client, server) =>
       val didOpenParams = new DidOpenTextDocumentParams()

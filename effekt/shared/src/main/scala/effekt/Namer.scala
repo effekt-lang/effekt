@@ -10,6 +10,7 @@ import effekt.typer.Substitutions
 import effekt.source.{Def, Id, IdDef, IdRef, Many, MatchGuard, ModuleDecl, Term, Tree, sourceOf, GenerateImplicitArgs}
 import effekt.symbols.*
 import effekt.util.messages.ErrorMessageReifier
+import effekt.util.messages.help
 import effekt.symbols.scopes.*
 import effekt.context.Try
 
@@ -798,11 +799,12 @@ object Namer extends Phase[Parsed, NameResolved] {
         }
         Substitutions.types(tparams, targs.unspan).substitute(tpe)
       case other =>
-        Context.error(pretty"Expected value type, but got block type ${other}.")
-        other match {
-          case constructor: BlockTypeConstructor =>
-            Context.info(pretty"Did you mean to box the interface ${constructor}, i.e. `${other} at {}`?")
-          case _ => ()
+        Context.error(pretty"Expected value type, but got block type ${other}.") {
+          other match {
+            case constructor: BlockTypeConstructor =>
+              help(pretty"Did you mean to box the interface ${constructor}, i.e. `${other} at {}`?")
+            case _ => ()
+          }
         }
 
         // Dummy value type in order to aggregate more errors (see #947)
@@ -814,20 +816,21 @@ object Namer extends Phase[Parsed, NameResolved] {
     case source.BoxedType(tpe, capt, _) =>
       BoxedType(resolveBlockType(tpe), resolve(capt))
     case other =>
-      Context.error(pretty"Expected value type, but got ${describeType(other)}.")
-      other match {
-        case funTpe: source.FunctionType =>
-          if isParam then Context.info(pretty"Did you mean to use braces in order to receive a block type `${funTpe.sourceOf}`?")
-          Context.info(pretty"Did you mean to use a first-class, boxed function type `${funTpe.sourceOf} at {}`?")
-        case source.Effectful(source.FunctionType(tparams, vparams, bparams, result, funEffects, _), effects, span ) =>
-          val combinedEffects = prettySourceEffectSet(funEffects.effs.toSet ++ effects.effs.toSet)
-          Context.info(pretty"A function type cannot have multiple effect sets, did you mean to use `/ ${combinedEffects}` instead of `/ ${funEffects.sourceOf} / ${effects.sourceOf}`?")
-        case source.Effectful(source.BoxedType(tpe@source.FunctionType(tparams, vparams, bparams, result, funEffects, _), capt, _), effects, span) =>
-          Context.info(pretty"Did you want to write a boxed type with effects, `${tpe.sourceOf} / ${effects.sourceOf} at ${capt.sourceOf}`?")
-        case source.Effectful(innerTpe, eff, span) =>
-          if isParam then Context.info(pretty"Did you mean to use braces and a function type `() => ${innerTpe.sourceOf} / ${eff.sourceOf}`?")
-          Context.info(pretty"Did you mean to use a first-class, boxed type `() => ${innerTpe.sourceOf} at {} / ${eff.sourceOf}`?")
-        case _ => ()
+      Context.error(pretty"Expected value type, but got ${describeType(other)}.") {
+        other match {
+          case funTpe: source.FunctionType =>
+            if isParam then help(pretty"Did you mean to use braces in order to receive a block type `${funTpe.sourceOf}`?")
+            help(pretty"Did you mean to use a first-class, boxed function type `${funTpe.sourceOf} at {}`?")
+          case source.Effectful(source.FunctionType(tparams, vparams, bparams, result, funEffects, _), effects, span ) =>
+            val combinedEffects = prettySourceEffectSet(funEffects.effs.toSet ++ effects.effs.toSet)
+            help(pretty"A function type cannot have multiple effect sets, did you mean to use `/ ${combinedEffects}` instead of `/ ${funEffects.sourceOf} / ${effects.sourceOf}`?")
+          case source.Effectful(source.BoxedType(tpe@source.FunctionType(tparams, vparams, bparams, result, funEffects, _), capt, _), effects, span) =>
+            help(pretty"Did you want to write a boxed type with effects, `${tpe.sourceOf} / ${effects.sourceOf} at ${capt.sourceOf}`?")
+          case source.Effectful(innerTpe, eff, span) =>
+            if isParam then help(pretty"Did you mean to use braces and a function type `() => ${innerTpe.sourceOf} / ${eff.sourceOf}`?")
+            help(pretty"Did you mean to use a first-class, boxed type `() => ${innerTpe.sourceOf} at {} / ${eff.sourceOf}`?")
+          case _ => ()
+        }
       }
 
       // Dummy value type in order to aggregate more errors (see #947)
@@ -840,20 +843,21 @@ object Namer extends Phase[Parsed, NameResolved] {
     case t: source.BlockTypeTree => t.eff
     case t: source.TypeRef => resolveBlockRef(t)
     case other =>
-      Context.error(pretty"Expected block type, but got ${describeType(other)}.")
-      other match
-        case source.BoxedType(innerTpe, eff, _) =>
-          if isParam then Context.info(pretty"Did you mean to use parentheses in order to receive a value type ${other.sourceOf}?")
-          Context.info(pretty"Did you mean to use the block type ${innerTpe.sourceOf} without 'at ${eff.sourceOf}'?")
-        case source.Effectful(source.FunctionType(tparams, vparams, bparams, result, funEffects, _), effects, span) =>
-          val combinedEffects = prettySourceEffectSet(funEffects.effs.toSet ++ effects.effs.toSet)
-          Context.info(pretty"A function type cannot have multiple effect sets, did you mean to use `/ ${combinedEffects}` instead of `/ ${funEffects.sourceOf} / ${effects.sourceOf}`?")
-        case source.Effectful(source.BoxedType(tpe @ source.FunctionType(tparams, vparams, bparams, result, funEffects, _), capt, _), effects, span) =>
-          Context.info(pretty"Did you want to write a boxed type with effects, `${tpe.sourceOf} / ${effects.sourceOf} at ${capt.sourceOf}`?")
-        case source.Effectful(innerTpe, effs, span) =>
-          // NOTE: We could use `isParam` to write a more precise message, but what exactly would it be?
-          Context.info(pretty"Did you mean to use a function type () => ${innerTpe.sourceOf} / ${effs.sourceOf}?")
-        case _ => ()
+      Context.error(pretty"Expected block type, but got ${describeType(other)}.") {
+        other match
+          case source.BoxedType(innerTpe, eff, _) =>
+            if isParam then help(pretty"Did you mean to use parentheses in order to receive a value type ${other.sourceOf}?")
+            help(pretty"Did you mean to use the block type ${innerTpe.sourceOf} without 'at ${eff.sourceOf}'?")
+          case source.Effectful(source.FunctionType(tparams, vparams, bparams, result, funEffects, _), effects, span) =>
+            val combinedEffects = prettySourceEffectSet(funEffects.effs.toSet ++ effects.effs.toSet)
+            help(pretty"A function type cannot have multiple effect sets, did you mean to use `/ ${combinedEffects}` instead of `/ ${funEffects.sourceOf} / ${effects.sourceOf}`?")
+          case source.Effectful(source.BoxedType(tpe @ source.FunctionType(tparams, vparams, bparams, result, funEffects, _), capt, _), effects, span) =>
+            help(pretty"Did you want to write a boxed type with effects, `${tpe.sourceOf} / ${effects.sourceOf} at ${capt.sourceOf}`?")
+          case source.Effectful(innerTpe, effs, span) =>
+            // NOTE: We could use `isParam` to write a more precise message, but what exactly would it be?
+            help(pretty"Did you mean to use a function type () => ${innerTpe.sourceOf} / ${effs.sourceOf}?")
+          case _ => ()
+      }
 
       // Dummy interface type in order to aggregate more errors (see #947)
       InterfaceType(ErrorBlockType(), Nil)
@@ -1167,13 +1171,11 @@ trait NamerOps extends ContextOps { Context: Context =>
         if (blocks.isEmpty) {
           val ops = scope.lookupOperation(id.path, id.name).flatten
 
-          // Provide specific info messages for operations
-          ops.foreach { op =>
-            info(pretty"There is an equally named effect operation ${op} of interface ${op.interface}. Use syntax `do ${id}()` to call it.")
+          abort(pretty"Cannot find a function named `${id}`.") {
+            ops.foreach { op =>
+              help(pretty"There is an equally named effect operation ${op} of interface ${op.interface}. Use syntax `do ${id}()` to call it.")
+            }
           }
-
-          // Always abort with the generic message
-          abort(pretty"Cannot find a function named `${id}`.")
         }
         assignSymbol(id, CallTarget(blocks, Some(scope.scope)))
     }

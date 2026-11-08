@@ -1370,54 +1370,56 @@ object Typer extends Phase[NameResolved, Typechecked] {
     def pluralized(n: Int, singular: String): String =
       if (n == 1) s"$n $singular" else s"$n ${singular}s"
 
-    // Hint: Tuple vs arg-list confusion (also covers lambda case)
-    if (!values.isAligned) {
-      // 1. User wrote `case (x, y) => ...` but function expects multiple arguments
-      // => Did we match exactly 1 value param with `__arg... ` name, and have multiple args missing
-      // HACK: Hardcoded '__arg' to recognize lambda case
-      (values.matched, values.extra, values.missing) match {
-        case (List((param: source.ValueParam, _)), Nil, _ :: _)
-          if param.id.name.startsWith("__arg") =>
-          Context.info(pretty"Did you mean to use `(x, y) => ...` instead of `case (x, y) => ...`?")
-        case _ => ()
+    def hints(using Subdiagnostics): Unit = {
+      // Hint: Tuple vs arg-list confusion (also covers lambda case)
+      if (!values.isAligned) {
+        // 1. User wrote `case (x, y) => ...` but function expects multiple arguments
+        // => Did we match exactly 1 value param with `__arg... ` name, and have multiple args missing
+        // HACK: Hardcoded '__arg' to recognize lambda case
+        (values.matched, values.extra, values.missing) match {
+          case (List((param: source.ValueParam, _)), Nil, _ :: _)
+            if param.id.name.startsWith("__arg") =>
+            help(pretty"Did you mean to use `(x, y) => ...` instead of `case (x, y) => ...`?")
+          case _ => ()
+        }
+
+        // 2a. User wrote `(x, y) => ... ` but function expects a single tuple
+        // 2b. User wrote `foo(x, y)` but the function expects a single tuple
+        // => Multiple extra value args, exactly 1 missing that's a tuple matching the count
+        // HACK: Hardcoded "tuple is a type whose name starts with 'Tuple'"
+        (values.matched, values.extra, values.missing) match {
+          case (List((_, tupleTpe @ ValueTypeApp(TypeConstructor.Record(tupleName, _, _, _), args))), extras, Nil)
+            if tupleName.name.startsWith("Tuple") && args.size == 1 + extras.size =>
+            name match {
+              case None            => help(pretty"Did you mean to use `case (x, y) => ...` to pattern match on the tuple ${tupleTpe}?")
+              case Some(givenName) => help(pretty"Did you mean to call ${givenName} with a single tuple argument instead of separate arguments?")
+            }
+          case _ => ()
+        }
+
+        // 3. User wrote `foo((x, y))` (tuple literal) but function expects multiple arguments
+        // => Single matched arg that's a Call to a Tuple constructor, with some missing params
+        // HACK: Hardcoded "tuple constructor is IdRef to TupleN in effekt namespace"
+        (values.matched, values.extra, values.missing) match {
+          case (List((arg: source.ValueArg, _)), Nil, missing@(_ :: _)) =>
+            (arg.value, name) match {
+              case (source.Call(source.IdTarget(source.IdRef(List("effekt"), tupleName, _)), _, tupleArgs, _, _), Some(givenName))
+                if tupleName.startsWith("Tuple") && tupleArgs.size == 1 + missing.size =>
+                help(pretty"Did you mean to call ${givenName} with ${tupleArgs.size} separate arguments instead of a tuple?")
+              case _ => ()
+            }
+          case _ => ()
+        }
       }
 
-      // 2a. User wrote `(x, y) => ... ` but function expects a single tuple
-      // 2b. User wrote `foo(x, y)` but the function expects a single tuple
-      // => Multiple extra value args, exactly 1 missing that's a tuple matching the count
-      // HACK: Hardcoded "tuple is a type whose name starts with 'Tuple'"
-      (values.matched, values.extra, values.missing) match {
-        case (List((_, tupleTpe @ ValueTypeApp(TypeConstructor.Record(tupleName, _, _, _), args))), extras, Nil)
-          if tupleName.name.startsWith("Tuple") && args.size == 1 + extras.size =>
-          name match {
-            case None            => Context.info(pretty"Did you mean to use `case (x, y) => ...` to pattern match on the tuple ${tupleTpe}?")
-            case Some(givenName) => Context.info(pretty"Did you mean to call ${givenName} with a single tuple argument instead of separate arguments?")
-          }
-        case _ => ()
-      }
-
-      // 3. User wrote `foo((x, y))` (tuple literal) but function expects multiple arguments
-      // => Single matched arg that's a Call to a Tuple constructor, with some missing params
-      // HACK: Hardcoded "tuple constructor is IdRef to TupleN in effekt namespace"
-      (values.matched, values.extra, values.missing) match {
-        case (List((arg: source.ValueArg, _)), Nil, missing@(_ :: _)) =>
-          (arg.value, name) match {
-            case (source.Call(source.IdTarget(source.IdRef(List("effekt"), tupleName, _)), _, tupleArgs, _, _), Some(givenName))
-              if tupleName.startsWith("Tuple") && tupleArgs.size == 1 + missing.size =>
-              Context.info(pretty"Did you mean to call ${givenName} with ${tupleArgs.size} separate arguments instead of a tuple?")
-            case _ => ()
-          }
-        case _ => ()
-      }
-    }
-
-    // Hint: Value vs block argument confusion
-    if (!values.isAligned && !blocks.isAligned && values.delta + blocks.delta == 0) {
-      // If total counts match, but individual do not, it's likely a value vs computation issue
-      if (blocks.delta > 0) {
-        Context.info(pretty"Did you mean to pass ${pluralized(blocks.delta, "block argument")} as a value? e.g. box it using `box { ... }`")
-      } else if (values.delta > 0) {
-        Context.info(pretty"Did you mean to pass ${pluralized(values.delta, "value argument")} as a block (computation)? ")
+      // Hint: Value vs block argument confusion
+      if (!values.isAligned && !blocks.isAligned && values.delta + blocks.delta == 0) {
+        // If total counts match, but individual do not, it's likely a value vs computation issue
+        if (blocks.delta > 0) {
+          help(pretty"Did you mean to pass ${pluralized(blocks.delta, "block argument")} as a value? e.g. box it using `box { ... }`")
+        } else if (values.delta > 0) {
+          help(pretty"Did you mean to pass ${pluralized(values.delta, "value argument")} as a block (computation)? ")
+        }
       }
     }
 
@@ -1448,7 +1450,7 @@ object Typer extends Phase[NameResolved, Typechecked] {
         Option.when(!blocks.isAligned) { blocks.gotCount }
       )
 
-      Context.abort(s"Wrong number of arguments to ${name getOrElse "function"}: expected ${expected}, but got ${got}")
+      Context.abort(pretty"Wrong number of arguments to ${name getOrElse "function"}: expected ${expected}, but got ${got}") { hints }
     }
   }
 

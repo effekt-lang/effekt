@@ -3,7 +3,7 @@ package typer
 
 import effekt.context.Context
 import effekt.symbols._
-import effekt.util.messages.ErrorMessageReifier
+import effekt.util.messages.{help, ErrorMessageReifier}
 
 
 /**
@@ -85,10 +85,11 @@ private[typer] def assertConcreteEffects(effs: Effects)(using C: Context): Unit 
 private[typer] def assertConcreteEffect(eff: InterfaceType, hints: Set[InterfaceType] = Set.empty)(using C: Context): Unit =
   unknowns(eff) match {
     case us if us.nonEmpty =>
-      hints.foreach { hint =>
-        C.info(pretty"Did you mean to use an operation of the concrete interface ${hint}?")
+      C.abort(pretty"Effects need to be fully known, but effect ${eff}'s type parameter(s) ${us.mkString(", ")} could not be inferred.\n\nMaybe try annotating them?") {
+        hints.foreach { hint =>
+          help(pretty"Did you mean to use an operation of the concrete interface ${hint}?")
+        }
       }
-      C.abort(pretty"Effects need to be fully known, but effect ${eff}'s type parameter(s) ${us.mkString(", ")} could not be inferred.\n\nMaybe try annotating them?")
     case _ => ()
   }
 
