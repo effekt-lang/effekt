@@ -1,4 +1,4 @@
-[error] examples/neg/lambdas/inference.effekt:13:8: Expected type
+[error] examples/neg/lambdas/inference.effekt:13:8: Expected type [typer]
   (Int => Bool at {}) => String at {}
 but got type
   (Int => Unit at {}) => String at ?C
@@ -10,7 +10,7 @@ Type mismatch between Bool and Unit.
   when comparing the return type of the function.
   hof2(box { (f: (Int) => Unit at {}) => "" })
        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-[error] examples/neg/lambdas/inference.effekt:13:15: Type Int => Unit at {} does not match the declared type Int => Bool at {}.
+[error] examples/neg/lambdas/inference.effekt:13:15: Type Int => Unit at {} does not match the declared type Int => Bool at {}. [typer]
   when comparing the return type of the function.
   hof2(box { (f: (Int) => Unit at {}) => "" })
               ^^^^^^^^^^^^^^^^^^^^^^

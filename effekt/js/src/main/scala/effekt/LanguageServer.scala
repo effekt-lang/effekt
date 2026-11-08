@@ -41,9 +41,7 @@ object lsp {
 
   // Diagnostics
   // -----------
-  class Diagnostic(val range: Range, val severity: DiagnosticSeverity, val message: String) extends js.Object {
-    val source = "effekt"
-  }
+  class Diagnostic(val range: Range, val severity: DiagnosticSeverity, val message: String, val source: String) extends js.Object
 
   type DiagnosticSeverity = Int
   object DiagnosticSeverity {
@@ -139,7 +137,7 @@ class LanguageServer extends Intelligence {
     val from = m.range.map { r => toLSPPosition(r.from) }.orNull
     val to = m.range.map { r => toLSPPosition(r.to) }.orNull
     val text = context.messaging.contentWithSubdiagnostics(m)
-    new lsp.Diagnostic(new lsp.Range(from, to), convertSeverity(m.severity), text)
+    new lsp.Diagnostic(new lsp.Range(from, to), convertSeverity(m.severity), text, context.messaging.lspSource(m))
   }
 
   private def toLSPPosition(p: Position): lsp.Position =

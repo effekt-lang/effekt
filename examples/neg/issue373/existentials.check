@@ -1,4 +1,4 @@
-[error] examples/neg/issue373/existentials.effekt:7:46: Cannot typecheck call.
+[error] examples/neg/issue373/existentials.effekt:7:46: Cannot typecheck call. [typer]
 There are multiple overloads, which all fail to check:
 
 Possible overload: effekt::infixPlusPlus of type (String, String) => String

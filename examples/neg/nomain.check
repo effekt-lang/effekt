@@ -1,3 +1,3 @@
-[error] examples/neg/nomain.effekt:1:1: No main function defined
+[error] examples/neg/nomain.effekt:1:1: No main function defined [deadcode-elimination]
 module nomain
 ^^^^^^^^^^^^^

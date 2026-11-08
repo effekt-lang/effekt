@@ -1,4 +1,4 @@
-[error] examples/neg/typer/expected_block_got_value_overload_wrong_arity.effekt:5:11: Cannot typecheck call.
+[error] examples/neg/typer/expected_block_got_value_overload_wrong_arity.effekt:5:11: Cannot typecheck call. [typer]
 There are multiple overloads, which all fail to check:
 
 Possible overload: expected_block_got_value_overload_wrong_arity::twice of type {Int => Int} => Int

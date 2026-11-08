@@ -1,4 +1,4 @@
-[error] examples/neg/name-based-implicits/no-implicit.effekt:8:3: Cannot typecheck call.
+[error] examples/neg/name-based-implicits/no-implicit.effekt:8:3: Cannot typecheck call. [typer]
 There are multiple overloads, which all fail to check:
 
 Possible overload: no-implicit::foo of type String => Unit

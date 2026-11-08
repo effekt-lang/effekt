@@ -1,4 +1,4 @@
-[error] examples/neg/name-based-implicits/type-tag-complex.effekt:15:95: Ambiguous overload.
+[error] examples/neg/name-based-implicits/type-tag-complex.effekt:15:95: Ambiguous overload. [typer]
 There are multiple overloads, which all would type check:
 - typeTag: () => TypeTag[F]
 - typeTag: () => TypeTag[S]

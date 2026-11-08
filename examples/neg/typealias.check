@@ -1,4 +1,4 @@
-[error] examples/neg/typealias.effekt:33:32: Cannot typecheck call.
+[error] examples/neg/typealias.effekt:33:32: Cannot typecheck call. [typer]
 There are multiple overloads, which all fail to check:
 
 Possible overload: effekt::infixPlus of type (Int, Int) => Int
