@@ -170,11 +170,31 @@ def openForWriting(path: String): File / Exception[IOError] =
 def openForAppending(path: String): File / Exception[IOError] =
   internal::checkResult(internal::openForAppending(path))
 
-def read(file: File, buffer: ByteArray, offset: Int, size: Int, position: Int): Int / Exception[IOError] =
-  internal::checkResult(internal::read(file, buffer, offset, size, position))
+/// Reads up to `size` bytes from `file` at `position` (-1 for the current position) into `buffer`, starting at `offset`.
+/// Returns the number of bytes read, and 0 at end of file.
+/// Panics unless:
+/// - `size` is positive (a read of nothing would look like end of file), and
+/// - `[offset, offset + size)` is a valid range inside `buffer` (like `bytearray::copy`).
+def read(file: File, buffer: ByteArray, offset: Int, size: Int, position: Int): Int / Exception[IOError] = {
+  if (size <= 0) { panic("io/filesystem::read: size must be positive") }
 
-def write(file: File, buffer: ByteArray, offset: Int, size: Int, position: Int): Int / Exception[IOError] =
-  internal::checkResult(internal::write(file, buffer, offset, size, position))
+  if (buffer.inBounds(offset, size)) {
+    internal::checkResult(internal::read(file, buffer, offset, size, position))
+  } else {
+    panic("io/filesystem::read: window out of bounds")
+  }
+}
+
+/// Writes up to `size` bytes from `buffer`, starting at `offset`, to `file` at `position` (-1 for the current position).
+/// Returns the number of bytes written, which may be fewer than `size`.
+/// Panics unless `[offset, offset + size)` is a valid range inside `buffer` (like `bytearray::copy`).
+def write(file: File, buffer: ByteArray, offset: Int, size: Int, position: Int): Int / Exception[IOError] = {
+  if (buffer.inBounds(offset, size)) {
+    internal::checkResult(internal::write(file, buffer, offset, size, position))
+  } else {
+    panic("io/filesystem::write: window out of bounds")
+  }
+}
 
 def close(file: File): Unit / Exception[IOError] = {
   internal::checkResult(internal::close(file)); ()

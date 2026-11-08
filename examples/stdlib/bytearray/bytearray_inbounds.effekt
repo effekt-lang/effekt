@@ -1,0 +1,14 @@
+import bytearray
+
+def main() = {
+  val arr = bytearray::allocate(8)
+  def check(offset: Int, length: Int) =
+    println("[" ++ offset.show ++ ", " ++ (offset + length).show ++ "): " ++ arr.inBounds(offset, length).show)
+
+  check(0, 8)   // the whole array
+  check(8, 0)   // empty and at the end
+  check(6, 2)   // the last two bytes
+  check(6, 3)   // one past the end
+  check(-1, 2)  // starts before the array
+  check(2, -1)  // negative length
+}
