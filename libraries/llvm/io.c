@@ -578,20 +578,28 @@ void c_yield(Stack stack) {
 
 // Subprocesses
 // ------------
+//
+// Spawn options are plain Effekt data (see the `process` module):
+// `c_spawn` receives, per each standard stream, whether to pipe it (1) or inherit it (0), and the callback to run for it,
+// and uses that to build libuv's options only for the duration of `uv_spawn`.
+// The pipes belong to the process in question and are closed when it closes.
 
-struct Pos c_spawn_options_default() {
-    uv_process_options_t* options = (uv_process_options_t*)malloc(sizeof(uv_process_options_t));
-    memset(options, 0, sizeof(uv_process_options_t));
-    uv_stdio_container_t* stdio = (uv_stdio_container_t*)malloc(3*sizeof(uv_stdio_container_t));
-    stdio[0].flags = UV_INHERIT_FD;
-    stdio[0].data.fd = 0;
-    stdio[1].flags = UV_INHERIT_FD;
-    stdio[1].data.fd = 1;
-    stdio[2].flags = UV_INHERIT_FD;
-    stdio[2].data.fd = 2;
-    options->stdio = stdio;
-    options->stdio_count = 3;
-    return (struct Pos) { .tag = 0, .obj = options, };
+// The standard input of a spawned process, as an Effekt object holding its pipe.
+// The pipe belongs to the process, so the eraser only frees the object.
+typedef struct {
+    uv_stream_t* stream;
+} writable_stream_t;
+
+void c_writable_stream_erase(void* object) { free(object); }
+
+struct Pos c_writable_stream_new(uv_stream_t* stream) {
+    writable_stream_t* writable = (writable_stream_t*)effekt_alloc(c_writable_stream_erase, sizeof(writable_stream_t));
+    writable->stream = stream;
+    return (struct Pos) { .tag = 0, .obj = (char*)writable - sizeof(struct Header) };
+}
+
+uv_stream_t* c_writable_stream(struct Pos writable) {
+    return ((writable_stream_t*)((char*)writable.obj + sizeof(struct Header)))->stream;
 }
 
 static void subproc_alloc_cb(uv_handle_t* handle, size_t suggested_size, uv_buf_t* buf) {
@@ -603,73 +611,50 @@ static void subproc_alloc_cb(uv_handle_t* handle, size_t suggested_size, uv_buf_
 typedef struct {
   struct Neg handler;
 } subproc_stream_cb_closure_t;
+
+// Calling a handler consumes a reference to it,
+// so it is shared before each chunk and released once the stream ends (as in `c_tcp_listen_cb`).
 void subproc_stream_cb(uv_stream_t *stream, ssize_t nread, const uv_buf_t *buf) {
   subproc_stream_cb_closure_t* clos = (subproc_stream_cb_closure_t*)(stream->data);
-  if(nread >= 0) {
+  if (nread > 0) {
     struct Pos chunk = c_bytearray_construct(nread, (uint8_t*)(buf->base));
     if (buf->base) free(buf->base);
+    shareNegative(clos->handler);
     run_Pos(clos->handler, chunk);
-  } else {
+  } else if (nread < 0) {
     uv_read_stop(stream);
     eraseNegative(clos->handler);
     free(clos);
+    stream->data = NULL;
     if (buf->base) free(buf->base);
+  } else {
+    if (buf->base) free(buf->base);  // 0: nothing read this time
   }
 }
-struct Pos subproc_options_on_stream(struct Pos opts, size_t id, uv_stdio_flags flags, struct Neg callback) {
-    uv_process_options_t* options = (uv_process_options_t*)opts.obj;
-
-    options->stdio[id].flags = UV_CREATE_PIPE | flags;
-    uv_pipe_t* pipe = (uv_pipe_t*)malloc(sizeof(uv_pipe_t));
-
-    uv_pipe_init(uv_default_loop(), pipe, 1);
-    options->stdio[id].data.stream = (uv_stream_t*)pipe;
-
-    subproc_stream_cb_closure_t* clos = (subproc_stream_cb_closure_t*)malloc(sizeof(subproc_stream_cb_closure_t));
-    clos->handler = callback;
-    pipe->data = clos;
-
-    return opts;
-}
-struct Pos c_spawn_options_on_stdout(struct Pos opts, struct Neg callback) {
-  return subproc_options_on_stream(opts, 1, UV_WRITABLE_PIPE, callback);
-}
-struct Pos c_spawn_options_on_stderr(struct Pos opts, struct Neg callback) {
-  return subproc_options_on_stream(opts, 2, UV_WRITABLE_PIPE, callback);
-}
-struct Pos c_spawn_options_pipe_stdin(struct Pos opts, struct Neg callback) {
-  return subproc_options_on_stream(opts, 0, UV_READABLE_PIPE, callback);
-}
-
 
 typedef struct {
   char** args;
   Stack k;
-  uv_process_options_t* opts;
+  uv_pipe_t* pipes[3];  // NULL iff the stream is inherited
 } subproc_proc_data_t;
+
 void c_close_stream_callback_exit(uv_handle_t* req) {
     free(req);
 }
+
 void subproc_on_close(uv_handle_t* handle) {
     subproc_proc_data_t* pd = (subproc_proc_data_t*)((uv_process_t*)handle)->data;
-    uv_process_options_t* opts = (uv_process_options_t*)(pd->opts);
-    if(opts->stdio[0].flags & UV_CREATE_PIPE){
-        uv_close((uv_handle_t*)(opts->stdio[0].data.stream), c_close_stream_callback_exit);
+    for (int i = 0; i < 3; i++) {
+        if (pd->pipes[i] != NULL) {
+            uv_close((uv_handle_t*)pd->pipes[i], c_close_stream_callback_exit);
+        }
     }
-    if(opts->stdio[1].flags & UV_CREATE_PIPE){
-        uv_close((uv_handle_t*)(opts->stdio[1].data.stream), c_close_stream_callback_exit);
-    }
-    if(opts->stdio[2].flags & UV_CREATE_PIPE){
-        uv_close((uv_handle_t*)(opts->stdio[2].data.stream), c_close_stream_callback_exit);
-    }
-    // TODO shutdown pipes for stdio
-    free(opts->stdio);
-    free(opts);
     free(pd);
     free(handle);
 }
+
 void subproc_on_exit(uv_process_t* proc, int64_t exit_status, int term_signal) {
-    (void)term_signal; (void)exit_status;
+    (void)term_signal;
     subproc_proc_data_t* pd = (subproc_proc_data_t*)proc->data;
     if (pd->args) {
         for(int i = 0; pd->args[i] != NULL; i++) {
@@ -688,8 +673,10 @@ void c_close_stream_callback(uv_shutdown_t* req, int status) {
     }
     free(req);
 }
-void c_close_stream(struct Pos stream) {
-    uv_stream_t* str = (uv_stream_t*)stream.obj;
+
+void c_close_stream(struct Pos writable) {
+    uv_stream_t* str = c_writable_stream(writable);
+    erasePositive(writable);
     uv_shutdown_t* req = (uv_shutdown_t*)malloc(sizeof(uv_shutdown_t));
     uv_shutdown(req, str, c_close_stream_callback);
 }
@@ -698,6 +685,7 @@ typedef struct {
     struct Pos buffer;
     uv_buf_t buf;
 } subproc_write_req_data_t;
+
 void c_write_stream_callback(uv_write_t* req, int status) {
     if(status != 0){
         // TODO error handling
@@ -707,8 +695,10 @@ void c_write_stream_callback(uv_write_t* req, int status) {
     free(data);
     free(req);
 }
-void c_write_stream(struct Pos stream, struct Pos buffer) {
-    uv_stream_t* str = (uv_stream_t*)stream.obj;
+
+void c_write_stream(struct Pos writable, struct Pos buffer) {
+    uv_stream_t* str = c_writable_stream(writable);
+    erasePositive(writable);
     uv_write_t* req = (uv_write_t*)malloc(sizeof(uv_write_t));
     memset(req, 0, sizeof(uv_write_t));
     subproc_write_req_data_t* data = (subproc_write_req_data_t*)malloc(sizeof(subproc_write_req_data_t));
@@ -719,14 +709,38 @@ void c_write_stream(struct Pos stream, struct Pos buffer) {
     uv_write(req, str, &(data->buf), 1, c_write_stream_callback);
 }
 
-void c_spawn(struct Pos cmd, struct Pos args, struct Pos options, Stack stack) {
-    uv_process_options_t* opts = (uv_process_options_t*)options.obj;
-    uv_process_t* proc = (uv_process_t*)malloc(sizeof(uv_process_t));
+// Connects standard stream `id` to a new pipe running `handler` if `pipe` is 1, or inherits it.
+static uv_pipe_t* subproc_stdio(uv_stdio_container_t* stdio, int id, Int pipe, int flags, struct Neg handler) {
+    if (!pipe) {
+        eraseNegative(handler);
+        stdio[id].flags = UV_INHERIT_FD;
+        stdio[id].data.fd = id;
+        return NULL;
+    }
+
+    uv_pipe_t* p = (uv_pipe_t*)malloc(sizeof(uv_pipe_t));
+    uv_pipe_init(uv_default_loop(), p, 1);
+    subproc_stream_cb_closure_t* clos = (subproc_stream_cb_closure_t*)malloc(sizeof(subproc_stream_cb_closure_t));
+    clos->handler = handler;
+    p->data = clos;
+    stdio[id].flags = UV_CREATE_PIPE | flags;
+    stdio[id].data.stream = (uv_stream_t*)p;
+    return p;
+}
+
+// Note: The struct arguments come first (on x64, they may get split by LLVM)
+void c_spawn(struct Pos cmd, struct Pos args, struct Neg on_stdin, struct Neg on_stdout, struct Neg on_stderr,
+             Int pipeStdin, Int pipeStdout, Int pipeStderr, Stack stack) {
+    subproc_proc_data_t* pd = (subproc_proc_data_t*)malloc(sizeof(subproc_proc_data_t));
+
+    uv_stdio_container_t stdio[3];
+    pd->pipes[0] = subproc_stdio(stdio, 0, pipeStdin, UV_READABLE_PIPE, on_stdin);
+    pd->pipes[1] = subproc_stdio(stdio, 1, pipeStdout, UV_WRITABLE_PIPE, on_stdout);
+    pd->pipes[2] = subproc_stdio(stdio, 2, pipeStderr, UV_WRITABLE_PIPE, on_stderr);
 
     // command
     char* cmd_s = c_bytearray_into_nullterminated_string(cmd);
     erasePositive(cmd);
-    opts->file = cmd_s;
 
     // args
     int _argc = (int)((uint64_t*)args.obj)[2];
@@ -738,32 +752,37 @@ void c_spawn(struct Pos cmd, struct Pos args, struct Pos options, Stack stack) {
     }
     erasePositive(args);
     _args[_argc + 1] = NULL;
-    opts->args = _args;
-    // callback to free _args
-    opts->exit_cb = subproc_on_exit;
-    subproc_proc_data_t* pd = (subproc_proc_data_t*)malloc(sizeof(subproc_proc_data_t));
+
+    // libuv only reads the options during `uv_spawn`.
+    uv_process_options_t opts;
+    memset(&opts, 0, sizeof(uv_process_options_t));
+    opts.file = cmd_s;
+    opts.args = _args;
+    opts.exit_cb = subproc_on_exit;
+    opts.stdio = stdio;
+    opts.stdio_count = 3;
+
     pd->args = _args;
     pd->k = stack;
+    uv_process_t* proc = (uv_process_t*)malloc(sizeof(uv_process_t));
     proc->data = pd;
 
     // spawn process
-    int err = uv_spawn(uv_default_loop(), proc, opts);
+    int err = uv_spawn(uv_default_loop(), proc, &opts);
 
-    if(opts->stdio[0].flags & UV_CREATE_PIPE) {
-        uv_stream_t* stream = (uv_stream_t*)(opts->stdio[0].data.stream);
+    if (pd->pipes[0] != NULL) {
+        uv_stream_t* stream = (uv_stream_t*)pd->pipes[0];
         subproc_stream_cb_closure_t* clos = (subproc_stream_cb_closure_t*)(stream->data);
-        struct Pos str = (struct Pos) { .tag = 0, .obj = stream, };
-        run_Pos(clos->handler, str);
-        eraseNegative(clos->handler);
+        stream->data = NULL;
+        struct Neg handler = clos->handler;
         free(clos);
+        run_Pos(handler, c_writable_stream_new(stream));  // consumes the handler's reference
     }
-    if(opts->stdio[1].flags & UV_CREATE_PIPE)
-      uv_read_start((uv_stream_t*)(opts->stdio[1].data.stream), subproc_alloc_cb, subproc_stream_cb);
-    if(opts->stdio[2].flags & UV_CREATE_PIPE)
-      uv_read_start((uv_stream_t*)(opts->stdio[2].data.stream), subproc_alloc_cb, subproc_stream_cb);
-    pd->opts = opts;
+    if (pd->pipes[1] != NULL)
+      uv_read_start((uv_stream_t*)pd->pipes[1], subproc_alloc_cb, subproc_stream_cb);
+    if (pd->pipes[2] != NULL)
+      uv_read_start((uv_stream_t*)pd->pipes[2], subproc_alloc_cb, subproc_stream_cb);
 
-    erasePositive(options);
     if(err) {
         printf("%s\n", uv_strerror(err));
         free(_args);
