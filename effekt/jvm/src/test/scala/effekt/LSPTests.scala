@@ -3,7 +3,7 @@ package effekt
 import com.google.gson.{Gson, GsonBuilder, JsonElement, JsonParser}
 import effekt.Intelligence.{BindingInfo, BindingKind, BindingOrigin, Code, LSPLocation, HoleItemKind, LSPPosition, LSPRange, NaturalLanguage, ScopeInfo, ScopeKind, TermBinding, TypeBinding}
 import munit.FunSuite
-import org.eclipse.lsp4j.{CodeAction, CodeActionKind, CodeActionParams, Command, DefinitionParams, Diagnostic, DiagnosticSeverity, DidChangeConfigurationParams, DidChangeTextDocumentParams, DidCloseTextDocumentParams, DidOpenTextDocumentParams, DidSaveTextDocumentParams, DocumentSymbol, DocumentSymbolParams, Hover, HoverParams, InitializeParams, InitializeResult, InlayHint, InlayHintKind, InlayHintParams, MarkupContent, MessageActionItem, MessageParams, Position, PublishDiagnosticsParams, Range, ReferenceContext, ReferenceParams, SaveOptions, ServerCapabilities, SetTraceParams, ShowMessageRequestParams, SymbolInformation, SymbolKind, TextDocumentContentChangeEvent, TextDocumentItem, TextDocumentSyncKind, TextDocumentSyncOptions, TextEdit, VersionedTextDocumentIdentifier, WorkspaceEdit}
+import org.eclipse.lsp4j.{ClientCapabilities, CodeAction, CodeActionKind, CodeActionParams, Command, DefinitionParams, Diagnostic, DiagnosticRelatedInformation, DiagnosticSeverity, DidChangeConfigurationParams, DidChangeTextDocumentParams, DidCloseTextDocumentParams, DidOpenTextDocumentParams, DidSaveTextDocumentParams, DocumentSymbol, DocumentSymbolParams, Hover, HoverParams, InitializeParams, InitializeResult, InlayHint, InlayHintKind, InlayHintParams, Location, MarkupContent, MessageActionItem, MessageParams, Position, PublishDiagnosticsCapabilities, PublishDiagnosticsParams, Range, ReferenceContext, ReferenceParams, SaveOptions, ServerCapabilities, SetTraceParams, ShowMessageRequestParams, SymbolInformation, SymbolKind, TextDocumentClientCapabilities, TextDocumentContentChangeEvent, TextDocumentItem, TextDocumentSyncKind, TextDocumentSyncOptions, TextEdit, VersionedTextDocumentIdentifier, WorkspaceEdit}
 import org.eclipse.lsp4j.jsonrpc.messages
 import org.eclipse.lsp4j.jsonrpc.services.ServiceEndpoints
 
@@ -293,6 +293,85 @@ class LSPTests extends FunSuite {
 
       val diagnostics = client.receivedDiagnostics()
       assertEquals(diagnostics, expected)
+    }
+  }
+
+  def initializeWithRelatedInformation(server: Server): Unit = {
+    val publishDiagnostics = new PublishDiagnosticsCapabilities()
+    publishDiagnostics.setRelatedInformation(true)
+    val textDocument = new TextDocumentClientCapabilities()
+    textDocument.setPublishDiagnostics(publishDiagnostics)
+    val capabilities = new ClientCapabilities()
+    capabilities.setTextDocument(textDocument)
+    val initializeParams = new InitializeParams()
+    initializeParams.setCapabilities(capabilities)
+    server.initialize(initializeParams).get()
+  }
+
+  test("a diagnostic's helps are its related information in LSP, if the client shows it") {
+    withClientAndServer { (client, server) =>
+      initializeWithRelatedInformation(server)
+
+      val (textDoc, range) = raw"""
+                       |def bar(f: (Int, Int) => Bool) = ()
+                       |           ↑                ↑
+                       |""".textDocumentAndRange
+
+      val didOpenParams = new DidOpenTextDocumentParams()
+      didOpenParams.setTextDocument(textDoc)
+      server.didOpen(didOpenParams)
+
+      val diagnostic = new Diagnostic()
+      diagnostic.setRange(range)
+      diagnostic.setSeverity(DiagnosticSeverity.Error)
+      diagnostic.setSource("effekt [namer]")
+      diagnostic.setMessage("Expected value type, but got a second-class function type (Int, Int) => Bool.")
+      diagnostic.setRelatedInformation(util.List.of(
+        new DiagnosticRelatedInformation(new Location("file://test.effekt", range),
+          "help: Did you mean to use braces in order to receive a block type `(Int, Int) => Bool`?"),
+        new DiagnosticRelatedInformation(new Location("file://test.effekt", range),
+          "help: Did you mean to use a first-class, boxed function type `(Int, Int) => Bool at {}`?")))
+
+      val diagnosticsWithError = new util.ArrayList[Diagnostic]()
+      diagnosticsWithError.add(diagnostic)
+
+      val expected = List(
+        new PublishDiagnosticsParams("file://test.effekt", new util.ArrayList[Diagnostic]()),
+        new PublishDiagnosticsParams("file://test.effekt", diagnosticsWithError)
+      )
+
+      assertEquals(client.receivedDiagnostics(), expected)
+    }
+  }
+
+  test("a diagnostic without subdiagnostics has no related information in LSP") {
+    withClientAndServer { (client, server) =>
+      initializeWithRelatedInformation(server)
+
+      val (textDoc, range) = raw"""
+                       |val x: Int = "String"
+                       |             ↑      ↑
+                       |""".textDocumentAndRange
+
+      val didOpenParams = new DidOpenTextDocumentParams()
+      didOpenParams.setTextDocument(textDoc)
+      server.didOpen(didOpenParams)
+
+      val diagnostic = new Diagnostic()
+      diagnostic.setRange(range)
+      diagnostic.setSeverity(DiagnosticSeverity.Error)
+      diagnostic.setSource("effekt [typer]")
+      diagnostic.setMessage("Expected Int but got String.")
+
+      val diagnosticsWithError = new util.ArrayList[Diagnostic]()
+      diagnosticsWithError.add(diagnostic)
+
+      val expected = List(
+        new PublishDiagnosticsParams("file://test.effekt", new util.ArrayList[Diagnostic]()),
+        new PublishDiagnosticsParams("file://test.effekt", diagnosticsWithError)
+      )
+
+      assertEquals(client.receivedDiagnostics(), expected)
     }
   }
 
