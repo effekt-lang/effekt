@@ -10,12 +10,27 @@ import io/error
 type Connection = Int
 
 /// Reads data from a TCP connection into a buffer at the given offset.
-def read(handle: Connection, buffer: ByteArray, offset: Int, size: Int): Int / Exception[IOError] =
-  internal::checkResult(internal::read(handle, buffer, offset, size))
+/// Panics unless:
+/// - `size` is positive (a read of nothing would look like end of file), and
+/// - `[offset, offset + size)` is a valid range inside `buffer` (like `bytearray::copy`).
+def read(handle: Connection, buffer: ByteArray, offset: Int, size: Int): Int / Exception[IOError] = {
+  if (size <= 0) { panic("io/network::read: size must be positive") }
+  if (buffer.inBounds(offset, size)) {
+    internal::checkResult(internal::read(handle, buffer, offset, size))
+  } else {
+    panic("io/network::read: window out of bounds")
+  }
+}
 
 /// Writes data from a buffer at the given offset to a TCP connection.
-def write(handle: Connection, buffer: ByteArray, offset: Int, size: Int): Int / Exception[IOError] =
-  internal::checkResult(internal::write(handle, buffer, offset, size))
+/// Panics unless `[offset, offset + size)` is a valid range inside `buffer` (like `bytearray::copy`).
+def write(handle: Connection, buffer: ByteArray, offset: Int, size: Int): Int / Exception[IOError] = {
+  if (buffer.inBounds(offset, size)) {
+    internal::checkResult(internal::write(handle, buffer, offset, size))
+  } else {
+    panic("io/network::write: window out of bounds")
+  }
+}
 
 /// Establishes a TCP connection to the specified host and port.
 def connect(host: String, port: Int): Connection / Exception[IOError] =

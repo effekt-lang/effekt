@@ -1,0 +1,6 @@
+[0, 8): true
+[8, 8): true
+[6, 8): true
+[6, 9): false
+[-1, 1): false
+[2, 1): false

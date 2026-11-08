@@ -120,12 +120,17 @@ def build(size: Int) { index: Int => Byte }: ByteArray = {
 ///
 /// O(N)
 def copy(from: ByteArray, start: Int, to: ByteArray, offset: Int, length: Int): Unit =
-  if (length < 0 || start < 0 || offset < 0
-      || start + length > from.size || offset + length > to.size) {
-    <{ "bytearray::copy: range out of bounds" }>
-  } else {
+  if (from.inBounds(start, length) && to.inBounds(offset, length)) {
     unsafeCopy(from, start, to, offset, length)
+  } else {
+    <{ "bytearray::copy: range out of bounds" }>
   }
+
+/// Whether `[offset, offset + length)` is a valid range of indices inside `arr`.
+///
+/// O(1)
+def inBounds(arr: ByteArray, offset: Int, length: Int): Bool =
+  offset >= 0 && length >= 0 && offset + length <= arr.size
 
 /// `copy` without its bounds check.
 /// Corrupts memory if misused; prefer `copy`.
