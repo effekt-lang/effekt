@@ -21,15 +21,16 @@ import scala.collection.mutable
  *
  * [[names]] gives every block argument a name, [[instances]] finds, starting from every definition, the shapes of the
  * blocks passed to known definitions, [[specialize]] makes a copy for each of them, [[aliases]] removes the names
- * given to block arguments again, [[merge]] merges the parameters of a copy that are always passed the same, and
- * [[optimizer.cleanup]] removes what is left unused and inlines what is called once.
+ * given to block arguments again, [[merge]] merges the parameters of a copy that are always passed the same,
+ * [[place]] moves copies as far in as their calls allow, and [[optimizer.cleanup]] removes what is left unused and
+ * inlines what is called once.
  * Toplevel and local definitions are treated alike; the definitions themselves stay for every other use.
  */
 def specialization(m: ModuleDecl): ModuleDecl = {
   val named = names(m)
   val known = sites(named)
   val (specialized, copies) = specialize(named, known, instances(named, known))
-  optimizer.cleanup(merge(aliases(specialized), copies))
+  optimizer.cleanup(place(merge(aliases(specialized), copies), copies))
 }
 
 object Specialize extends Phase[CoreTransformed, CoreTransformed] {
@@ -520,4 +521,150 @@ def merge(m: ModuleDecl, copies: Set[Id]): ModuleDecl = {
     case Toplevel.Def(f, block) => Toplevel.Def(f, merging.rewrite(block))
     case Toplevel.Val(f, binding) => Toplevel.Val(f, merging.rewrite(binding))
   })
+}
+
+
+// Place
+// -----
+
+/**
+ * Moves each copy called from only one other definition into it, around the innermost statement containing all its
+ * calls there, and drops the parameters that all these calls pass the same variable visible there:
+ *
+ *   def f_g(x){p} = … f_g(x){p} …;  def main() = reset { p => … f_g(1){p} … }
+ *     ~>   def main() = reset { p => def f_g(x) = … f_g(x) …; … f_g(1) … }
+ *
+ * A copy whose calls are then all inside another copy moves along with it, so we repeat until nothing moves.
+ */
+def place(m: ModuleDecl, copies: Set[Id]): ModuleDecl = {
+
+  def calls(c: Id, tree: Stmt | Block): List[(List[Expr], List[Block])] = {
+    val found = mutable.ListBuffer.empty[(List[Expr], List[Block])]
+    object collecting extends Tree.Query[Unit, Unit] {
+      def empty = ()
+      def combine = (_, _) => ()
+      override def stmt(using Unit) = {
+        case Stmt.App(Block.BlockVar(f, _, _), targs, vargs, bargs) =>
+          if (f == c) found += ((vargs, bargs))
+          all(vargs, query)
+          all(bargs, query)
+      }
+    }
+    tree match {
+      case s: Stmt => collecting.query(s)(using ())
+      case b: Block => collecting.query(b)(using ())
+    }
+    found.toList
+  }
+
+  /** The positions of [[block]]'s parameters that every call in [[outside]] passes the same variable, free in [[outside]], and that the calls in [[block]] pass on unchanged. */
+  def dropped(block: BlockLit, outside: Stmt, external: List[(List[Expr], List[Block])], internal: List[(List[Expr], List[Block])]): (Map[Int, Expr.ValueVar], Map[Int, Block.BlockVar]) = {
+    val free = outside.free
+    val values = block.vparams.indices.flatMap { i =>
+      external.map(_._1(i)).distinct match {
+        case List(v @ Expr.ValueVar(x, _)) if free.values.toMap.contains(x) &&
+            internal.forall { case (vargs, _) => vargs(i) match { case Expr.ValueVar(y, _) => y == block.vparams(i).id || y == x; case _ => false } } =>
+          Some(i -> v)
+        case _ => None
+      }
+    }.toMap
+    val blocks = block.bparams.indices.flatMap { i =>
+      external.map(_._2(i)).collect { case b: Block.BlockVar => b.id }.distinct match {
+        case List(x) if external.forall(_._2(i).isInstanceOf[Block.BlockVar]) && free.blocks.toMap.contains(x) &&
+            internal.forall { case (_, bargs) => bargs(i) match { case Block.BlockVar(y, _, _) => y == block.bparams(i).id || y == x; case _ => false } } =>
+          Some(i -> external.head._2(i).asInstanceOf[Block.BlockVar])
+        case _ => None
+      }
+    }.toMap
+    (values, blocks)
+  }
+
+  def sink(m: ModuleDecl, c: Id, d: Id): ModuleDecl = {
+    val block = m.definitions.collectFirst { case Toplevel.Def(`c`, b: BlockLit) => b }.get
+    val total = calls(c, m.definitions.collectFirst { case Toplevel.Def(`d`, b) => b }.get).size
+
+    val counts = new java.util.IdentityHashMap[Stmt, Integer]
+    object counting extends Tree.Query[Unit, Int] {
+      def empty = 0
+      def combine = _ + _
+      override def visit[T](t: T)(visitor: Unit ?=> T => Int)(using Unit): Int = {
+        val result = visitor(t)
+        t match {
+          case s: Stmt => counts.put(s, result)
+          case _ => ()
+        }
+        result
+      }
+      override def stmt(using Unit) = {
+        case Stmt.App(Block.BlockVar(`c`, _, _), targs, vargs, bargs) => 1 + all(vargs, query) + all(bargs, query)
+      }
+    }
+    var outside: Option[Stmt] = None
+    object finding extends Tree.Query[Unit, Unit] {
+      def empty = ()
+      def combine = (_, _) => ()
+      override def visit[T](t: T)(visitor: Unit ?=> T => Unit)(using Unit): Unit = t match {
+        case s: Stmt if counts.getOrDefault(s, 0) == total =>
+          outside = Some(s)
+          visitor(t)
+        case s: Stmt if counts.getOrDefault(s, 0) == 0 => ()
+        case _ => visitor(t)
+      }
+    }
+    m.definitions.collectFirst { case Toplevel.Def(`d`, b) =>
+      counting.query(b)(using ())
+      finding.query(b)(using ())
+    }
+    val around = outside.get
+
+    val (values, blocks) = dropped(block, around, calls(c, around), calls(c, block))
+    val substitution = Substitution(DB.empty,
+      DB.from(blocks.toList.flatMap { case (i, b) => block.bparams(i).capt.map { cap => cap -> b.capt } }),
+      DB.from(values.toList.map { case (i, v) => block.vparams(i).id -> v }),
+      DB.from(blocks.toList.map { case (i, b) => block.bparams(i).id -> b }))
+    def keep[A](as: List[A], drop: Int => Boolean): List[A] = as.zipWithIndex.collect { case (a, i) if !drop(i) => a }
+    val placed = BlockLit(block.tparams, keep(block.cparams, blocks.contains), keep(block.vparams, values.contains),
+      keep(block.bparams, blocks.contains), substitute(block.body)(using substitution))
+    val tpe = placed.tpe
+
+    object dropping extends Tree.Rewrite {
+      override def rewrite(s: Stmt): Stmt = s match {
+        case Stmt.App(Block.BlockVar(`c`, _, capt), targs, vargs, bargs) =>
+          Stmt.App(Block.BlockVar(c, tpe, capt), targs, keep(vargs.map(rewrite), values.contains), keep(bargs.map(rewrite), blocks.contains))
+        case other => super.rewrite(other)
+      }
+    }
+    val nothingDropped = values.isEmpty && blocks.isEmpty
+    val inner = if (nothingDropped) placed else dropping.rewrite(placed)
+    object wrapping extends Tree.Rewrite {
+      override def rewrite(s: Stmt): Stmt =
+        if (s eq around) Stmt.Def(c, inner, if (nothingDropped) s else dropping.rewrite(s))
+        else if (counts.getOrDefault(s, 0) == 0) s
+        else super.rewrite(s)
+    }
+    m.copy(definitions = m.definitions.collect {
+      case Toplevel.Def(`d`, b) => Toplevel.Def(d, wrapping.rewrite(b))
+      case other if other.id != c => other
+    })
+  }
+
+  var current = m
+  val mentions = mutable.Map.empty[Id, Set[Id]]
+  def mention(d: Id, block: Block): Unit =
+    block.free.blocks.toMap.keys.filter(copies.contains).foreach { c => mentions(c) = mentions.getOrElse(c, Set.empty) + d }
+  current.definitions.foreach { case Toplevel.Def(d, block) => mention(d, block); case _ => () }
+
+  var remaining = copies.filter { c => current.definitions.exists(_.id == c) }
+  var moving = true
+  while (moving) {
+    remaining.find { c => (mentions.getOrElse(c, Set.empty) - c).size == 1 } match {
+      case Some(c) =>
+        val d = (mentions(c) - c).head
+        current = sink(current, c, d)
+        remaining = remaining - c
+        mentions.keys.foreach { x => if (mentions(x).contains(c)) mentions(x) = mentions(x) - c + d }
+      case None => moving = false
+    }
+  }
+  current
 }

@@ -23,10 +23,8 @@ def apply(x: Int){f @ f: (Int) => Int} = {
 }
 def main() = {
   var c @ r = 0;
-  apply_f: (Int){c: Ref[Int]} => Int @ {r}(1){c: Ref[Int] @ {r}}
-}
-def apply_f(x: Int){c @ c: Ref[Int]} = {
+  let x = 1
   let y = x: Int
-  put c @ c = y: Int;
+  put c @ r = y: Int;
   return y: Int
 }

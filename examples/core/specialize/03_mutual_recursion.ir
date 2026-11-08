@@ -1,4 +1,5 @@
 // The shapes propagate into the copies: ping asks for pong with the same block, which asks for ping again.
+// Both copies move into `main`, pong's into ping's, where it is called once and inlined.
 
 def ping(b: Bool){f: (Int) => Int} = {
   if (b: Bool) {
@@ -36,16 +37,13 @@ def pong(b: Bool){f @ f: (Int) => Int} = {
   ping: (Bool){f: (Int) => Int} => Int @ {}(b: Bool){f: (Int) => Int @ {f}}
 }
 def main(b: Bool, n: Int) = {
-  ping_f: (Bool, Int) => Int @ {}(b: Bool, n: Int)
-}
-def ping_f(b: Bool, n: Int) = {
-  if (b: Bool) {
-    let x = 1
-    return n: Int
-  } else {
-    pong_f: (Bool, Int) => Int @ {}(b: Bool, n: Int)
+  def ping_f() = {
+    if (b: Bool) {
+      let x = 1
+      return n: Int
+    } else {
+      ping_f: () => Int @ {}()
+    }
   }
-}
-def pong_f(b: Bool, n: Int) = {
-  ping_f: (Bool, Int) => Int @ {}(b: Bool, n: Int)
+  ping_f: () => Int @ {}()
 }

@@ -32,7 +32,20 @@ def loop(b: Bool){k @ k: (Int) => Int} = {
   }
 }
 def main(b: Bool) = {
-  loop_f: (Bool) => Int @ {}(b: Bool)
+  if (b: Bool) {
+    let x = 0
+    return x: Int
+  } else {
+    def g(y: Int) = {
+      let x = y: Int
+      return x: Int
+    }
+    if (b: Bool) {
+      g: (Int) => Int @ {}(0)
+    } else {
+      loop_g: (Bool){k: (Int) => Int} => Int @ {}(b: Bool){g: (Int) => Int @ {}}
+    }
+  }
 }
 def loop_g(b: Bool){k @ k: (Int) => Int} = {
   def g(x: Int) = {
@@ -42,24 +55,5 @@ def loop_g(b: Bool){k @ k: (Int) => Int} = {
     g: (Int) => Int @ {k}(0)
   } else {
     loop_g: (Bool){k: (Int) => Int} => Int @ {k}(b: Bool){g: (Int) => Int @ {k}}
-  }
-}
-def loop_f(b: Bool) = {
-  if (b: Bool) {
-    let x = 0
-    return x: Int
-  } else {
-    loop_gf: (Bool) => Int @ {}(b: Bool)
-  }
-}
-def loop_gf(b: Bool) = {
-  def g(y: Int) = {
-    let x = y: Int
-    return x: Int
-  }
-  if (b: Bool) {
-    g: (Int) => Int @ {}(0)
-  } else {
-    loop_g: (Bool){k: (Int) => Int} => Int @ {}(b: Bool){g: (Int) => Int @ {}}
   }
 }

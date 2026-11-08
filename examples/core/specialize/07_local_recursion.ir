@@ -1,6 +1,6 @@
 // A local definition calling itself with the same known block calls its copy again: in the copy, its own name is
-// bound to the definition and known by the instance. Since every call passes `b` for `c` and the captured `b`,
-// the two parameters are merged.
+// bound to the definition and known by the instance. The copy moves into `main`, where `b` and `n` are visible,
+// so all its parameters are dropped.
 
 def main(b: Bool, n: Int) = {
   def loop(c: Bool){h: (Int) => Int} = {
@@ -22,13 +22,13 @@ loop ↦ [f]
 /// SPECIALIZE
 
 def main(b: Bool, n: Int) = {
-  loop_f: (Bool, Int) => Int @ {}(b: Bool, n: Int)
-}
-def loop_f(c: Bool, n: Int) = {
-  if (c: Bool) {
-    let x = n: Int
-    return x: Int
-  } else {
-    loop_f: (Bool, Int) => Int @ {}(c: Bool, n: Int)
+  def loop_f() = {
+    if (b: Bool) {
+      let x = n: Int
+      return x: Int
+    } else {
+      loop_f: () => Int @ {}()
+    }
   }
+  loop_f: () => Int @ {}()
 }

@@ -16,9 +16,6 @@ run ↦ [f]
 /// SPECIALIZE
 
 def main(n: Int) = {
-  run_f: (Int) => Int @ {}(n: Int)
-}
-def run_f(n: Int) = {
   let x = n: Int
   return x: Int
 }

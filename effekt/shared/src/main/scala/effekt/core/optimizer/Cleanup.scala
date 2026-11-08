@@ -38,6 +38,8 @@ def cleanup(m: ModuleDecl): ModuleDecl = {
  * Inlines the definitions in [[once]] at their only call:
  *
  *   [[ def f(x){g} = s; C[ f(a){h} ] ]]  =  C[ let x = a; def g = h; s ]
+ *
+ * A block argument that is a variable is substituted instead, since it may be a reference used by `get` and `put`.
  */
 def inlineOnce(m: ModuleDecl, once: Set[Id]): ModuleDecl = {
   val inlined = mutable.Map.empty[Id, BlockLit]
@@ -48,8 +50,10 @@ def inlineOnce(m: ModuleDecl, once: Set[Id]): ModuleDecl = {
         rewrite(rest)
       case Stmt.App(BlockVar(f, _, _), targs, vargs, bargs) if inlined.contains(f) =>
         val block = inlined(f)
-        val types = Substitution(DB.from(block.tparams zip targs), DB.from(block.cparams zip bargs.map(_.capt)), DB.empty, DB.empty)
+        val variables = (block.bparams zip bargs).collect { case (param, arg: BlockVar) => param.id -> arg }
+        val types = Substitution(DB.from(block.tparams zip targs), DB.from(block.cparams zip bargs.map(_.capt)), DB.empty, DB.from(variables))
         val withBlocks = (block.bparams zip bargs).foldRight(substitute(block.body)(using types)) {
+          case ((param, arg: BlockVar), rest) => rest
           case ((param, arg), rest) => Stmt.Def(param.id, rewrite(arg), rest)
         }
         (block.vparams zip vargs).foldRight(withBlocks) { case ((param, arg), rest) => Stmt.Let(param.id, rewrite(arg), rest) }
