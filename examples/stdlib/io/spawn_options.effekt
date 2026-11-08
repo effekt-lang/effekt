@@ -1,0 +1,28 @@
+import process
+import ref
+
+def main() = {
+  // options are plain data: they can be dropped, or used for several processes.
+  val _ = default().onStdout(box { _ => () })
+  val shared = default()
+  val first = spawn("echo", ["first"].fromList, shared)
+  val second = spawn("echo", ["second"].fromList, shared)
+  println("exit codes " ++ first.show ++ " " ++ second.show)
+
+  // a second callback for a stream runs after the first one
+  val _ = spawn("echo", 
+    ["chained"].fromList,
+    default().onStdout(box { c => print("one: " ++ c) })
+             .onStdout(box { c => print("two: " ++ c) })
+  )
+
+  // a callback that captures state runs for every chunk of a loooooong output
+  val bytes = ref(0)
+  val _ = spawn("seq", 
+    ["1", "200000"].fromList, 
+    default().onStdout(box { chunk =>
+      bytes.set(bytes.get + chunk.length)
+    })
+  )
+  println("received " ++ bytes.get.show ++ " bytes")
+}
