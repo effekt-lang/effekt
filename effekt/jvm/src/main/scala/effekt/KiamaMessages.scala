@@ -36,7 +36,7 @@ object KiamaMessages {
           to   <- r.to.source.positionToOffset(r.to)
         } yield Span(r.from.source, from, to)
       }
-      KiamaMessage(Diagnostic(fromKiama(severity), span.map(Label(_)), Message(content)))
+      KiamaMessage(Diagnostic(fromKiama(severity), span.map(Label(_)), Message(content), None))
     }
 
     def formatContent(msg: KiamaMessage): String = effekt.formatContent(msg.diagnostic)

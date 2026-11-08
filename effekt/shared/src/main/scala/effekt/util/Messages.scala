@@ -13,7 +13,7 @@ object messages {
 
   case class Label(span: Span)
 
-  case class Diagnostic(severity: Severity, primary: Option[Label], reason: Reason) {
+  case class Diagnostic(severity: Severity, primary: Option[Label], reason: Reason, phase: Option[String]) {
     def range: Option[Range] = primary.map(_.span.range)
   }
 
@@ -142,17 +142,17 @@ object messages {
 
   def TODO(msg: String = ""): Nothing =
     val explanation = if (msg.isEmpty) "Not implemented, yet" else s"Not implemented, yet: ${msg}"
-    throw CompilerPanic(Diagnostic(Severity.Error, None, Message(explanation)))
+    throw CompilerPanic(Diagnostic(Severity.Error, None, Message(explanation), None))
 
   def FIXME[A](a: A, msg: String = ""): A = a
 
   def NOT_SUPPORTED(msg: String = ""): Nothing =
     val explanation = if (msg.isEmpty) "Currently not supported" else s"Currently not supported: ${msg}"
-    throw CompilerPanic(Diagnostic(Severity.Error, None, Message(explanation)))
+    throw CompilerPanic(Diagnostic(Severity.Error, None, Message(explanation), None))
 
   def INTERNAL_ERROR(msg: String = ""): Nothing =
     val explanation = if (msg.isEmpty) "Internal compiler error" else s"Internal compiler error: ${msg}"
-    throw CompilerPanic(Diagnostic(Severity.Error, None, Message(explanation)))
+    throw CompilerPanic(Diagnostic(Severity.Error, None, Message(explanation), None))
 
   /**
    * Stores messages in a mutable field
@@ -213,11 +213,20 @@ object messages {
 
     var focus: Tree // the current focus of the compiler
 
+    /** The innermost phase currently running, recorded in every diagnostic made while it runs. */
+    private var phase: Option[String] = None
+
+    def inPhase[T](name: String)(block: => T): T = {
+      val before = phase
+      phase = Some(name)
+      try block finally phase = before
+    }
+
     val messaging: BufferedMessaging
 
     def diagnostic(reason: Reason, severity: Severity, at: Option[Span]): Diagnostic =
       // spans with a missing origin give no position
-      Diagnostic(severity, at.filter { s => s.origin != Origin.Missing }.map(Label(_)), reason)
+      Diagnostic(severity, at.filter { s => s.origin != Origin.Missing }.map(Label(_)), reason, phase)
 
     def diagnostic(reason: Reason, severity: Severity): Diagnostic =
       diagnostic(reason, severity, spanOf(focus))

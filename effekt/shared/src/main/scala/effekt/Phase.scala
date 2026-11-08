@@ -37,8 +37,11 @@ trait Phase[-In, +Out] { curr =>
 
   def run(input: In)(using C: Context): Option[Out]
 
+  def runAsCurrent(input: In)(using C: Context): Option[Out] =
+    C.inPhase(phaseName) { run(input) }
+
   def apply(input: In)(using C: Context): Option[Out] = try {
-    run(input)
+    runAsCurrent(input)
   } catch {
     case FatalPhaseError(msg) =>
       C.report(msg)
@@ -46,18 +49,24 @@ trait Phase[-In, +Out] { curr =>
   }
 
   def andThen[Out2](next: Phase[Out, Out2]): Phase[In, Out2] =
-    new Phase[In, Out2] {
+    new Phase.Composite[In, Out2] {
       val phaseName = s"${curr.phaseName} -> ${next.phaseName}"
-      def run(input: In)(using C: Context) = curr.run(input).flatMap(out => next.run(out))
+      def run(input: In)(using C: Context) = curr.runAsCurrent(input).flatMap { out => next.runAsCurrent(out) }
     }
 
-  def map[Out2](f: Context ?=> Out => Out2): Phase[In, Out2] = new Phase[In, Out2] {
+  def map[Out2](f: Context ?=> Out => Out2): Phase[In, Out2] = new Phase.Composite[In, Out2] {
     val phaseName = curr.phaseName
-    def run(input: In)(using C: Context) = curr.run(input).map(f)
+    def run(input: In)(using C: Context) = curr.runAsCurrent(input).map(f)
   }
 }
 
 object Phase {
+
+  /** Used for plumbing that combines phases (`andThen`, `map`) as opposed to being a phase by itself. */
+  private[effekt] trait Composite[-In, +Out] extends Phase[In, Out] {
+    override def runAsCurrent(input: In)(using C: Context): Option[Out] = this.run(input)
+  }
+
   /**
    * Smart constructor for creating phases.
    *
@@ -84,7 +93,7 @@ object Phase {
   def cached[From, To](name: String, cacheBy: From => Long)(phase: Phase[From, To]): Phase[From, To] = {
     object task extends Task[From, To] {
       val taskName = name
-      def run(input: From)(using C: Context) = phase.run(input)
+      def run(input: From)(using C: Context) = phase.runAsCurrent(input)
       def fingerprint(input: From) = cacheBy(input)
     }
 
