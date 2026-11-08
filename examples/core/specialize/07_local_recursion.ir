@@ -21,32 +21,13 @@ loop ↦ [f]
 /// SPECIALIZE
 
 def main(b: Bool, n: Int) = {
-  def loop(c: Bool){h @ h: (Int) => Int} = {
-    if (c: Bool) {
-      h: (Int) => Int @ {h}(n: Int)
-    } else {
-      loop: (Bool){h: (Int) => Int} => Int @ {}(b: Bool){h: (Int) => Int @ {h}}
-    }
-  }
-  def f(x: Int) = {
-    return x: Int
-  }
   loop_f: (Bool, Bool, Int) => Int @ {}(b: Bool, b: Bool, n: Int)
 }
 def loop_f(c: Bool, b: Bool, n: Int) = {
-  def loop(c: Bool){h @ h: (Int) => Int} = {
-    if (c: Bool) {
-      h: (Int) => Int @ {h}(n: Int)
-    } else {
-      loop: (Bool){h: (Int) => Int} => Int @ {}(b: Bool){h: (Int) => Int @ {h}}
-    }
-  }
-  def f(x: Int) = {
-    return x: Int
-  }
   if (c: Bool) {
-    f: (Int) => Int @ {f}(n: Int)
+    let x = n: Int
+    return x: Int
   } else {
-    loop_f: (Bool, Bool, Int) => Int @ {f}(b: Bool, b: Bool, n: Int)
+    loop_f: (Bool, Bool, Int) => Int @ {}(b: Bool, b: Bool, n: Int)
   }
 }

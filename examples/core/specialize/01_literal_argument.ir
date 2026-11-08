@@ -20,14 +20,9 @@ def apply(x: Int){f @ f: (Int) => Int} = {
   f: (Int) => Int @ {f}(x: Int)
 }
 def main() = {
-  def f(x: Int) = {
-    return x: Int
-  }
   apply_f: (Int) => Int @ {}(0)
 }
 def apply_f(x: Int) = {
-  def f(y: Int) = {
-    return y: Int
-  }
-  f: (Int) => Int @ {f}(x: Int)
+  let y = x: Int
+  return y: Int
 }

@@ -36,24 +36,16 @@ def pong(b: Bool){f @ f: (Int) => Int} = {
   ping: (Bool){f: (Int) => Int} => Int @ {}(b: Bool){f: (Int) => Int @ {f}}
 }
 def main(b: Bool, n: Int) = {
-  def f(x: Int) = {
-    return n: Int
-  }
   ping_f: (Bool, Int) => Int @ {}(b: Bool, n: Int)
 }
 def ping_f(b: Bool, n: Int) = {
-  def f(x: Int) = {
-    return n: Int
-  }
   if (b: Bool) {
-    f: (Int) => Int @ {f}(1)
+    let x = 1
+    return n: Int
   } else {
-    pong_f: (Bool, Int) => Int @ {f}(b: Bool, n: Int)
+    pong_f: (Bool, Int) => Int @ {}(b: Bool, n: Int)
   }
 }
 def pong_f(b: Bool, n: Int) = {
-  def f(x: Int) = {
-    return n: Int
-  }
-  ping_f: (Bool, Int) => Int @ {f}(b: Bool, n: Int)
+  ping_f: (Bool, Int) => Int @ {}(b: Bool, n: Int)
 }

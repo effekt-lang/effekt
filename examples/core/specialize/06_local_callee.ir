@@ -16,20 +16,9 @@ run ↦ [f]
 /// SPECIALIZE
 
 def main(n: Int) = {
-  def run(){h @ h: (Int) => Int} = {
-    h: (Int) => Int @ {h}(n: Int)
-  }
-  def f(x: Int) = {
-    return x: Int
-  }
   run_f: (Int) => Int @ {}(n: Int)
 }
 def run_f(n: Int) = {
-  def run(){h @ h: (Int) => Int} = {
-    h: (Int) => Int @ {h}(n: Int)
-  }
-  def f(x: Int) = {
-    return x: Int
-  }
-  f: (Int) => Int @ {f}(n: Int)
+  let x = n: Int
+  return x: Int
 }

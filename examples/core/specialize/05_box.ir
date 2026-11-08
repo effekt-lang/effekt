@@ -17,16 +17,14 @@ def main() = {
 
 /// SPECIALIZE
 
-def apply(x: Int){f: (Int) => Int} = {
-  (f: (Int) => Int @ {f})(x: Int)
+def apply(x: Int){f @ f: (Int) => Int} = {
+  f: (Int) => Int @ {f}(x: Int)
 }
-
 def id(x: Int) = {
   return x: Int
 }
-
 def main() = {
-  let g = box {} (id: (Int) => Int @ {})
-  (apply: (Int){f: (Int) => Int} => Int @ {})(0){unbox g: (Int) => Int at {}}
+  let g = box {} id: (Int) => Int @ {}
+  def f = (unbox g: (Int) => Int at {})
+  apply: (Int){f: (Int) => Int} => Int @ {}(0){f: (Int) => Int @ {}}
 }
-

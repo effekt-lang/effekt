@@ -28,16 +28,10 @@ def loop(b: Bool){k @ k: (Int) => Int} = {
   if (b: Bool) {
     k: (Int) => Int @ {k}(0)
   } else {
-    def g(x: Int) = {
-      k: (Int) => Int @ {k}(x: Int)
-    }
     loop_g: (Bool){k: (Int) => Int} => Int @ {k}(b: Bool){k: (Int) => Int @ {k}}
   }
 }
 def main(b: Bool) = {
-  def f(x: Int) = {
-    return x: Int
-  }
   loop_f: (Bool) => Int @ {}(b: Bool)
 }
 def loop_g(b: Bool){k @ k: (Int) => Int} = {
@@ -45,40 +39,27 @@ def loop_g(b: Bool){k @ k: (Int) => Int} = {
     k: (Int) => Int @ {k}(x: Int)
   }
   if (b: Bool) {
-    g: (Int) => Int @ {g}(0)
+    g: (Int) => Int @ {k}(0)
   } else {
-    def h(x: Int) = {
-      g: (Int) => Int @ {g}(x: Int)
-    }
-    loop_g: (Bool){k: (Int) => Int} => Int @ {g}(b: Bool){g: (Int) => Int @ {g}}
+    loop_g: (Bool){k: (Int) => Int} => Int @ {k}(b: Bool){g: (Int) => Int @ {k}}
   }
 }
 def loop_f(b: Bool) = {
-  def f(x: Int) = {
-    return x: Int
-  }
   if (b: Bool) {
-    f: (Int) => Int @ {f}(0)
+    let x = 0
+    return x: Int
   } else {
-    def g(x: Int) = {
-      f: (Int) => Int @ {f}(x: Int)
-    }
-    loop_gf: (Bool) => Int @ {f}(b: Bool)
+    loop_gf: (Bool) => Int @ {}(b: Bool)
   }
 }
 def loop_gf(b: Bool) = {
-  def f(x: Int) = {
+  def g(y: Int) = {
+    let x = y: Int
     return x: Int
   }
-  def g(x: Int) = {
-    f: (Int) => Int @ {}(x: Int)
-  }
   if (b: Bool) {
-    g: (Int) => Int @ {g}(0)
+    g: (Int) => Int @ {}(0)
   } else {
-    def h(x: Int) = {
-      g: (Int) => Int @ {g}(x: Int)
-    }
-    loop_g: (Bool){k: (Int) => Int} => Int @ {g}(b: Bool){g: (Int) => Int @ {g}}
+    loop_g: (Bool){k: (Int) => Int} => Int @ {}(b: Bool){g: (Int) => Int @ {}}
   }
 }

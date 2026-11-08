@@ -20,13 +20,14 @@ import scala.collection.mutable
  *   def main() = { var s = 0; apply_g(1){s} }
  *
  * [[names]] gives every block argument a name, [[instances]] finds, starting from every definition, the shapes of the
- * blocks passed to known definitions, and [[specialize]] makes a copy for each of them.
+ * blocks passed to known definitions, [[specialize]] makes a copy for each of them, [[aliases]] removes the names
+ * given to block arguments again, and [[optimizer.cleanup]] removes what is left unused and inlines what is called once.
  * Toplevel and local definitions are treated alike; the definitions themselves stay for every other use.
  */
 def specialization(m: ModuleDecl): ModuleDecl = {
   val named = names(m)
   val known = sites(named)
-  specialize(named, known, instances(named, known))
+  optimizer.cleanup(aliases(specialize(named, known, instances(named, known))))
 }
 
 object Specialize extends Phase[CoreTransformed, CoreTransformed] {
@@ -43,19 +44,20 @@ object Specialize extends Phase[CoreTransformed, CoreTransformed] {
 // -----
 
 /**
- * [[ f(…){ b } ]] = def g = [[ b ]]; f(…){ g }   for every block argument `b` that is a literal or an object
+ * [[ f(…){ b } ]] = def g = [[ b ]]; f(…){ g }   for every block argument `b`, also one that has a name already
  */
 def names(m: ModuleDecl): ModuleDecl = {
   object naming extends Tree.Rewrite {
     override def rewrite(s: Stmt): Stmt = s match {
       case Stmt.App(callee, targs, vargs, bargs) =>
-        val named = bargs.map {
-          case block @ (_: BlockLit | _: Block.New) =>
-            val id = Id("f")
-            (Some(id -> rewrite(block)), Block.BlockVar(id, block.tpe, block.capt))
-          case block => (None, rewrite(block))
+        val named = bargs.map { block =>
+          val id = block match {
+            case Block.BlockVar(x, _, _) => Id(x)
+            case _ => Id("f")
+          }
+          (id -> rewrite(block), Block.BlockVar(id, block.tpe, block.capt))
         }
-        named.flatMap(_._1).foldRight(Stmt.App(rewrite(callee), targs, vargs.map(rewrite), named.map(_._2)): Stmt) {
+        named.map(_._1).foldRight(Stmt.App(rewrite(callee), targs, vargs.map(rewrite), named.map(_._2)): Stmt) {
           case ((id, block), rest) => Stmt.Def(id, block, rest)
         }
       case other => super.rewrite(other)
@@ -357,7 +359,13 @@ def specialize(m: ModuleDecl, known: Map[Id, Site], all: List[Instance]): Module
     val extraBlocks = extra.collect { case b: BlockParam => b }
     val kept = (callee.bparams zip i.arguments).collect { case (p, None) => p }
     val keptCaptures = (callee.cparams zip i.arguments).collect { case (c, None) => c }
-    val body = Binding(calleeBindings ++ argumentBindings.flatten, substitute(callee.body)(using calleeSubstitution))
+    val passed = (callee.bparams zip i.arguments).collect { case (p, Some(_)) => p -> argumentSeeds.flatten.toMap.apply(p.id).block }
+    val bound = Substitution(DB.empty,
+      DB.from(passed.flatMap { case (p, block) => p.capt.map { c => c -> block.capt } }),
+      DB.empty,
+      DB.from(passed.map { case (p, block) => p.id -> Block.BlockVar(p.id, p.tpe, block.capt) }))
+    val body = Binding(calleeBindings ++ argumentBindings.flatten,
+      substitute(substitute(callee.body)(using calleeSubstitution))(using bound))
     val copied = BlockLit(callee.tparams, keptCaptures ++ extraBlocks.map(_.id),
       callee.vparams ++ extra.collect { case v: ValueParam => v }, kept ++ extraBlocks, body)
     Toplevel.Def(copies(i), specializing.rewrite(copied)(using argumentSeeds.foldLeft(calleeSeeds)(_ ++ _)))
@@ -368,4 +376,28 @@ def specialize(m: ModuleDecl, known: Map[Id, Site], all: List[Instance]): Module
     case Toplevel.Val(id, binding) => Toplevel.Val(id, specializing.rewrite(binding)(using Map.empty))
   }
   m.copy(definitions = rewritten ++ all.map(copy))
+}
+
+
+// Aliases
+// -------
+
+/**
+ * [[ def g = f; s ]] = [[ s ]][g := f]
+ */
+def aliases(m: ModuleDecl): ModuleDecl = {
+  object dealiasing extends Tree.RewriteWithContext[Map[Id, Block.BlockVar]] {
+    override def rewrite(b: Block)(using known: Map[Id, Block.BlockVar]): Block = b match {
+      case Block.BlockVar(id, _, _) if known.contains(id) => known(id)
+      case other => super.rewrite(other)
+    }
+    override def rewrite(b: Block.BlockVar)(using known: Map[Id, Block.BlockVar]): Block.BlockVar =
+      known.getOrElse(b.id, b)
+    override def rewrite(s: Stmt)(using known: Map[Id, Block.BlockVar]): Stmt = s match {
+      case Stmt.Def(id, Block.BlockVar(x, tpe, capt), body) =>
+        rewrite(body)(using known + (id -> known.getOrElse(x, Block.BlockVar(x, tpe, capt))))
+      case other => super.rewrite(other)
+    }
+  }
+  dealiasing.rewrite(m)(using Map.empty)
 }
