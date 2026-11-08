@@ -3,7 +3,7 @@ There are multiple overloads, which all fail to check:
 
 Possible overload: expected_block_got_value_overload_wrong_arity::twice of type {Int => Int} => Int
   Wrong number of arguments to twice: expected 0 value arguments and 1 block argument, but got 1 value argument and 0 block arguments
-  Did you mean to pass 1 value argument as a block (computation)? 
+  Did you mean to pass 1 value argument as a block (computation)?
 
 Possible overload: expected_block_got_value_overload_wrong_arity::twice of type (Int, Int) => Int
   Wrong number of arguments to twice: expected 2 value arguments, but got 1 value argument
