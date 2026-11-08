@@ -1418,7 +1418,7 @@ object Typer extends Phase[NameResolved, Typechecked] {
         if (blocks.delta > 0) {
           help(pretty"Did you mean to pass ${pluralized(blocks.delta, "block argument")} as a value? e.g. box it using `box { ... }`")
         } else if (values.delta > 0) {
-          help(pretty"Did you mean to pass ${pluralized(values.delta, "value argument")} as a block (computation)? ")
+          help(pretty"Did you mean to pass ${pluralized(values.delta, "value argument")} as a block (computation)?")
         }
       }
     }
