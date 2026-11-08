@@ -66,10 +66,10 @@ double c_io_random(void) {
 // TODO
 // - pooling of request objects (benchmark first!)
 
+// `c_fs_cb`'s data: the stack to resume in and the buffer to release.
 typedef struct {
     Stack stack;
     struct Pos buffer;
-    size_t offset;
 } io_closure_t;
 
 void c_resume_int_fs(uv_fs_t* request) {
@@ -137,7 +137,6 @@ void c_fs_read(Int file, struct Pos buffer, Int offset, Int size, Int position, 
     io_closure_t* read_closure = malloc(sizeof(io_closure_t));
     read_closure->stack = stack;
     read_closure->buffer = buffer;
-    read_closure->offset = offset;
 
     uv_fs_t* request = malloc(sizeof(uv_fs_t));
     request->data = read_closure;
@@ -160,7 +159,6 @@ void c_fs_write(Int file, struct Pos buffer, Int offset, Int size, Int position,
     io_closure_t* write_closure = malloc(sizeof(io_closure_t));
     write_closure->stack = stack;
     write_closure->buffer = buffer;
-    write_closure->offset = offset;
 
     uv_fs_t* request = malloc(sizeof(uv_fs_t));
     request->data = write_closure;
@@ -243,6 +241,7 @@ void c_tcp_connect(String host, Int port, Stack stack) {
         resume_Int(stack, result);
         return;
     }
+    tcp_handle->data = NULL;  // no pending read yet (explicit `NULL` since libuv leaves it uninitialised)
 
     uv_connect_t* connect_req = malloc(sizeof(uv_connect_t));
     connect_req->data = stack;
@@ -252,7 +251,7 @@ void c_tcp_connect(String host, Int port, Stack stack) {
     free(host_str);
 
     if (result < 0) {
-        free(tcp_handle);
+        uv_close((uv_handle_t*)tcp_handle, (uv_close_cb)free);
         free(connect_req);
         resume_Int(stack, result);
         return;
@@ -261,59 +260,87 @@ void c_tcp_connect(String host, Int port, Stack stack) {
     result = uv_tcp_connect(connect_req, tcp_handle, (const struct sockaddr*)&addr, c_tcp_connect_cb);
 
     if (result < 0) {
-        free(tcp_handle);
+        uv_close((uv_handle_t*)tcp_handle, (uv_close_cb)free);
         free(connect_req);
         resume_Int(stack, result);
         return;
     }
 }
 
+typedef struct {
+    Stack stack;
+    struct Pos buffer;
+    size_t offset;
+    size_t size;
+} tcp_read_closure_t;
+
 void c_tcp_read_cb(uv_stream_t* stream, ssize_t bytes_read, const uv_buf_t* buf) {
     (void)(buf);
-    io_closure_t* read_closure = (io_closure_t*)stream->data;
+    // 0 means nothing was read this time (EAGAIN), not end of file, so keep waiting.
+    if (bytes_read == 0) return;
+
+    tcp_read_closure_t* read_closure = (tcp_read_closure_t*)stream->data;
     Stack stack = read_closure->stack;
 
     uv_read_stop(stream);
+    stream->data = NULL;
     erasePositive(read_closure->buffer);
     free(read_closure);
 
-    resume_Int(stack, (int64_t)bytes_read);
+    // End of file is 0, as the contract in io/network says, but other errors stay negative.
+    resume_Int(stack, bytes_read == UV_EOF ? 0 : (int64_t)bytes_read);
 }
 
 void c_tcp_read_alloc_cb(uv_handle_t* handle, size_t suggested_size, uv_buf_t* buf) {
     (void)(suggested_size);
-    io_closure_t* read_closure = (io_closure_t*)handle->data;
+    tcp_read_closure_t* read_closure = (tcp_read_closure_t*)handle->data;
+    // Exactly the requested window [offset, offset + size), io/network checks it is in bounds.
     buf->base = (char*)c_bytearray_data(read_closure->buffer) + read_closure->offset;
-    // TODO c_bytearray_size also erases
-    buf->len = read_closure->buffer.tag;
+    buf->len = read_closure->size;
 }
 
 void c_tcp_read(Int handle, struct Pos buffer, Int offset, Int size, Stack stack) {
-    (void)size;
     uv_stream_t* stream = (uv_stream_t*)handle;
 
-    io_closure_t* read_closure = malloc(sizeof(io_closure_t));
+    // At most one read is pending on a connection, its closure is in stream->data.
+    if (stream->data != NULL) {
+        erasePositive(buffer);
+        resume_Int(stack, UV_EALREADY);
+        return;
+    }
+
+    tcp_read_closure_t* read_closure = malloc(sizeof(tcp_read_closure_t));
     read_closure->stack = stack;
     read_closure->buffer = buffer;
     read_closure->offset = offset;
+    read_closure->size = size;
     stream->data = read_closure;
 
     int result = uv_read_start(stream, c_tcp_read_alloc_cb, c_tcp_read_cb);
 
     if (result < 0) {
-        free(read_closure);
         stream->data = NULL;
+        erasePositive(buffer);
+        free(read_closure);
         resume_Int(stack, result);
     }
 }
 
+typedef struct {
+    Stack stack;
+    struct Pos buffer;
+    size_t size;
+} tcp_write_closure_t;
+
 void c_tcp_write_cb(uv_write_t* request, int status) {
-    io_closure_t* write_closure = (io_closure_t*)request->data;
+    tcp_write_closure_t* write_closure = (tcp_write_closure_t*)request->data;
     free(request);
     erasePositive(write_closure->buffer);
     Stack stack = write_closure->stack;
+    // `uv_write` writes everything or fails, but our contract returns the number of bytes written.
+    int64_t written = (int64_t)write_closure->size;
     free(write_closure);
-    resume_Int(stack, (int64_t)status);
+    resume_Int(stack, status < 0 ? (int64_t)status : written);
 }
 
 void c_tcp_write(Int handle, struct Pos buffer, Int offset, Int size, Stack stack) {
@@ -321,10 +348,10 @@ void c_tcp_write(Int handle, struct Pos buffer, Int offset, Int size, Stack stac
 
     uv_buf_t buf = uv_buf_init((char*)(c_bytearray_data(buffer) + offset), size);
 
-    io_closure_t* write_closure = malloc(sizeof(io_closure_t));
+    tcp_write_closure_t* write_closure = malloc(sizeof(tcp_write_closure_t));
     write_closure->stack = stack;
     write_closure->buffer = buffer;
-    write_closure->offset = offset;
+    write_closure->size = size;
 
     uv_write_t* request = malloc(sizeof(uv_write_t));
     request->data = write_closure;
@@ -333,8 +360,9 @@ void c_tcp_write(Int handle, struct Pos buffer, Int offset, Int size, Stack stac
 
     if (result < 0) {
         free(request);
+        erasePositive(buffer);
+        free(write_closure);
         resume_Int(stack, result);
-	free(write_closure);
     }
 }
 
@@ -346,7 +374,17 @@ void c_tcp_close_cb(uv_handle_t* handle) {
 
 void c_tcp_close(Int handle, Stack stack) {
     uv_handle_t* uv_handle = (uv_handle_t*)handle;
+
+    // A read still pending ends as at end of file, much like on the JS backend.
+    tcp_read_closure_t* pending = (tcp_read_closure_t*)uv_handle->data;
     uv_handle->data = stack;
+    if (pending != NULL) {
+        uv_read_stop((uv_stream_t*)uv_handle);
+        Stack reader = pending->stack;
+        erasePositive(pending->buffer);
+        free(pending);
+        resume_Int(reader, 0);
+    }
     uv_close(uv_handle, c_tcp_close_cb);
 }
 
@@ -362,6 +400,8 @@ Int c_tcp_bind(String host, Int port) {
         free(host_str);
         return result;
     }
+
+    tcp_handle->data = NULL;  // no listen yet
 
     struct sockaddr_in addr;
     result = uv_ip4_addr(host_str, port, &addr);
@@ -388,41 +428,26 @@ typedef struct {
 
 void c_tcp_listen_cb(uv_stream_t* server, int status) {
     tcp_listen_closure_t* listen_closure = (tcp_listen_closure_t*)server->data;
-    Stack closure_stack = listen_closure->stack;
-    struct Neg closure_handler = listen_closure->handler;
 
-    if (status < 0) {
-        server->data = NULL;
-        free(listen_closure);
-        eraseNegative(closure_handler);
-        resume_Int(closure_stack, status);
-        return;
-    }
+    // An error while accepting concerns that one client, not the listener:
+    // listen returns only once shutdown is called (as on the JS backend),
+    // so skip the client and keep listening.
+    if (status < 0) return;
 
     uv_tcp_t* client = malloc(sizeof(uv_tcp_t));
-    int result = uv_tcp_init(uv_default_loop(), client);
-
-    if (result < 0) {
+    if (uv_tcp_init(uv_default_loop(), client) < 0) {
         free(client);
-        server->data = NULL;
-        free(listen_closure);
-        eraseNegative(closure_handler);
-        resume_Int(closure_stack, result);
         return;
     }
-
-    result = uv_accept(server, (uv_stream_t*)client);
-    if (result < 0) {
+    client->data = NULL;  // no pending read yet
+    if (uv_accept(server, (uv_stream_t*)client) < 0) {
         uv_close((uv_handle_t*)client, (uv_close_cb)free);
-        server->data = NULL;
-        free(listen_closure);
-        eraseNegative(closure_handler);
-        resume_Int(closure_stack, result);
         return;
     }
 
-    shareNegative(closure_handler);
-    run_Int(closure_handler, (int64_t)client);
+    struct Neg handler = listen_closure->handler;
+    shareNegative(handler);
+    run_Int(handler, (int64_t)client);
 }
 
 void c_tcp_listen(Int listener, struct Neg handler, Stack stack) {
