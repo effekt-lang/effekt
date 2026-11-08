@@ -1,0 +1,11 @@
+[error] examples/neg/typer/mismatch/expected_interface_got_function.effekt:6:24: Expected type [typer]
+  Greet at {}
+but got type
+  () => Unit at ?C
+
+Type mismatch between Greet and () => Unit.
+  val _: Greet at {} = box hello
+                       ^^^^^^^^^
+[error] examples/neg/typer/mismatch/expected_interface_got_function.effekt:6:28: Expected Greet but got () => Unit. [typer]
+  val _: Greet at {} = box hello
+                           ^^^^^

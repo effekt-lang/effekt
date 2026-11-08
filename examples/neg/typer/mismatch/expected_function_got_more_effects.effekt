@@ -1,0 +1,9 @@
+effect fail(): Unit
+
+def apply(f: () => Unit at {}): Unit = ()
+
+def mayFail(): Unit / fail = do fail()
+
+def main() = {
+  val _ = apply(box mayFail)
+}

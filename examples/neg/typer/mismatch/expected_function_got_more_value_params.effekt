@@ -1,0 +1,7 @@
+def apply(f: Int => Bool at {}): Unit = ()
+
+def both(x: Int, y: Int): Bool = true
+
+def main() = {
+  val _ = apply(box both)
+}

@@ -1,0 +1,6 @@
+def describe(n: Int) = n match {
+  case 0 => "zero"
+  case _ => 42
+}
+
+def main() = ()

@@ -1,0 +1,7 @@
+effect fail(): Unit
+
+def apply(f: () => Unit at {}): Unit = ()
+
+def main() = {
+  val _ = apply(box { () => do fail() })
+}

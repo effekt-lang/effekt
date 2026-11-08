@@ -1,0 +1,3 @@
+def choose(b: Bool) = if (b) 1 else "hello"
+
+def main() = ()

@@ -1,0 +1,6 @@
+interface Greet { def greet(): Unit }
+interface Wave { def wave(): Unit }
+
+def main() = {
+  val _: Wave at {} = box new Greet { def greet() = () }
+}

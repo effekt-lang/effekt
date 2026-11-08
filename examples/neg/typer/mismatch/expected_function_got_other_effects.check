@@ -1,0 +1,6 @@
+[error] examples/neg/typer/mismatch/expected_function_got_other_effects.effekt:9:17: { other } is not equal to { fail } [typer]
+  val _ = apply(box mayFail)
+                ^^^^^^^^^^^
+[error] examples/neg/typer/mismatch/expected_function_got_other_effects.effekt:9:21: { other } is not equal to { fail } [typer]
+  val _ = apply(box mayFail)
+                    ^^^^^^^
