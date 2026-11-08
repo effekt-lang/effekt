@@ -25,8 +25,11 @@ def x0(x2: Int) = {
   x1: (Int) => Int @ {}(x2: Int)
 }
 def x1(x8: Int) = {
-  def x9(x10: Int) = {
-    return x10: Int
+  def x9(){x11 @ x11: (Int) => Int} = {
+    x11: (Int) => Int @ {x11}(x8: Int)
   }
-  x9: (Int) => Int @ {x9}(x8: Int)
+  def x12(x13: Int) = {
+    return x13: Int
+  }
+  x12: (Int) => Int @ {x12}(x8: Int)
 }

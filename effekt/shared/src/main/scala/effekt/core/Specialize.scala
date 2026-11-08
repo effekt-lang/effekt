@@ -72,17 +72,18 @@ def names(m: ModuleDecl): ModuleDecl = {
 case class Site(block: Block, values: List[ValueParam], blocks: List[BlockParam])
 
 /**
- * Every definition whose block is a literal or an object. Toplevel definitions capture nothing.
+ * Every definition whose block is a literal or an object. Toplevel definitions capture nothing, and no definition
+ * captures itself.
  * A definition capturing a continuation or a prompt is none: a shift to a prompt passed as a parameter cannot be
  * resolved statically anymore.
  */
 def sites(m: ModuleDecl): Map[Id, Site] = {
   val globals: Set[Id] = m.definitions.map(_.id).toSet ++ m.externs.collect { case d: Extern.Def => d.id }
 
-  def local(block: Block): Option[Site] = {
+  def local(self: Id, block: Block): Option[Site] = {
     val free = block.free
     val values = free.values.toMap.toList.sortBy(_._1.id).map { case (id, tpe) => ValueParam(id, tpe) }
-    val blocks = free.blocks.toMap.toList.filterNot { case (id, _) => globals.contains(id) }.sortBy(_._1.id)
+    val blocks = free.blocks.toMap.toList.filterNot { case (id, _) => globals.contains(id) || id == self }.sortBy(_._1.id)
       .map { case (id, (tpe, capt)) => BlockParam(id, tpe, capt) }
     Option.unless(blocks.exists { b => b.tpe.isInstanceOf[BlockType.Resume] || b.tpe.isInstanceOf[BlockType.Prompt] })(Site(block, values, blocks))
   }
@@ -92,7 +93,7 @@ def sites(m: ModuleDecl): Map[Id, Site] = {
     def combine = _ ++ _
     override def stmt(using Unit) = {
       case Stmt.Def(id, block @ (_: BlockLit | _: Block.New), body) =>
-        local(block).map { site => Map(id -> site) }.getOrElse(Map.empty) ++ query(block) ++ query(body)
+        local(id, block).map { site => Map(id -> site) }.getOrElse(Map.empty) ++ query(block) ++ query(body)
     }
   }
   m.definitions.collect { case Toplevel.Def(id, block: BlockLit) => id -> Site(block, Nil, Nil) }.toMap ++
@@ -166,12 +167,13 @@ def instances(m: ModuleDecl, known: Map[Id, Site]): List[Instance] = {
     def combine = (_, _) => ()
     override def stmt(using env: Map[Id, Shape]) = {
       case Stmt.Def(id, block, body) =>
-        query(block)
         val bound = block match {
           case Block.BlockVar(x, _, _) => lookup(env)(x)
           case _ => shape(id, lookup(env))
         }
-        query(body)(using bound.map { s => env + (id -> s) }.getOrElse(env - id))
+        val inner = bound.map { s => env + (id -> s) }.getOrElse(env - id)
+        query(block)(using inner)
+        query(body)(using inner)
       case Stmt.App(callee @ Block.BlockVar(f, _, _), targs, vargs, bargs) =>
         instance(f, bargs, lookup(env)).foreach { i => if found.add(i) then pending.enqueue(i) }
         all(vargs, query)
@@ -185,7 +187,8 @@ def instances(m: ModuleDecl, known: Map[Id, Site]): List[Instance] = {
     val block = literal(i.callee).get
     val captured = (known(i.callee.site).blocks zip i.callee.captures).collect { case (b, Some(s)) => b.id -> s }
     val arguments = (block.bparams zip i.arguments).collect { case (p, Some(s)) => p.id -> s }
-    collecting.query(block.body)(using (captured ++ arguments).toMap)
+    val self = Option.unless(isToplevel(i.callee.site))(i.callee.site -> i.callee)
+    collecting.query(block.body)(using (captured ++ arguments ++ self).toMap)
   }
   found.toList
 }
@@ -204,6 +207,8 @@ def instances(m: ModuleDecl, known: Map[Id, Site]): List[Instance] = {
  *
  *   def f_g(…, v'){b'} = def g = { … v' … b' … }; [[ body of f ]]
  *
+ * A local definition refers to itself in the copy as a definition bound at its beginning, known by the instance's
+ * callee, so that a recursive call with the same blocks calls the copy again.
  * A call to a copy keeps the captures of the blocks it no longer passes, since they are still used in the copy.
  */
 def specialize(m: ModuleDecl, known: Map[Id, Site], all: List[Instance]): ModuleDecl = {
@@ -223,14 +228,15 @@ def specialize(m: ModuleDecl, known: Map[Id, Site], all: List[Instance]): Module
   def lookup(env: Map[Id, Known])(id: Id): Option[Shape] =
     env.get(id).map(_.shape).orElse(Option.when(toplevel.contains(id) && known.contains(id))(Shape(id, Nil)))
 
-  /** What a known block captures, under the names it has here, in the order of [[leaves]]. */
+  /** What a known block captures, under the names it has here, in the order of [[leaves]], not counting itself. */
   def arguments(k: Known, env: Map[Id, Known]): List[Expr | Block] = {
     val site = known(k.shape.site)
     val free = k.block.free
     val values = free.values.toMap.map { case (id, tpe) => originOf(id) -> (Expr.ValueVar(id, tpe): Expr) }
-    val blocks = free.blocks.toMap.map { case (id, (tpe, capt)) => originOf(id) -> (id, Block.BlockVar(id, tpe, capt)) }
+    val blocks = free.blocks.toMap.filterNot { case (id, _) => env.get(id).exists(_.block eq k.block) }
+      .map { case (id, (tpe, capt)) => originOf(id) -> (id, Block.BlockVar(id, tpe, capt)) }
     site.values.map { v => values(v.id) } ++ (site.blocks zip k.shape.captures).flatMap {
-      case (b, Some(_)) => arguments(env(blocks(b.id)._1), env)
+      case (b, Some(nested)) => arguments(Known(nested, env(blocks(b.id)._1).block), env)
       case (b, None) => List(blocks(b.id)._2)
     }
   }
@@ -256,7 +262,8 @@ def specialize(m: ModuleDecl, known: Map[Id, Site], all: List[Instance]): Module
             case _ => shape(originOf(id), name => lookup(env)(current(block, name))).map { s => Known(s, block) }
           }
         }
-        Stmt.Def(id, rewrite(block), rewrite(body)(using bound.map { k => env + (id -> k) }.getOrElse(env)))
+        val inner = bound.map { k => env + (id -> k) }.getOrElse(env)
+        Stmt.Def(id, rewrite(block)(using inner), rewrite(body)(using inner))
 
       case Stmt.App(callee @ Block.BlockVar(f, _, capt), targs, vargs, bargs) =>
         instance(f, bargs, lookup(env)).filter(copies.contains) match {
@@ -325,13 +332,26 @@ def specialize(m: ModuleDecl, known: Map[Id, Site], all: List[Instance]): Module
       (Nil, List(Binding.Def(name, alias)), Map(name -> Known(shape, alias)))
     } else {
       val (params, bindings, seeds, substitution) = captured(shape)
-      val block = fresh(substitute(known(shape.site).block)(using substitution))
+      val block = fresh(substitute(known(shape.site).block)(using itself(substitution, shape.site, name)))
       (params, bindings :+ Binding.Def(name, block), seeds + (name -> Known(shape, block)))
     }
 
+  /** [[substitution]], and the definition [[site]] refers to itself as [[name]]. */
+  def itself(substitution: Substitution, site: Id, name: Id): Substitution = {
+    val block = known(site).block
+    substitution.copy(blocks = substitution.blocks + (site -> Block.BlockVar(name, block.tpe, block.capt)))
+  }
+
   def copy(i: Instance): Toplevel.Def = {
     val callee = fresh(literal(i.callee).get)
-    val (calleeParams, calleeBindings, calleeSeeds, calleeSubstitution) = captured(i.callee)
+    val (calleeParams, capturedBindings, capturedSeeds, capturedSubstitution) = captured(i.callee)
+    val (calleeBindings, calleeSeeds, calleeSubstitution) =
+      if (toplevel.contains(i.callee.site)) (capturedBindings, capturedSeeds, capturedSubstitution) else {
+        val name = Id(i.callee.site)
+        val substitution = itself(capturedSubstitution, i.callee.site, name)
+        val block = fresh(substitute(known(i.callee.site).block)(using substitution))
+        (capturedBindings :+ Binding.Def(name, block), capturedSeeds + (name -> Known(i.callee, block)), substitution)
+      }
     val (argumentParams, argumentBindings, argumentSeeds) = (callee.bparams zip i.arguments).collect {
       case (p, Some(s)) => instantiate(p.id, s)
     }.unzip3

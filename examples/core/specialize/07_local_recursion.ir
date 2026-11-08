@@ -1,0 +1,52 @@
+// A local definition calling itself with the same known block calls its copy again: in the copy, its own name is
+// bound to the definition and known by the instance.
+
+def main(b: Bool, n: Int) = {
+  def loop(c: Bool){h: (Int) => Int} = {
+    if (c: Bool) {
+      (h: (Int) => Int @ {h})(n: Int)
+    } else {
+      (loop: (Bool){h: (Int) => Int} => Int @ {})(b: Bool){h: (Int) => Int @ {h}}
+    }
+  }
+  (loop: (Bool){h: (Int) => Int} => Int @ {})(b: Bool){(x: Int) =>
+    return x: Int
+  }
+}
+
+/// INSTANCES
+
+loop ↦ [f]
+
+/// SPECIALIZE
+
+def x0(x2: Bool, x3: Int) = {
+  def x4(x6: Bool){x7 @ x7: (Int) => Int} = {
+    if (x6: Bool) {
+      x7: (Int) => Int @ {x7}(x3: Int)
+    } else {
+      x4: (Bool){x8: (Int) => Int} => Int @ {}(x2: Bool){x7: (Int) => Int @ {x7}}
+    }
+  }
+  def x9(x10: Int) = {
+    return x10: Int
+  }
+  x1: (Bool, Bool, Int) => Int @ {}(x2: Bool, x2: Bool, x3: Int)
+}
+def x1(x11: Bool, x12: Bool, x13: Int) = {
+  def x14(x16: Bool){x17 @ x17: (Int) => Int} = {
+    if (x16: Bool) {
+      x17: (Int) => Int @ {x17}(x13: Int)
+    } else {
+      x14: (Bool){x18: (Int) => Int} => Int @ {}(x12: Bool){x17: (Int) => Int @ {x17}}
+    }
+  }
+  def x19(x20: Int) = {
+    return x20: Int
+  }
+  if (x11: Bool) {
+    x19: (Int) => Int @ {x19}(x13: Int)
+  } else {
+    x1: (Bool, Bool, Int) => Int @ {x19}(x12: Bool, x12: Bool, x13: Int)
+  }
+}
