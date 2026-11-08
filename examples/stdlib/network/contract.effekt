@@ -6,9 +6,12 @@ import io/time
 import bytearray
 import stream
 
-/// Runs the given `handler` on the first connection to `port`, then shuts the listener down.
-def serveOnce(port: Int, handler: Connection => Unit at {io, async, global}): Unit / Exception[IOError] = {
-  val listener = bind("127.0.0.1", port)
+/// Runs the given `handler` on the first connection to a port chosen by the system,
+/// then shuts the listener down.
+/// Returns the port for use in listeners.
+def serveOnce(handler: Connection => Unit at {io, async, global}): Int / Exception[IOError] = {
+  val listener = bind("127.0.0.1", 0)
+  val serverPort = port(listener)
   val _ = spawn(box {
     with on[IOError].panic
     listen(listener, box { connection =>
@@ -17,6 +20,7 @@ def serveOnce(port: Int, handler: Connection => Unit at {io, async, global}): Un
       close(connection)
     })
   })
+  serverPort
 }
 
 def send(connection: Connection, text: String): Int / Exception[IOError] = {
@@ -28,13 +32,13 @@ def main() = {
   with on[IOError].panic
 
   // `read` returns what is there, without waiting for `size` bytes
-  serveOnce(18101, box { connection =>
+  val port1 = serveOnce(box { connection =>
     with on[IOError].panic
     val buffer = bytearray::allocate(64)
     val n = read(connection, buffer, 0, 16)
     val _ = send(connection, "server read " ++ n.show ++ " bytes")
   })
-  val c1 = connect("127.0.0.1", 18101)
+  val c1 = connect("127.0.0.1", port1)
   println("write returned " ++ send(c1, "hello").show)
   val reply = bytearray::allocate(64)
   val r = read(c1, reply, 0, 64)
@@ -42,11 +46,11 @@ def main() = {
   close(c1)
 
   // `read` writes at most `size` bytes, at `offset`
-  serveOnce(18102, box { connection =>
+  val port2 = serveOnce(box { connection =>
     with on[IOError].panic
     val _ = send(connection, "XXXXXXXXXXXXXXXX")
   })
-  val c2 = connect("127.0.0.1", 18102)
+  val c2 = connect("127.0.0.1", port2)
   val small = bytearray::allocate(8)
   each(0, 8) { i => small.set(i, 46.toByte) }
   val n2 = read(c2, small, 6, 2)
@@ -56,11 +60,11 @@ def main() = {
   close(c2)
 
   // end of file is 0, and stays 0
-  serveOnce(18103, box { connection =>
+  val port3 = serveOnce(box { connection =>
     with on[IOError].panic
     val _ = send(connection, "abc")
   })
-  val c3 = connect("127.0.0.1", 18103)
+  val c3 = connect("127.0.0.1", port3)
   val buffer3 = bytearray::allocate(16)
   val first = read(c3, buffer3, 0, 16)
   val second = read(c3, buffer3, 0, 16)
@@ -69,11 +73,11 @@ def main() = {
   close(c3)
 
   // `streaming`'s `next` performs `stop` at end of file
-  serveOnce(18104, box { connection =>
+  val port4 = serveOnce(box { connection =>
     with on[IOError].panic
     val _ = send(connection, "abcd")
   })
-  val c4 = connect("127.0.0.1", 18104)
+  val c4 = connect("127.0.0.1", port4)
   var total = 0
   streaming(c4) {
     loop { total = total + do next[ByteArray]().size }
@@ -82,12 +86,12 @@ def main() = {
   close(c4)
 
   // a read which is still pending when the connection is closed returns 0, like if it were at end of file
-  serveOnce(18107, box { connection =>
+  val port7 = serveOnce(box { connection =>
     with on[IOError].panic
     val reply = bytearray::allocate(4)
     val _ = read(connection, reply, 0, 4)
   })
-  val c7 = connect("127.0.0.1", 18107)
+  val c7 = connect("127.0.0.1", port7)
   val pending = promise(box {
     with on[IOError].result
     read(c7, bytearray::allocate(4), 0, 4)
@@ -96,12 +100,12 @@ def main() = {
   println("pending read after close returned " ++ pending.await.value.show)
 
   // at most one read is pending on a connection: another one raises EALREADY, but the first still completes
-  serveOnce(18108, box { connection =>
+  val port8 = serveOnce(box { connection =>
     with on[IOError].panic
     sleep(200)
     val _ = send(connection, "x")
   })
-  val c8 = connect("127.0.0.1", 18108)
+  val c8 = connect("127.0.0.1", port8)
   def readOrError(): Int =
     try read(c8, bytearray::allocate(4), 0, 4)
     with Exception[IOError] { 
@@ -117,9 +121,37 @@ def main() = {
   println("two pending reads: one returned " ++ max(a, b).show ++ ", the other " ++ (if (min(a, b) == -1) "raised EALREADY" else min(a, b).show))
   close(c8)
 
+  // binding an address which is already bound raises EADDRINUSE
+  val bound = bind("127.0.0.1", 0)
+  try {
+    val _ = bind("127.0.0.1", port(bound));
+    println("binding a bound address succeeded")
+  } with Exception[IOError] {
+    def raise(e, msg) = println("binding a bound address raised: " ++ msg)
+  }
+
+  // a connection which arrives before `listen` starts is handled once it does
+  val early = bind("127.0.0.1", 0)
+  val c9 = connect("127.0.0.1", port(early))
+  val _ = spawn(box {
+    with on[IOError].panic
+    listen(early, box { connection =>
+      with on[IOError].panic
+      shutdown(early)
+      val _ = send(connection, "early")
+      close(connection)
+    })
+  })
+  val greeting = bytearray::allocate(16)
+  val n9 = read(c9, greeting, 0, 16)
+  println("connected before listen, then received: " ++ greeting.resize(n9).toString)
+  close(c9)
+
   // a refused connection raises
+  val closedPort = port(bound)
+  shutdown(bound)
   try { 
-    val _ = connect("127.0.0.1", 18105);
+    val _ = connect("127.0.0.1", closedPort);
     println("connect to a closed port succeeded")
   } with Exception[IOError] { 
     def raise(e, msg) = println("connect to a closed port raised: " ++ msg)
