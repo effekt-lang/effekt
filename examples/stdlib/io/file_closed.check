@@ -1,0 +1,5 @@
+wrote 3 bytes
+write after close raised: bad file descriptor
+read after close raised: bad file descriptor
+close after close raised: bad file descriptor
+the other file holds 0 bytes

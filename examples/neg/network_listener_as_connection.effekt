@@ -1,0 +1,8 @@
+module network_listener_as_connection
+
+import io/network
+
+def closeListener(listener: Listener): Unit =
+  close(listener) // ERROR Expected Connection but got Listener
+
+def main() = ()
