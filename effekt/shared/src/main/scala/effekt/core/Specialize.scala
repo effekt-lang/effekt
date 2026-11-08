@@ -421,15 +421,18 @@ def merge(m: ModuleDecl, copies: Set[Id]): ModuleDecl = {
     case Toplevel.Def(id, block: BlockLit) if copies.contains(id) => id -> block
   }.toMap
 
-  object collecting extends Tree.Query[Unit, Map[Id, List[(List[Expr], List[Block])]]] {
-    def empty = Map.empty
-    def combine = (a, b) => (a.keySet ++ b.keySet).map { k => k -> (a.getOrElse(k, Nil) ++ b.getOrElse(k, Nil)) }.toMap
+  val calls = mutable.Map.empty[Id, List[(List[Expr], List[Block])]]
+  object collecting extends Tree.Query[Unit, Unit] {
+    def empty = ()
+    def combine = (_, _) => ()
     override def stmt(using Unit) = {
       case Stmt.App(Block.BlockVar(f, _, _), targs, vargs, bargs) if definitions.contains(f) =>
-        combine(Map(f -> List((vargs, bargs))), combine(all(vargs, query), all(bargs, query)))
+        calls(f) = (vargs, bargs) :: calls.getOrElse(f, Nil)
+        all(vargs, query)
+        all(bargs, query)
     }
   }
-  val calls = collecting.query(m)(using ())
+  collecting.query(m)(using ())
 
   /** For each position, the position whose parameter it is merged into. */
   def merged(f: Id): (List[Int], List[Int]) = {
