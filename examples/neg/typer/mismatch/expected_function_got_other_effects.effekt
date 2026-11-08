@@ -3,8 +3,8 @@ effect other(): Unit
 
 def apply(f: () => Unit / other at {}): Unit = ()
 
-def fail(): Unit / fail = do fail()
+def mayFail(): Unit / fail = do fail()
 
 def main() = {
-  val _ = apply(box fail)
+  val _ = apply(box mayFail)
 }
