@@ -3,7 +3,7 @@ module ref
 import effekt
 
 extern js """
-  function set$impl(ref, value) {
+  function ref$set(ref, value) {
     ref.value = value;
     return $effekt.unit;
   }
@@ -93,7 +93,7 @@ llvm """
 
 /// Sets the referenced element of the `ref` to `value` in constant time.
 extern def set[T](ref: Ref[T], value: T) at global: Unit =
-  js "set$impl(${ref}, ${value})"
+  js "ref$set(${ref}, ${value})"
   chez "(set-box! ${ref} ${value})"
   llvm """
     %refField_pointer = extractvalue %Pos ${ref}, 1

@@ -363,7 +363,7 @@ namespace internal {
   """
 
 extern jsNode """
-    const { getSystemErrorName } = require('node:util');
+    const error$getSystemErrorName = require('node:util').getSystemErrorName;
 
     /**
      * Maps the error code to a Effekt-stable (platform independent) numeric value.
@@ -376,7 +376,7 @@ extern jsNode """
      * For reference, see the following Deno code which is more readable than the NodeJS implementation:
      * https://github.com/denoland/deno/blob/8fb073d7b4ea83b57fd1bf9875681347b414bbe6/ext/node/polyfills/internal_binding/uv.ts
      */
-    function errorNumber(errno) {
+    function error$number(errno) {
       const mapByName = {
         EPERM: 1,
         ENOENT: 2,
@@ -461,7 +461,7 @@ extern jsNode """
 
       // When the error code is not known, we return 217 (UNKNOWN).
       try {
-        const name = getSystemErrorName(errno);
+        const name = error$getSystemErrorName(errno);
         return mapByName[name] ?? 217;
       } catch {
         return 217;
@@ -470,7 +470,7 @@ extern jsNode """
   """
 
   extern def errorNumber(errno: Int) at {}: Int =
-    jsNode "errorNumber(${errno})"
+    jsNode "error$number(${errno})"
     llvm """
       %z = call %Int @c_error_number(%Int ${errno})
       ret %Int %z

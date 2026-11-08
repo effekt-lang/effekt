@@ -4,6 +4,14 @@ module io
 // Event Loop
 // ----------
 
+// Shared by `io/filesystem` and `io/network`: Node's I/O expects a `Buffer`, and a byte array is a typed array,
+// so this views the same bytes without copying, and Node then writes into the array itself.
+extern jsNode """
+  function io$toBuffer(bytes) {
+    return Buffer.from(bytes.buffer, bytes.byteOffset, bytes.byteLength);
+  }
+"""
+
 extern llvm """
   declare void @c_yield(%Stack)
 """
