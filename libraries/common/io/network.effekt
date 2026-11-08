@@ -98,7 +98,7 @@ namespace internal {
   extern jsNode """
     const net = require('net');
 
-    // Error results are negative libuv codes, as Node reports them in err.errno (see io/filesystem).
+    // Error results are negative libuv codes, as Node reports them in `err.errno` (see `io/filesystem`).
     // Their numbers differ between platforms, so the ones used here are looked up by name.
     const tcp$code = {};
     for (const [code, [name]] of require('node:util').getSystemErrorMap()) tcp$code[name] = code;
@@ -205,7 +205,8 @@ namespace internal {
       return entry.server.address().port;
     }
 
-    // Settles with an error if listening fails, and with 0 once `shutdown` is called.
+    // Settles with `EBADF` if the listener was shut down, and with 0 once `shutdown` is called.
+    // On the other hand, errors of listening, such as `EADDRINUSE`, are raised by `bind`.
     function tcp$listen(listenerHandle, handler, callback) {
       const entry = tcp$handles.get(listenerHandle);
       if (!entry || !entry.server) { callback(tcp$code.EBADF); return; }

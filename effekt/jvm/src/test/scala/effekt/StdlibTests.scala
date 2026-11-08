@@ -33,9 +33,7 @@ class StdlibJavaScriptTests extends StdlibTests {
     examplesDir / "stdlib" / "char" / "ascii_iswhitespace.effekt",
   )
 
-  override def ignored: Set[File] = Set(
-    examplesDir / "stdlib" / "network" / "streaming.effekt",
-  )
+  override def ignored: Set[File] = Set()
 }
 
 abstract class StdlibChezTests extends StdlibTests {

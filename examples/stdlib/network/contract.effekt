@@ -8,7 +8,7 @@ import stream
 
 /// Runs the given `handler` on the first connection to a port chosen by the system,
 /// then shuts the listener down.
-/// Returns the port for use in listeners.
+/// Returns the port to connect to.
 def serveOnce(handler: Connection => Unit at {io, async, global}): Int / Exception[IOError] = {
   val listener = bind("127.0.0.1", 0)
   val serverPort = port(listener)
