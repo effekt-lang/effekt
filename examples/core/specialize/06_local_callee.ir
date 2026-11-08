@@ -1,0 +1,32 @@
+// A local definition is specialized like a toplevel one; what it captures becomes parameters of its copy.
+
+def main(n: Int) = {
+  def run(){h: (Int) => Int} = {
+    (h: (Int) => Int @ {h})(n: Int)
+  }
+  (run: (){h: (Int) => Int} => Int @ {})(){(x: Int) =>
+    return x: Int
+  }
+}
+
+/// INSTANCES
+
+run ↦ [f]
+
+/// SPECIALIZE
+
+def x0(x2: Int) = {
+  def x3(){x5 @ x5: (Int) => Int} = {
+    x5: (Int) => Int @ {x5}(x2: Int)
+  }
+  def x6(x7: Int) = {
+    return x7: Int
+  }
+  x1: (Int) => Int @ {}(x2: Int)
+}
+def x1(x8: Int) = {
+  def x9(x10: Int) = {
+    return x10: Int
+  }
+  x9: (Int) => Int @ {x9}(x8: Int)
+}

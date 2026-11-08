@@ -1,0 +1,33 @@
+// A block literal passed to a definition is named, and the definition gets a copy where the block is known.
+
+def apply(x: Int){f: (Int) => Int} = {
+  (f: (Int) => Int @ {f})(x: Int)
+}
+
+def main() = {
+  (apply: (Int){f: (Int) => Int} => Int @ {})(0){(x: Int) =>
+    return x: Int
+  }
+}
+
+/// INSTANCES
+
+apply ↦ [f]
+
+/// SPECIALIZE
+
+def x0(x4: Int){x5 @ x5: (Int) => Int} = {
+  x5: (Int) => Int @ {x5}(x4: Int)
+}
+def x1() = {
+  def x6(x7: Int) = {
+    return x7: Int
+  }
+  x2: (Int) => Int @ {}(0)
+}
+def x2(x8: Int) = {
+  def x9(x10: Int) = {
+    return x10: Int
+  }
+  x9: (Int) => Int @ {x9}(x8: Int)
+}

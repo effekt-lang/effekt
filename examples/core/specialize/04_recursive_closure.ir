@@ -1,0 +1,84 @@
+// A block built up recursively captures a block from the same definition, which it then captures as unknown.
+
+def loop(b: Bool){k: (Int) => Int} = {
+  if (b: Bool) {
+    (k: (Int) => Int @ {k})(0)
+  } else {
+    (loop: (Bool){k: (Int) => Int} => Int @ {})(b: Bool){(x: Int) =>
+      (k: (Int) => Int @ {k})(x: Int)
+    }
+  }
+}
+
+def main(b: Bool) = {
+  (loop: (Bool){k: (Int) => Int} => Int @ {})(b: Bool){(x: Int) =>
+    return x: Int
+  }
+}
+
+/// INSTANCES
+
+loop ↦ [f(?)]
+loop ↦ [f(f)]
+loop ↦ [f]
+
+/// SPECIALIZE
+
+def x0(x6: Bool){x7 @ x7: (Int) => Int} = {
+  if (x6: Bool) {
+    x7: (Int) => Int @ {x7}(0)
+  } else {
+    def x8(x9: Int) = {
+      x7: (Int) => Int @ {x7}(x9: Int)
+    }
+    x2: (Bool){x10: (Int) => Int} => Int @ {x7}(x6: Bool){x7: (Int) => Int @ {x7}}
+  }
+}
+def x1(x11: Bool) = {
+  def x12(x13: Int) = {
+    return x13: Int
+  }
+  x3: (Bool) => Int @ {}(x11: Bool)
+}
+def x2(x15: Bool){x16 @ x16: (Int) => Int} = {
+  def x17(x18: Int) = {
+    x16: (Int) => Int @ {x16}(x18: Int)
+  }
+  if (x15: Bool) {
+    x17: (Int) => Int @ {x17}(0)
+  } else {
+    def x19(x20: Int) = {
+      x17: (Int) => Int @ {x17}(x20: Int)
+    }
+    x2: (Bool){x21: (Int) => Int} => Int @ {x17}(x15: Bool){x17: (Int) => Int @ {x17}}
+  }
+}
+def x3(x22: Bool) = {
+  def x23(x24: Int) = {
+    return x24: Int
+  }
+  if (x22: Bool) {
+    x23: (Int) => Int @ {x23}(0)
+  } else {
+    def x25(x26: Int) = {
+      x23: (Int) => Int @ {x23}(x26: Int)
+    }
+    x4: (Bool) => Int @ {x23}(x22: Bool)
+  }
+}
+def x4(x27: Bool) = {
+  def x28(x29: Int) = {
+    return x29: Int
+  }
+  def x30(x31: Int) = {
+    x28: (Int) => Int @ {}(x31: Int)
+  }
+  if (x27: Bool) {
+    x30: (Int) => Int @ {x30}(0)
+  } else {
+    def x32(x33: Int) = {
+      x30: (Int) => Int @ {x30}(x33: Int)
+    }
+    x2: (Bool){x34: (Int) => Int} => Int @ {x30}(x27: Bool){x30: (Int) => Int @ {x30}}
+  }
+}

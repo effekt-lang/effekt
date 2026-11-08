@@ -1,0 +1,59 @@
+// The shapes propagate into the copies: ping asks for pong with the same block, which asks for ping again.
+
+def ping(b: Bool){f: (Int) => Int} = {
+  if (b: Bool) {
+    (f: (Int) => Int @ {f})(1)
+  } else {
+    (pong: (Bool){f: (Int) => Int} => Int @ {})(b: Bool){f: (Int) => Int @ {f}}
+  }
+}
+
+def pong(b: Bool){f: (Int) => Int} = {
+  (ping: (Bool){f: (Int) => Int} => Int @ {})(b: Bool){f: (Int) => Int @ {f}}
+}
+
+def main(b: Bool, n: Int) = {
+  (ping: (Bool){f: (Int) => Int} => Int @ {})(b: Bool){(x: Int) =>
+    return n: Int
+  }
+}
+
+/// INSTANCES
+
+ping ↦ [f]
+pong ↦ [f]
+
+/// SPECIALIZE
+
+def x0(x6: Bool){x7 @ x7: (Int) => Int} = {
+  if (x6: Bool) {
+    x7: (Int) => Int @ {x7}(1)
+  } else {
+    x1: (Bool){x8: (Int) => Int} => Int @ {}(x6: Bool){x7: (Int) => Int @ {x7}}
+  }
+}
+def x1(x10: Bool){x11 @ x11: (Int) => Int} = {
+  x0: (Bool){x12: (Int) => Int} => Int @ {}(x10: Bool){x11: (Int) => Int @ {x11}}
+}
+def x2(x13: Bool, x14: Int) = {
+  def x15(x16: Int) = {
+    return x14: Int
+  }
+  x3: (Bool, Int) => Int @ {}(x13: Bool, x14: Int)
+}
+def x3(x17: Bool, x18: Int) = {
+  def x19(x20: Int) = {
+    return x18: Int
+  }
+  if (x17: Bool) {
+    x19: (Int) => Int @ {x19}(1)
+  } else {
+    x4: (Bool, Int) => Int @ {x19}(x17: Bool, x18: Int)
+  }
+}
+def x4(x21: Bool, x22: Int) = {
+  def x23(x24: Int) = {
+    return x22: Int
+  }
+  x3: (Bool, Int) => Int @ {x23}(x21: Bool, x22: Int)
+}
