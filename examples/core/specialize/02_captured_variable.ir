@@ -1,4 +1,4 @@
-// A mutable variable the block captures becomes a block parameter of the copy.
+// A mutable variable the block captures stays visible to the copy, which sits right after the block.
 
 def apply(x: Int){f: (Int) => Int} = {
   (f: (Int) => Int @ {f})(x: Int)
@@ -11,10 +11,6 @@ def main() = {
     return x: Int
   }
 }
-
-/// INSTANCES
-
-apply ↦ [f(?)]
 
 /// SPECIALIZE
 

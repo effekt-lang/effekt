@@ -1,5 +1,5 @@
-// The shapes propagate into the copies: ping asks for pong with the same block, which asks for ping again.
-// Both copies move into `main`, pong's into ping's, where it is called once and inlined.
+// The copy of ping for the lambda sits right after it; it asks for pong with the same block, whose copy is not in
+// scope, so it sits at the beginning of ping's copy, where it sees ping's copy and calls it.
 
 def ping(b: Bool){f: (Int) => Int} = {
   if (b: Bool) {
@@ -19,11 +19,6 @@ def main(b: Bool, n: Int) = {
   }
 }
 
-/// INSTANCES
-
-ping ↦ [f]
-pong ↦ [f]
-
 /// SPECIALIZE
 
 def ping(b: Bool){f @ f: (Int) => Int} = {
@@ -37,13 +32,14 @@ def pong(b: Bool){f @ f: (Int) => Int} = {
   ping: (Bool){f: (Int) => Int} => Int @ {}(b: Bool){f: (Int) => Int @ {f}}
 }
 def main(b: Bool, n: Int) = {
-  def ping_f() = {
+  def ping_f(b: Bool) = {
     if (b: Bool) {
       let x = 1
       return n: Int
     } else {
-      ping_f: () => Int @ {}()
+      let c = b: Bool
+      ping_f: (Bool) => Int @ {}(c: Bool)
     }
   }
-  ping_f: () => Int @ {}()
+  ping_f: (Bool) => Int @ {}(b: Bool)
 }

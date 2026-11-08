@@ -1,4 +1,4 @@
-// A local definition is specialized like a toplevel one; what it captures becomes parameters of its copy.
+// A local definition is specialized like a toplevel one: the copy sits right after the later of the two definitions and sees what both of them see.
 
 def main(n: Int) = {
   def run(){h: (Int) => Int} = {
@@ -8,10 +8,6 @@ def main(n: Int) = {
     return x: Int
   }
 }
-
-/// INSTANCES
-
-run ↦ [f]
 
 /// SPECIALIZE
 

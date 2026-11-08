@@ -10,10 +10,6 @@ def main() = {
   }
 }
 
-/// INSTANCES
-
-apply ↦ [f]
-
 /// SPECIALIZE
 
 def apply(x: Int){f @ f: (Int) => Int} = {

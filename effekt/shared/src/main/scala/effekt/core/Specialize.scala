@@ -9,29 +9,16 @@ import effekt.util.DB
 import scala.collection.mutable
 
 /**
- * Specializes definitions to the blocks passed to them, like Rust monomorphizes closures:
+ * Specializes definitions taking one block to the local definitions passed to them, placing each copy right after
+ * the later of the two definitions, where it sees everything both of them see:
  *
- *   def apply(x: Int){f: Int => Int} = f(x)
- *   def main() = { var s = 0; def g(y: Int) = { s = s + y; return y }; apply(1){g} }
+ *   def h(x) = x + i; … f(5){h}   ~>   def h(x) = x + i; def f_h(y) = [[ body of f ]][g := h]; … f_h(5)
  *
- * becomes
- *
- *   def apply_g(x: Int){s: Ref[Int]} = { def f(y: Int) = { s = s + y; return y }; f(x) }
- *   def main() = { var s = 0; apply_g(1){s} }
- *
- * [[names]] gives every block argument a name, [[instances]] finds, starting from every definition, the shapes of the
- * blocks passed to known definitions, [[specialize]] makes a copy for each of them, [[aliases]] removes the names
- * given to block arguments again, [[merge]] merges the parameters of a copy that are always passed the same,
- * [[place]] moves copies as far in as their calls allow, and [[optimizer.cleanup]] removes what is left unused and
- * inlines what is called once.
- * Toplevel and local definitions are treated alike; the definitions themselves stay for every other use.
+ * [[names]] gives every literal block argument a name, [[specialize]] makes the copies, and [[optimizer.cleanup]]
+ * removes what is left unused and inlines what is called once.
  */
-def specialization(m: ModuleDecl): ModuleDecl = {
-  val named = names(m)
-  val known = sites(named)
-  val (specialized, copies) = specialize(named, known, instances(named, known))
-  optimizer.cleanup(place(merge(aliases(specialized), copies), copies))
-}
+def specialization(m: ModuleDecl): ModuleDecl =
+  optimizer.cleanup(specialize(names(m)))
 
 object Specialize extends Phase[CoreTransformed, CoreTransformed] {
   val phaseName: String = "specialize"
@@ -47,20 +34,19 @@ object Specialize extends Phase[CoreTransformed, CoreTransformed] {
 // -----
 
 /**
- * [[ f(…){ b } ]] = def g = [[ b ]]; f(…){ g }   for every block argument `b`, also one that has a name already
+ * [[ f(…){ b } ]] = def g = [[ b ]]; f(…){ g }   for every block argument `b` that is a literal or an object
  */
 def names(m: ModuleDecl): ModuleDecl = {
   object naming extends Tree.Rewrite {
     override def rewrite(s: Stmt): Stmt = s match {
       case Stmt.App(callee, targs, vargs, bargs) =>
-        val named = bargs.map { block =>
-          val id = block match {
-            case Block.BlockVar(x, _, _) => Id(x)
-            case _ => Id("f")
-          }
-          (id -> rewrite(block), Block.BlockVar(id, block.tpe, block.capt))
+        val named = bargs.map {
+          case block @ (_: BlockLit | _: Block.New) =>
+            val id = Id("f")
+            (Some(id -> rewrite(block)), Block.BlockVar(id, block.tpe, block.capt))
+          case block => (None, rewrite(block))
         }
-        named.map(_._1).foldRight(Stmt.App(rewrite(callee), targs, vargs.map(rewrite), named.map(_._2)): Stmt) {
+        named.flatMap(_._1).foldRight(Stmt.App(rewrite(callee), targs, vargs.map(rewrite), named.map(_._2)): Stmt) {
           case ((id, block), rest) => Stmt.Def(id, block, rest)
         }
       case other => super.rewrite(other)
@@ -70,601 +56,128 @@ def names(m: ModuleDecl): ModuleDecl = {
 }
 
 
-// Sites
-// -----
-
-/** A definition of a block: what it is, and the values and blocks it captures, in a fixed order. */
-case class Site(block: Block, values: List[ValueParam], blocks: List[BlockParam])
-
-/**
- * Every definition whose block is a literal or an object. Toplevel definitions capture nothing, and no definition
- * captures itself.
- */
-def sites(m: ModuleDecl): Map[Id, Site] = {
-  val globals: Set[Id] = m.definitions.map(_.id).toSet ++ m.externs.collect { case d: Extern.Def => d.id }
-
-  def local(self: Id, block: Block): Site = {
-    val free = block.free
-    val values = free.values.toMap.toList.sortBy(_._1.id).map { case (id, tpe) => ValueParam(id, tpe) }
-    val blocks = free.blocks.toMap.toList.filterNot { case (id, _) => globals.contains(id) || id == self }.sortBy(_._1.id)
-      .map { case (id, (tpe, capt)) => BlockParam(id, tpe, capt) }
-    Site(block, values, blocks)
-  }
-
-  object collecting extends Tree.Query[Unit, Map[Id, Site]] {
-    def empty = Map.empty
-    def combine = _ ++ _
-    override def stmt(using Unit) = {
-      case Stmt.Def(id, block @ (_: BlockLit | _: Block.New), body) =>
-        Map(id -> local(id, block)) ++ query(block) ++ query(body)
-    }
-  }
-  m.definitions.collect { case Toplevel.Def(id, block: BlockLit) => id -> Site(block, Nil, Nil) }.toMap ++
-    collecting.query(m)(using ())
-}
-
-
-// Shapes
-// ------
-
-/** A known block: the definition it comes from, and for each block it captures whether that is known. */
-case class Shape(site: Id, captures: List[Option[Shape]]) {
-  def contains(other: Id): Boolean = site == other || captures.exists(_.exists(_.contains(other)))
-}
-
-/** A call to a known definition with some known block arguments. */
-case class Instance(callee: Shape, arguments: List[Option[Shape]])
-
-/**
- * The shape of the block defined as [[site]], where [[known]] gives the shapes of the blocks it captures under their
- * names here. A block capturing a block from the same definition is built up recursively, and captures it as unknown.
- */
-def shape(site: Id, known: Id => Option[Shape])(using sites: Map[Id, Site]): Option[Shape] =
-  sites.get(site).map { s => Shape(site, s.blocks.map { b => known(b.id).filterNot(_.contains(site)) }) }
-
-/** The instance a call `callee(…){bargs}` asks for, if the callee and some of its block arguments are known. */
-def instance(callee: Id, bargs: List[Block], known: Id => Option[Shape])(using sites: Map[Id, Site]): Option[Instance] = {
-  val arguments = bargs.map {
-    case Block.BlockVar(id, _, _) => known(id)
-    case _ => None
-  }
-  known(callee).filter { c => literal(c).exists(_.bparams.nonEmpty) && arguments.exists(_.isDefined) }
-    .map { c => Instance(c, arguments) }
-}
-
-def literal(shape: Shape)(using sites: Map[Id, Site]): Option[BlockLit] = sites(shape.site).block match {
-  case block: BlockLit => Some(block)
-  case _ => None
-}
-
-/** The captured values and unknown captured blocks of a known block, depth first. */
-def leaves(shape: Shape)(using sites: Map[Id, Site]): List[ValueParam | BlockParam] = {
-  val site = sites(shape.site)
-  site.values ++ (site.blocks zip shape.captures).flatMap {
-    case (b, Some(nested)) => leaves(nested)
-    case (b, None) => List(b)
-  }
-}
-
-
-// Instances
-// ---------
-
-/**
- * All instances, starting from every definition and propagating the shapes into the instances found:
- * in an instance, the known block arguments and the blocks its callee captures are known.
- */
-def instances(m: ModuleDecl, known: Map[Id, Site]): List[Instance] = {
-  given Map[Id, Site] = known
-  val found = mutable.LinkedHashSet.empty[Instance]
-  val pending = mutable.Queue.empty[Instance]
-
-  def lookup(env: Map[Id, Shape])(id: Id): Option[Shape] =
-    env.get(id).orElse(Option.when(known.get(id).exists(_.values.isEmpty) && isToplevel(id))(Shape(id, Nil)))
-
-  lazy val toplevel: Set[Id] = m.definitions.map(_.id).toSet
-  def isToplevel(id: Id): Boolean = toplevel.contains(id)
-
-  object collecting extends Tree.Query[Map[Id, Shape], Unit] {
-    def empty = ()
-    def combine = (_, _) => ()
-    override def stmt(using env: Map[Id, Shape]) = {
-      case Stmt.Def(id, block, body) =>
-        val bound = block match {
-          case Block.BlockVar(x, _, _) => lookup(env)(x)
-          case _ => shape(id, lookup(env))
-        }
-        val inner = bound.map { s => env + (id -> s) }.getOrElse(env - id)
-        query(block)(using inner)
-        query(body)(using inner)
-      case Stmt.App(callee @ Block.BlockVar(f, _, _), targs, vargs, bargs) =>
-        instance(f, bargs, lookup(env)).foreach { i => if found.add(i) then pending.enqueue(i) }
-        all(vargs, query)
-        all(bargs, query)
-    }
-  }
-
-  m.definitions.foreach { d => collecting.query(d)(using Map.empty) }
-  while (pending.nonEmpty) {
-    val i = pending.dequeue()
-    val block = literal(i.callee).get
-    val captured = (known(i.callee.site).blocks zip i.callee.captures).collect { case (b, Some(s)) => b.id -> s }
-    val arguments = (block.bparams zip i.arguments).collect { case (p, Some(s)) => p.id -> s }
-    val self = Option.unless(isToplevel(i.callee.site))(i.callee.site -> i.callee)
-    collecting.query(block.body)(using (captured ++ arguments ++ self).toMap)
-  }
-  found.toList
-}
-
-
 // Specialize
 // ----------
 
 /**
- * One copy per instance, and every call asking for an instance calls its copy instead:
- *
- *   [[ f(…){ g } ]] = f_g(…, values g captures){ unknown blocks g captures }   if the instance is known
- *
- * The copy binds the known blocks it needs at its beginning, each capturing fresh parameters, so that a block
- * captured from different places does not get confused:
- *
- *   def f_g(…, v'){b'} = def g = { … v' … b' … }; [[ body of f ]]
- *
- * A local definition refers to itself in the copy as a definition bound at its beginning, known by the instance's
- * callee, so that a recursive call with the same blocks calls the copy again.
- * A call to a copy keeps the captures of the blocks it no longer passes, since they are still used in the copy.
+ * What is in scope: the local definitions of literals and objects, the aliases `def x = y`, the copies, and the
+ * callees and arguments of the copies we are in, by where they come from.
  */
-def specialize(m: ModuleDecl, known: Map[Id, Site], all: List[Instance]): (ModuleDecl, Set[Id]) = {
-  given Map[Id, Site] = known
-  val toplevel: Set[Id] = m.definitions.map(_.id).toSet
-  val copies: Map[Instance, Id] = all.map { i =>
-    i -> Id(i.callee.site.name.name + "_specialized")
+case class Scope(
+  definitions: Map[Id, Block],
+  aliases: Map[Id, Id],
+  copies: Map[(Id, Id), Id],
+  within: Set[(Id, Id)]
+) {
+  def resolve(id: Id): Id = aliases.get(id).map(resolve).getOrElse(id)
+}
+
+/**
+ * One copy per callee taking one block and local definition passed to it, right after the later of the two:
+ *
+ *   [[ def g = b; s ]] = def g = [[ b ]]; def f_g(x) = [[ body of f ]][k := g]; [[ s ]]   for each `f(…){g}` in `s`
+ *   [[ f(e){g} ]] = f_g(e)   if the copy is in scope
+ *
+ * A copy asking for another copy with a block defined outside of it, which is not in scope, gets it at its beginning,
+ * so that mutual recursion `ping(…){g}`, `pong(…){g}` ends up nested.
+ * A copy of `f` for a block defined at the same place as the block of a copy of `f` we are in is built up recursively,
+ * so we do not make it.
+ */
+def specialize(m: ModuleDecl): ModuleDecl = {
+  val toplevel: Map[Id, BlockLit] = m.definitions.collect {
+    case Toplevel.Def(id, block: BlockLit) => id -> block
   }.toMap
 
-  /** Where a renamed name comes from, so that the copies agree on what a definition is. */
   val origin = mutable.Map.empty[Id, Id]
-  def originOf(id: Id): Id = origin.getOrElse(id, id)
+  def originOf(id: Id): Id = origin.get(id).map(originOf).getOrElse(id)
 
-  /** A known block in scope: its shape, and the block, to find what it captures under the names here. */
-  case class Known(shape: Shape, block: Block)
-
-  def lookup(env: Map[Id, Known])(id: Id): Option[Shape] =
-    env.get(id).map(_.shape).orElse(Option.when(toplevel.contains(id) && known.contains(id))(Shape(id, Nil)))
-
-  /** What a known block captures, under the names it has here, in the order of [[leaves]], not counting itself. */
-  def arguments(k: Known, env: Map[Id, Known]): List[Expr | Block] = {
-    val site = known(k.shape.site)
-    val free = k.block.free
-    val values = free.values.toMap.map { case (id, tpe) => originOf(id) -> (Expr.ValueVar(id, tpe): Expr) }
-    val blocks = free.blocks.toMap.filterNot { case (id, _) => env.get(id).exists(_.block eq k.block) }
-      .map { case (id, (tpe, capt)) => originOf(id) -> (id, Block.BlockVar(id, tpe, capt)) }
-    site.values.map { v => values(v.id) } ++ (site.blocks zip k.shape.captures).flatMap {
-      case (b, Some(nested)) => arguments(Known(nested, env(blocks(b.id)._1).block), env)
-      case (b, None) => List(blocks(b.id)._2)
-    }
-  }
-
-  def signature(i: Instance): BlockType.Function = {
-    val block = literal(i.callee).get
-    val extra = (i.callee :: i.arguments.flatten).flatMap(leaves)
-    val kept = (block.bparams zip i.arguments).collect { case (p, None) => p }
-    val keptCaptures = (block.cparams zip i.arguments).collect { case (c, None) => c }
-    val extraBlocks = extra.collect { case b: BlockParam => b }
-    BlockType.Function(block.tparams, keptCaptures ++ extraBlocks.map(_.id),
-      block.vparams.map(_.tpe) ++ extra.collect { case v: ValueParam => v.tpe },
-      kept.map(_.tpe) ++ extraBlocks.map(_.tpe),
-      block.body.tpe)
-  }
-
-  object specializing extends Tree.RewriteWithContext[Map[Id, Known]] {
-    override def rewrite(s: Stmt)(using env: Map[Id, Known]): Stmt = s match {
-      case Stmt.Def(id, block, body) =>
-        val bound = env.get(id).orElse {
-          block match {
-            case Block.BlockVar(x, _, _) => env.get(x).orElse(lookup(env)(x).map { s => Known(s, block) })
-            case _ => shape(originOf(id), name => lookup(env)(current(block, name))).map { s => Known(s, block) }
-          }
-        }
-        val inner = bound.map { k => env + (id -> k) }.getOrElse(env)
-        Stmt.Def(id, rewrite(block)(using inner), rewrite(body)(using inner))
-
-      case Stmt.App(callee @ Block.BlockVar(f, _, capt), targs, vargs, bargs) =>
-        instance(f, bargs, lookup(env)).filter(copies.contains) match {
-          case Some(i) =>
-            val calleeKnown = env.getOrElse(f, Known(i.callee, callee))
-            val passed = (bargs zip i.arguments).collect { case (b @ Block.BlockVar(x, _, _), Some(_)) => env.getOrElse(x, Known(lookup(env)(x).get, b)) }
-            val extra = (calleeKnown :: passed).flatMap(arguments(_, env))
-            val unknown = (bargs zip i.arguments).collect { case (b, None) => rewrite(b) }
-            val captures = capt ++ (bargs zip i.arguments).collect { case (b, Some(_)) => b.capt }.flatten
-            Stmt.App(Block.BlockVar(copies(i), signature(i), captures), targs,
-              vargs.map(rewrite) ++ extra.collect { case e: Expr => e },
-              unknown ++ extra.collect { case b: Block => b })
-          case None => super.rewrite(s)
-        }
-
-      case other => super.rewrite(other)
-    }
-  }
-
-  /** The name a block captured by the definition [[block]] has here, given its name where it was defined. */
-  def current(block: Block, name: Id): Id =
-    block.free.blocks.toMap.keys.find { id => originOf(id) == name }.getOrElse(name)
-
-  /** [[block]] with fresh names for everything it binds, remembering the names they replace. */
-  def fresh[B <: Block](block: B): B = {
-    val renamer = Renamer()
-    val renamed = renamer.rewrite(block).asInstanceOf[B]
-    renamer.renamed.foreach { case (fresh, old) => origin(fresh) = originOf(old) }
+  def fresh(block: BlockLit): BlockLit = {
+    val (renamed, renaming) = Renamer.rename(block)
+    renaming.foreach { case (fresh, old) => origin(fresh) = old }
     renamed
   }
 
-  /**
-   * The parameters for what a block of [[shape]] captures, the bindings of the known blocks it captures,
-   * named fresh and known by their shapes, and the substitution for its free variables.
-   */
-  def captured(shape: Shape): (List[ValueParam | BlockParam], List[Binding], Map[Id, Known], Substitution) = {
-    val site = known(shape.site)
-    val values = site.values.map { v =>
-      val param = ValueParam(Id(v.id), v.tpe)
-      origin(param.id) = v.id
-      param
-    }
-    val blocks = (site.blocks zip shape.captures).map {
-      case (b, Some(s)) =>
-        val name = Id(b.id)
-        origin(name) = b.id
-        val (params, bindings, seeds) = instantiate(name, s)
-        (params, Block.BlockVar(name, b.tpe, seeds(name).block.capt), bindings, seeds)
-      case (b, None) =>
-        val name = Id(b.id)
-        origin(name) = b.id
-        (List(BlockParam(name, b.tpe, Set(name))), Block.BlockVar(name, b.tpe, Set(name)), Nil, Map.empty)
-    }
-    val substitution = Substitution(DB.empty,
-      DB.from((site.blocks zip blocks).flatMap { case (b, (_, block, _, _)) => b.capt.map { c => c -> block.capt } }),
-      DB.from((site.values zip values).map { case (v, param) => v.id -> Expr.ValueVar(param.id, param.tpe) }),
-      DB.from((site.blocks zip blocks).map { case (b, (_, block, _, _)) => b.id -> block }))
-    (values ++ blocks.flatMap(_._1), blocks.flatMap(_._3), blocks.map(_._4).foldLeft(Map.empty)(_ ++ _), substitution)
-  }
-
-  /** Binds a block of [[shape]] as [[name]], see [[captured]]. */
-  def instantiate(name: Id, shape: Shape): (List[ValueParam | BlockParam], List[Binding], Map[Id, Known]) =
-    if (toplevel.contains(shape.site)) {
-      val site = known(shape.site)
-      val alias = Block.BlockVar(shape.site, site.block.tpe, site.block.capt)
-      (Nil, List(Binding.Def(name, alias)), Map(name -> Known(shape, alias)))
-    } else {
-      val (params, bindings, seeds, substitution) = captured(shape)
-      val block = fresh(substitute(known(shape.site).block)(using itself(substitution, shape.site, name)))
-      (params, bindings :+ Binding.Def(name, block), seeds + (name -> Known(shape, block)))
+  /** The definition taking one block that [[f]] stands for. */
+  def callee(f: Id, scope: Scope): Option[BlockLit] =
+    scope.definitions.get(f).orElse(toplevel.get(f)).collect {
+      case block: BlockLit if block.bparams.size == 1 => block
     }
 
-  /** [[substitution]], and the definition [[site]] refers to itself as [[name]]. */
-  def itself(substitution: Substitution, site: Id, name: Id): Substitution = {
-    val block = known(site).block
-    substitution.copy(blocks = substitution.blocks + (site -> Block.BlockVar(name, block.tpe, block.capt)))
-  }
-
-  def copy(i: Instance): Toplevel.Def = {
-    val callee = fresh(literal(i.callee).get)
-    val (calleeParams, capturedBindings, capturedSeeds, capturedSubstitution) = captured(i.callee)
-    val (calleeBindings, calleeSeeds, calleeSubstitution) =
-      if (toplevel.contains(i.callee.site)) (capturedBindings, capturedSeeds, capturedSubstitution) else {
-        val name = Id(i.callee.site)
-        val substitution = itself(capturedSubstitution, i.callee.site, name)
-        val block = fresh(substitute(known(i.callee.site).block)(using substitution))
-        (capturedBindings :+ Binding.Def(name, block), capturedSeeds + (name -> Known(i.callee, block)), substitution)
-      }
-    val (argumentParams, argumentBindings, argumentSeeds) = (callee.bparams zip i.arguments).collect {
-      case (p, Some(s)) => instantiate(p.id, s)
-    }.unzip3
-    val extra = calleeParams ++ argumentParams.flatten
-    val extraBlocks = extra.collect { case b: BlockParam => b }
-    val kept = (callee.bparams zip i.arguments).collect { case (p, None) => p }
-    val keptCaptures = (callee.cparams zip i.arguments).collect { case (c, None) => c }
-    val passed = (callee.bparams zip i.arguments).collect { case (p, Some(_)) => p -> argumentSeeds.flatten.toMap.apply(p.id).block }
-    val bound = Substitution(DB.empty,
-      DB.from(passed.flatMap { case (p, block) => p.capt.map { c => c -> block.capt } }),
-      DB.empty,
-      DB.from(passed.map { case (p, block) => p.id -> Block.BlockVar(p.id, p.tpe, block.capt) }))
-    val body = Binding(calleeBindings ++ argumentBindings.flatten,
-      substitute(substitute(callee.body)(using calleeSubstitution))(using bound))
-    val copied = BlockLit(callee.tparams, keptCaptures ++ extraBlocks.map(_.id),
-      callee.vparams ++ extra.collect { case v: ValueParam => v }, kept ++ extraBlocks, body)
-    Toplevel.Def(copies(i), specializing.rewrite(copied)(using argumentSeeds.foldLeft(calleeSeeds)(_ ++ _)))
-  }
-
-  val rewritten = m.definitions.map {
-    case Toplevel.Def(id, block) => Toplevel.Def(id, specializing.rewrite(block)(using Map.empty))
-    case Toplevel.Val(id, binding) => Toplevel.Val(id, specializing.rewrite(binding)(using Map.empty))
-  }
-  (m.copy(definitions = rewritten ++ all.map(copy)), copies.values.toSet)
-}
-
-
-// Aliases
-// -------
-
-/**
- * [[ def g = f; s ]] = [[ s ]][g := f]
- */
-def aliases(m: ModuleDecl): ModuleDecl = {
-  object dealiasing extends Tree.RewriteWithContext[Map[Id, Block.BlockVar]] {
-    override def rewrite(b: Block)(using known: Map[Id, Block.BlockVar]): Block = b match {
-      case Block.BlockVar(id, _, _) if known.contains(id) => known(id)
-      case other => super.rewrite(other)
-    }
-    override def rewrite(b: Block.BlockVar)(using known: Map[Id, Block.BlockVar]): Block.BlockVar =
-      known.getOrElse(b.id, b)
-    override def rewrite(s: Stmt)(using known: Map[Id, Block.BlockVar]): Stmt = s match {
-      case Stmt.Def(id, Block.BlockVar(x, tpe, capt), body) =>
-        rewrite(body)(using known + (id -> known.getOrElse(x, Block.BlockVar(x, tpe, capt))))
-      case other => super.rewrite(other)
-    }
-  }
-  dealiasing.rewrite(m)(using Map.empty)
-}
-
-
-// Merge
-// -----
-
-/**
- * Merges the parameters of a copy that every call passes the same variable, where in the copy itself two parameters
- * merged count as the same:
- *
- *   def f(x, y) = … f(x, x) …;  f(a, a)   ~>   def f(x) = … f(x) …;  f(a)
- *
- * The pairs of parameters are the greatest fixed point: we start with all of them and drop those some call separates.
- */
-def merge(m: ModuleDecl, copies: Set[Id]): ModuleDecl = {
-  val definitions: Map[Id, BlockLit] = m.definitions.collect {
-    case Toplevel.Def(id, block: BlockLit) if copies.contains(id) => id -> block
-  }.toMap
-
-  val calls = mutable.Map.empty[Id, List[(List[Expr], List[Block])]]
-  object collecting extends Tree.Query[Unit, Unit] {
-    def empty = ()
-    def combine = (_, _) => ()
-    override def stmt(using Unit) = {
-      case Stmt.App(Block.BlockVar(f, _, _), targs, vargs, bargs) if definitions.contains(f) =>
-        calls(f) = (vargs, bargs) :: calls.getOrElse(f, Nil)
-        all(vargs, query)
-        all(bargs, query)
-    }
-  }
-  collecting.query(m)(using ())
-
-  /** For each position, the position whose parameter it is merged into. */
-  def merged(f: Id): (List[Int], List[Int]) = {
-    val block = definitions(f)
-    val valueIndex = block.vparams.map(_.id).zipWithIndex.toMap
-    val blockIndex = block.bparams.map(_.id).zipWithIndex.toMap
-
-    def pairs[P](params: List[P], tpe: P => Any): Set[(Int, Int)] =
-      (for { i <- params.indices; j <- params.indices if i < j && tpe(params(i)) == tpe(params(j)) } yield (i, j)).toSet
-
-    def same(related: Set[(Int, Int)], index: Map[Id, Int])(a: Option[Id], b: Option[Id]): Boolean = (a, b) match {
-      case (Some(x), Some(y)) if x == y => true
-      case (Some(x), Some(y)) => (index.get(x), index.get(y)) match {
-        case (Some(i), Some(j)) => related.contains((i min j, i max j))
-        case _ => false
-      }
-      case _ => false
-    }
-
-    def value(e: Expr): Option[Id] = e match {
-      case Expr.ValueVar(id, _) => Some(id)
-      case _ => None
-    }
-
-    def variable(b: Block): Option[Id] = b match {
-      case Block.BlockVar(id, _, _) => Some(id)
-      case _ => None
-    }
-
-    var values = pairs(block.vparams, _.tpe)
-    var blocks = pairs(block.bparams, _.tpe)
-    var changed = true
-    while (changed) {
-      val nextValues = values.filter { case (i, j) =>
-        calls.getOrElse(f, Nil).forall { case (vargs, _) => same(values, valueIndex)(value(vargs(i)), value(vargs(j))) }
-      }
-      val nextBlocks = blocks.filter { case (i, j) =>
-        calls.getOrElse(f, Nil).forall { case (_, bargs) => same(blocks, blockIndex)(variable(bargs(i)), variable(bargs(j))) }
-      }
-      changed = nextValues != values || nextBlocks != blocks
-      values = nextValues
-      blocks = nextBlocks
-    }
-    def representatives(n: Int, related: Set[(Int, Int)]): List[Int] =
-      (0 until n).toList.map { j => (0 until j).find { i => related.contains((i, j)) }.getOrElse(j) }
-    (representatives(block.vparams.size, values), representatives(block.bparams.size, blocks))
-  }
-
-  val representatives: Map[Id, (List[Int], List[Int])] = definitions.keys.map { f => f -> merged(f) }.toMap
-
-  def kept[A](representative: List[Int], as: List[A]): List[A] =
-    (as zip representative).zipWithIndex.collect { case ((a, r), i) if r == i => a }
-
-  def retyped(f: Id, tpe: BlockType): BlockType = tpe match {
-    case BlockType.Function(tparams, cparams, vparams, bparams, result) =>
-      val (vs, bs) = representatives(f)
-      BlockType.Function(tparams, kept(bs, cparams), kept(vs, vparams), kept(bs, bparams), result)
-    case other => other
-  }
-
-  object merging extends Tree.Rewrite {
-    override def rewrite(s: Stmt): Stmt = s match {
-      case Stmt.App(Block.BlockVar(f, tpe, capt), targs, vargs, bargs) if representatives.contains(f) =>
-        val (vs, bs) = representatives(f)
-        Stmt.App(Block.BlockVar(f, retyped(f, tpe), capt), targs, kept(vs, vargs.map(rewrite)), kept(bs, bargs.map(rewrite)))
-      case other => super.rewrite(other)
-    }
-  }
-
-  m.copy(definitions = m.definitions.map {
-    case Toplevel.Def(f, block: BlockLit) if representatives.contains(f) =>
-      val (vs, bs) = representatives(f)
-      val substitution = Substitution(DB.empty,
-        DB.from(block.bparams.zipWithIndex.collect { case (p, i) if bs(i) != i => p.capt.map { c => c -> block.bparams(bs(i)).capt } }.flatten),
-        DB.from(block.vparams.zipWithIndex.collect { case (p, i) if vs(i) != i =>
-          val r = block.vparams(vs(i))
-          p.id -> Expr.ValueVar(r.id, r.tpe)
-        }),
-        DB.from(block.bparams.zipWithIndex.collect { case (p, i) if bs(i) != i =>
-          val r = block.bparams(bs(i))
-          p.id -> Block.BlockVar(r.id, r.tpe, r.capt)
-        }))
-      val body = merging.rewrite(substitute(block.body)(using substitution))
-      Toplevel.Def(f, BlockLit(block.tparams, kept(bs, block.cparams), kept(vs, block.vparams), kept(bs, block.bparams), body))
-    case Toplevel.Def(f, block) => Toplevel.Def(f, merging.rewrite(block))
-    case Toplevel.Val(f, binding) => Toplevel.Val(f, merging.rewrite(binding))
-  })
-}
-
-
-// Place
-// -----
-
-/**
- * Moves each copy called from only one other definition into it, around the innermost statement containing all its
- * calls there, and drops the parameters that all these calls pass the same variable visible there:
- *
- *   def f_g(x){p} = … f_g(x){p} …;  def main() = reset { p => … f_g(1){p} … }
- *     ~>   def main() = reset { p => def f_g(x) = … f_g(x) …; … f_g(1) … }
- *
- * A copy whose calls are then all inside another copy moves along with it, so we repeat until nothing moves.
- */
-def place(m: ModuleDecl, copies: Set[Id]): ModuleDecl = {
-
-  def calls(c: Id, tree: Stmt | Block): List[(List[Expr], List[Block])] = {
-    val found = mutable.ListBuffer.empty[(List[Expr], List[Block])]
-    object collecting extends Tree.Query[Unit, Unit] {
-      def empty = ()
-      def combine = (_, _) => ()
-      override def stmt(using Unit) = {
-        case Stmt.App(Block.BlockVar(f, _, _), targs, vargs, bargs) =>
-          if (f == c) found += ((vargs, bargs))
-          all(vargs, query)
-          all(bargs, query)
+  /** The calls `f(…){g}` in [[s]], by what the names stand for. */
+  def calls(s: Stmt, scope: Scope): Set[(Id, Id)] = {
+    object collecting extends Tree.Query[Map[Id, Id], Set[(Id, Id)]] {
+      def empty = Set.empty
+      def combine = _ ++ _
+      def resolve(id: Id)(using aliases: Map[Id, Id]): Id = aliases.get(id).map(resolve).getOrElse(scope.resolve(id))
+      override def stmt(using aliases: Map[Id, Id]) = {
+        case Stmt.Def(id, Block.BlockVar(x, _, _), body) => query(body)(using aliases + (id -> x))
+        case Stmt.App(Block.BlockVar(f, _, _), targs, vargs, List(Block.BlockVar(x, _, _))) =>
+          combine(Set(resolve(f) -> resolve(x)), all(vargs, query))
       }
     }
-    tree match {
-      case s: Stmt => collecting.query(s)(using ())
-      case b: Block => collecting.query(b)(using ())
+    collecting.query(s)(using Map.empty)
+  }
+
+  /** The copies [[s]] asks for that [[wanted]] decides to make here, named, and the scope with them. */
+  def provide(s: Stmt, scope: Scope)(wanted: (Id, Id) => Boolean): (List[(Id, Id, Id)], Scope) = {
+    val requests = calls(s, scope).toList.filter { case (f, g) =>
+      !scope.copies.contains((f, g)) && wanted(f, g) && callee(f, scope).isDefined &&
+        scope.definitions.contains(g) && !scope.within.contains((originOf(f), originOf(g)))
     }
-    found.toList
+    val named = requests.map { case (f, g) => (f, g, Id(f.name.name + "_" + g.name.name)) }
+    (named, scope.copy(copies = scope.copies ++ named.map { case (f, g, c) => (f, g) -> c }))
   }
 
-  /** The positions of [[block]]'s parameters that every call in [[outside]] passes the same variable, free in [[outside]], and that the calls in [[block]] pass on unchanged. */
-  def dropped(block: BlockLit, outside: Stmt, external: List[(List[Expr], List[Block])], internal: List[(List[Expr], List[Block])]): (Map[Int, Expr.ValueVar], Map[Int, Block.BlockVar]) = {
-    val free = outside.free
-    val values = block.vparams.indices.flatMap { i =>
-      external.map(_._1(i)).distinct match {
-        case List(v @ Expr.ValueVar(x, _)) if free.values.toMap.contains(x) &&
-            internal.forall { case (vargs, _) => vargs(i) match { case Expr.ValueVar(y, _) => y == block.vparams(i).id || y == x; case _ => false } } =>
-          Some(i -> v)
-        case _ => None
-      }
-    }.toMap
-    val blocks = block.bparams.indices.flatMap { i =>
-      external.map(_._2(i)).collect { case b: Block.BlockVar => b.id }.distinct match {
-        case List(x) if external.forall(_._2(i).isInstanceOf[Block.BlockVar]) && free.blocks.toMap.contains(x) &&
-            internal.forall { case (_, bargs) => bargs(i) match { case Block.BlockVar(y, _, _) => y == block.bparams(i).id || y == x; case _ => false } } =>
-          Some(i -> external.head._2(i).asInstanceOf[Block.BlockVar])
-        case _ => None
-      }
-    }.toMap
-    (values, blocks)
+  def copy(f: Id, g: Id, scope: Scope): BlockLit = {
+    val block = fresh(callee(f, scope).get)
+    val argument = scope.definitions(g)
+    val k = block.bparams.head
+    val variable = Block.BlockVar(g, argument.tpe, argument.capt)
+    val body = substitute(block.body)(using Substitution(DB.empty,
+      DB.from(block.cparams.map { c => c -> argument.capt }), DB.empty, DB.from(List(k.id -> variable))))
+    val inner = scope.copy(within = scope.within + ((originOf(f), originOf(g))))
+    val (outside, withOutside) = provide(body, inner) { (_, _) => true }
+    BlockLit(block.tparams, Nil, block.vparams, Nil, bind(outside, withOutside, specializing.rewrite(body)(using withOutside)))
   }
 
-  def sink(m: ModuleDecl, c: Id, d: Id): ModuleDecl = {
-    val block = m.definitions.collectFirst { case Toplevel.Def(`c`, b: BlockLit) => b }.get
-    val total = calls(c, m.definitions.collectFirst { case Toplevel.Def(`d`, b) => b }.get).size
+  /** Binds the copies [[named]] in order, each seeing itself and the ones before it. */
+  def bind(named: List[(Id, Id, Id)], scope: Scope, rest: Stmt): Stmt = {
+    val before = scope.copy(copies = scope.copies -- named.map { case (f, g, _) => (f, g) })
+    def go(named: List[(Id, Id, Id)], scope: Scope): Stmt = named match {
+      case Nil => rest
+      case (f, g, c) :: more =>
+        val seeing = scope.copy(copies = scope.copies + ((f, g) -> c))
+        Stmt.Def(c, copy(f, g, seeing), go(more, seeing))
+    }
+    go(named, before)
+  }
 
-    val counts = new java.util.IdentityHashMap[Stmt, Integer]
-    object counting extends Tree.Query[Unit, Int] {
-      def empty = 0
-      def combine = _ + _
-      override def visit[T](t: T)(visitor: Unit ?=> T => Int)(using Unit): Int = {
-        val result = visitor(t)
-        t match {
-          case s: Stmt => counts.put(s, result)
-          case _ => ()
+  object specializing extends Tree.RewriteWithContext[Scope] {
+    override def rewrite(s: Stmt)(using scope: Scope): Stmt = s match {
+      case Stmt.Def(id, alias @ Block.BlockVar(x, _, _), body) =>
+        Stmt.Def(id, alias, rewrite(body)(using scope.copy(aliases = scope.aliases + (id -> x))))
+
+      case Stmt.Def(id, block @ (_: BlockLit | _: Block.New), body) =>
+        val defined = scope.copy(definitions = scope.definitions + (id -> block))
+        val (named, withCopies) = provide(body, defined) { (f, g) => f == id || g == id }
+        Stmt.Def(id, rewrite(block)(using defined), bind(named, withCopies, rewrite(body)(using withCopies)))
+
+      case Stmt.App(callee @ Block.BlockVar(f, _, capt), targs, vargs, List(argument @ Block.BlockVar(x, _, _)))
+          if scope.copies.contains((scope.resolve(f), scope.resolve(x))) =>
+        val c = scope.copies((scope.resolve(f), scope.resolve(x)))
+        val tpe = callee.tpe match {
+          case BlockType.Function(tparams, _, vparams, _, result) => BlockType.Function(tparams, Nil, vparams, Nil, result)
+          case other => other
         }
-        result
-      }
-      override def stmt(using Unit) = {
-        case Stmt.App(Block.BlockVar(`c`, _, _), targs, vargs, bargs) => 1 + all(vargs, query) + all(bargs, query)
-      }
-    }
-    var outside: Option[Stmt] = None
-    object finding extends Tree.Query[Unit, Unit] {
-      def empty = ()
-      def combine = (_, _) => ()
-      override def visit[T](t: T)(visitor: Unit ?=> T => Unit)(using Unit): Unit = t match {
-        case s: Stmt if counts.getOrDefault(s, 0) == total =>
-          outside = Some(s)
-          visitor(t)
-        case s: Stmt if counts.getOrDefault(s, 0) == 0 => ()
-        case _ => visitor(t)
-      }
-    }
-    m.definitions.collectFirst { case Toplevel.Def(`d`, b) =>
-      counting.query(b)(using ())
-      finding.query(b)(using ())
-    }
-    val around = outside.get
+        Stmt.App(Block.BlockVar(c, tpe, capt ++ argument.capt), targs, vargs.map(rewrite), Nil)
 
-    val (values, blocks) = dropped(block, around, calls(c, around), calls(c, block))
-    val substitution = Substitution(DB.empty,
-      DB.from(blocks.toList.flatMap { case (i, b) => block.bparams(i).capt.map { cap => cap -> b.capt } }),
-      DB.from(values.toList.map { case (i, v) => block.vparams(i).id -> v }),
-      DB.from(blocks.toList.map { case (i, b) => block.bparams(i).id -> b }))
-    def keep[A](as: List[A], drop: Int => Boolean): List[A] = as.zipWithIndex.collect { case (a, i) if !drop(i) => a }
-    val placed = BlockLit(block.tparams, keep(block.cparams, blocks.contains), keep(block.vparams, values.contains),
-      keep(block.bparams, blocks.contains), substitute(block.body)(using substitution))
-    val tpe = placed.tpe
-
-    object dropping extends Tree.Rewrite {
-      override def rewrite(s: Stmt): Stmt = s match {
-        case Stmt.App(Block.BlockVar(`c`, _, capt), targs, vargs, bargs) =>
-          Stmt.App(Block.BlockVar(c, tpe, capt), targs, keep(vargs.map(rewrite), values.contains), keep(bargs.map(rewrite), blocks.contains))
-        case other => super.rewrite(other)
-      }
+      case other => super.rewrite(other)
     }
-    val nothingDropped = values.isEmpty && blocks.isEmpty
-    val inner = if (nothingDropped) placed else dropping.rewrite(placed)
-    object wrapping extends Tree.Rewrite {
-      override def rewrite(s: Stmt): Stmt =
-        if (s eq around) Stmt.Def(c, inner, if (nothingDropped) s else dropping.rewrite(s))
-        else if (counts.getOrDefault(s, 0) == 0) s
-        else super.rewrite(s)
-    }
-    m.copy(definitions = m.definitions.collect {
-      case Toplevel.Def(`d`, b) => Toplevel.Def(d, wrapping.rewrite(b))
-      case other if other.id != c => other
-    })
   }
 
-  var current = m
-  val mentions = mutable.Map.empty[Id, Set[Id]]
-  def mention(d: Id, block: Block): Unit =
-    block.free.blocks.toMap.keys.filter(copies.contains).foreach { c => mentions(c) = mentions.getOrElse(c, Set.empty) + d }
-  current.definitions.foreach { case Toplevel.Def(d, block) => mention(d, block); case _ => () }
-
-  var remaining = copies.filter { c => current.definitions.exists(_.id == c) }
-  var moving = true
-  while (moving) {
-    remaining.find { c => (mentions.getOrElse(c, Set.empty) - c).size == 1 } match {
-      case Some(c) =>
-        val d = (mentions(c) - c).head
-        current = sink(current, c, d)
-        remaining = remaining - c
-        mentions.keys.foreach { x => if (mentions(x).contains(c)) mentions(x) = mentions(x) - c + d }
-      case None => moving = false
-    }
-  }
-  current
+  val empty = Scope(Map.empty, Map.empty, Map.empty, Set.empty)
+  m.copy(definitions = m.definitions.map {
+    case Toplevel.Def(id, block) => Toplevel.Def(id, specializing.rewrite(block)(using empty))
+    case Toplevel.Val(id, binding) => Toplevel.Val(id, specializing.rewrite(binding)(using empty))
+  })
 }

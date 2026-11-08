@@ -13,8 +13,6 @@ def main() = {
   (apply: (Int){f: (Int) => Int} => Int @ {})(0){unbox g: (Int) => Int at {}}
 }
 
-/// INSTANCES
-
 /// SPECIALIZE
 
 def apply(x: Int){f @ f: (Int) => Int} = {
@@ -25,6 +23,5 @@ def id(x: Int) = {
 }
 def main() = {
   let g = box {} id: (Int) => Int @ {}
-  def f = (unbox g: (Int) => Int at {})
-  apply: (Int){f: (Int) => Int} => Int @ {}(0){f: (Int) => Int @ {}}
+  apply: (Int){f: (Int) => Int} => Int @ {}(0){(unbox g: (Int) => Int at {})}
 }
