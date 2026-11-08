@@ -319,7 +319,7 @@ class OptimizerTests extends CoreTests {
     normalizeWith(Default(threshold = 0, onceLimit = Some(0), carryingLimit = 0))(input, expected)
   }
 
-  test("a frame that shifts to the same prompt stays") {
+  test("a frame that shifts to the same prompt moves as well") {
     val input =
       """ def main = { (){p: Prompt[Int]} =>
         |   val x = shift (p : Prompt[Int] @ {p}) { {k: (Int) ~> Int} => resume (k : (Int) ~> Int @ {k}) { return 1 } };
@@ -327,7 +327,63 @@ class OptimizerTests extends CoreTests {
         | }
         |""".stripMargin
 
-    normalizeWith(Default(threshold = 0, onceLimit = Some(0), carryingLimit = 0))(input, input)
+    val expected =
+      """ def main = { (){p: Prompt[Int]} =>
+        |   def j = { (x: Int) => shift (p : Prompt[Int] @ {p}) { {k2: (Int) ~> Int} => resume (k2 : (Int) ~> Int @ {k2}) { return x:Int } } }
+        |   shift (p : Prompt[Int] @ {p}) { {k: (Int) ~> Int} => resume (k : (Int) ~> Int @ {k}) { let x = 1 (j : (Int) => Int @ {p})(x: Int) } }
+        | }
+        |""".stripMargin
+
+    normalizeWith(Default(threshold = 0, onceLimit = Some(0), carryingLimit = 0))(input, expected)
+  }
+
+  test("a shift in a resumption to the same prompt captures what the resumption re-installs") {
+    val input =
+      """ def main = { (){p: Prompt[Int]} =>
+        |   shift (p : Prompt[Int] @ {p}) { {k: (Int) ~> Int} =>
+        |     val r = resume (k : (Int) ~> Int @ {k}) {
+        |       let y = 7
+        |       shift (p : Prompt[Int] @ {p}) { {k2: (Int) ~> Int} => val z = resume (k2 : (Int) ~> Int @ {k2}) { return y:Int }; return z:Int }
+        |     };
+        |     return r:Int
+        |   }
+        | }
+        |""".stripMargin
+
+    val expected =
+      """ def main = { (){p: Prompt[Int]} =>
+        |   shift (p : Prompt[Int] @ {p}) { {k: (Int) ~> Int} =>
+        |     val r = { let y = 7 val z = resume (k : (Int) ~> Int @ {k}) { return y:Int }; return z:Int };
+        |     return r:Int
+        |   }
+        | }
+        |""".stripMargin
+
+    removeTailResumptions(input, expected)
+  }
+
+  test("a resumption that resumes in tail position is reused through the shift around it") {
+    val input =
+      """ def main = { () => reset { (){q: Prompt[Int]} => reset { (){p: Prompt[Int]} =>
+        |   shift (p : Prompt[Int] @ {p}) { {k: (Int) ~> Int} =>
+        |     shift (q : Prompt[Int] @ {q}) { {k2: (Int) ~> Int} =>
+        |       val v = resume (k2 : (Int) ~> Int @ {k2}) { resume (k : (Int) ~> Int @ {k}) { return 1 } };
+        |       return v:Int
+        |     }
+        |   }
+        | } } }
+        |""".stripMargin
+
+    val expected =
+      """ def main = { () => reset { (){q: Prompt[Int]} => reset { (){p: Prompt[Int]} =>
+        |   shift (q : Prompt[Int] @ {q}) { {k2: (Int) ~> Int} =>
+        |     val v = resume (k2 : (Int) ~> Int @ {k2}) { return 1 };
+        |     return v:Int
+        |   }
+        | } } }
+        |""".stripMargin
+
+    removeTailResumptions(input, expected)
   }
 
   test("a reset with multiple answers is inlined") {

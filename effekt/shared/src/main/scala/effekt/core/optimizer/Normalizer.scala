@@ -108,10 +108,6 @@ object Normalizer { normal =>
     case ValueType.Boxed(_, _) => false
   }
 
-  /** Whether [[s]] resumes a continuation bound outside of it. */
-  private def resumes(s: Stmt): Boolean =
-    s.free.blocks.toMap.exists { case (_, (tpe, _)) => tpe.isInstanceOf[BlockType.Resume] }
-
   private def blockFor(id: Id)(using ctx: Context): Option[Block] =
     ctx.blocks.get(id)
 
@@ -379,12 +375,10 @@ object Normalizer { normal =>
         // [[ val x: A = shift(p) { {k: A => R} => body2 }; body: B ]] =
         //   def j(x) = [[ body ]]
         //   shift(p) { {k: >>>B<<< => R} => body2[ resume(k) { s } := resume(k) { [[ val x = s; j(x) ]] } ] }
-        // if `k` occurs only resumed, since the frame is part of what `k` captures,
-        // and the frame neither resumes nor shifts to `p` itself, which [[StaticResumptions]] treats better
+        // if `k` occurs only resumed, since the frame is part of what `k` captures
         case shift @ Stmt.Shift(p, BlockParam(k, BlockType.Resume(tpeA, answer), captures), body2)
             if StaticResumptions.Shift(shift, k, tpeA).resumesOnly =>
           val res = normalize(body)
-          if resumes(res) || res.free.blocks.isDefinedAt(p.id) then Stmt.Val(ids, shift, res) else
           joinpoint(ids, tpeA, res) { j => (C: Context) ?=>
             val retyped = BlockParam(k, BlockType.Resume(res.tpe, answer), captures)
             Stmt.Shift(p, retyped, StaticResumptions.Shift(shift, k, tpeA).replaceResumptions { resumed =>

@@ -6,6 +6,8 @@ import scala.annotation.tailrec
 import scala.util.boundary
 import scala.util.boundary.break
 
+import effekt.util.DB
+
 /**
  * Reduces delimited control whose context is static.
  *
@@ -93,9 +95,10 @@ object StaticResumptions {
     override def rewrite(stmt: Stmt): Stmt = stmt match {
       // 0) a shift whose context is unknown (inside a call or a closure), inner shifts first:
       //    [[ shift(p) { {k} => B[resume(k){s}] } ]] ~> B[s]   if every exit resumes
-      case Shift(shift) if !blocked.contains(shift.stmt.prompt.id) =>
-        val inner = shift.withBody(rewrite(shift.body))
-        reuse(inner, atPrompt = false).getOrElse { inner.stmt }
+      case Shift(shift) =>
+        val inner = shift.withBody(rewrite(resumingShifts(shift).rewrite(shift.body)))
+        if (blocked.contains(shift.stmt.prompt.id)) inner.stmt
+        else reuse(inner, atPrompt = false).getOrElse { inner.stmt }
 
       case Stmt.Reset(BlockLit(tparams, cparams, vparams, List(prompt @ BlockParam(_, BlockType.Prompt(answer), _)), body))
           if !blocked.contains(prompt.id) =>
@@ -103,6 +106,48 @@ object StaticResumptions {
           reduceShifts(Prompt(prompt, cparams.head, answer), rewrite(body), joinable = true, blocked)))
 
       case other => super.rewrite(other)
+    }
+  }
+
+  /**
+   * [[ resume(k){ T[shift(p) { {k2} => b }] } ]] ~> T[ [[ b[k2 := k] ]] ]   where [[shift]] captured `k` up to `p`
+   *
+   * Resuming re-installs the reset of `p`, and `T` only binds without pushing a frame, so `k2` captures exactly what `k` did.
+   * The other leaves `l` of `T` become `resume(k){l}`.
+   */
+  class resumingShifts(shift: Shift) extends Tree.Rewrite {
+    val prompt: Id = shift.stmt.prompt.id
+    val k: Block.BlockVar = Block.BlockVar(shift.k, shift.stmt.k.tpe, shift.stmt.k.capt)
+    val answer: List[ValueType] = shift.body.tpe
+
+    override def rewrite(stmt: Stmt): Stmt = stmt match {
+      case shift.Resume(resumed) =>
+        val inner = rewrite(resumed)
+        shifting(inner).getOrElse { Stmt.Resume(k, inner) }
+      case other => super.rewrite(other)
+    }
+
+    def shifting(stmt: Stmt): Option[Stmt] = stmt match {
+      case Stmt.Shift(Block.BlockVar(p, _, _), BlockParam(k2, _, capt2), body) if p == prompt =>
+        val captures = DB.from(capt2.toList.map { c => c -> k.capt })
+        Some(rewrite(substitutions.substitute(body)(using substitutions.Substitution(DB.empty, captures, DB.empty, DB.from(List(k2 -> k))))))
+      case Stmt.Let(id, binding, body) => shifting(body).map { Stmt.Let(id, binding, _) }
+      case Stmt.Def(id, block, body) => shifting(body).map { Stmt.Def(id, block, _) }
+      case Stmt.If(cond, thn, els) => (shifting(thn), shifting(els)) match {
+        case (None, None) => None
+        case (thnShifting, elsShifting) =>
+          Some(Stmt.If(cond, thnShifting.getOrElse(Stmt.Resume(k, thn)), elsShifting.getOrElse(Stmt.Resume(k, els))))
+      }
+      case Stmt.Match(scrutinee, tpe, clauses, default) =>
+        val shiftingClauses = clauses.map { case (tag, clause) => shifting(clause.body) }
+        val shiftingDefault = default.map(shifting)
+        if (shiftingClauses.forall(_.isEmpty) && shiftingDefault.forall(_.isEmpty)) None
+        else Some(Stmt.Match(scrutinee, answer,
+          (clauses zip shiftingClauses).map { case ((tag, clause), shifted) =>
+            tag -> clause.copy(body = shifted.getOrElse { Stmt.Resume(k, clause.body) })
+          },
+          (default zip shiftingDefault).map { case (stmt, shifted) => shifted.getOrElse { Stmt.Resume(k, stmt) } }))
+      case _ => None
     }
   }
 
@@ -430,6 +475,17 @@ object StaticResumptions {
             && !frame.before.contains(k) && !shift.observes(frame.names, frame.body) =>
           frame.rebuild(go(frame.body, transparent))
 
+        // [[ shift(q) { {k2} => B[resume(k2){r}] } ]] = shift(q) { {k2} => B[resume(k2){ [[ r ]] }] }   if `k` occurs nowhere else
+        // since `k2` now also captures the frames of `k`, it resumes with what `k` resumed with
+        case inner @ Stmt.Shift(prompt, BlockParam(k2, BlockType.Resume(from, answer), capt2), _)
+            if prompt.id != shift.stmt.prompt.id && Shift(inner, k2, from).resumesOnly =>
+          val retyped = BlockParam(k2, BlockType.Resume(result, answer), capt2)
+          val body = Shift(inner, k2, from).replaceResumptions { resumed =>
+            Stmt.Resume(Block.BlockVar(k2, retyped.tpe, capt2), go(resumed, Set.empty))
+          }
+          if (body.free.contains(k)) break(None)
+          Stmt.Shift(prompt, retyped, body)
+
         case other if other.free.contains(k) => break(None)
 
         // [[ f(…) ]] = f(…)   a tail call to a block only ever tail-called
@@ -509,8 +565,9 @@ object StaticResumptions {
   }
 
   /** Whether every use of [[id]] in [[stmt]] is a call to it in tail position. */
-  def tailCalledOnly(id: Id, stmt: Stmt): Boolean =
-    tailPositions(stmt) match {
+  def tailCalledOnly(id: Id, stmt: Stmt): Boolean = stmt match {
+    case Stmt.Def(_, block, body) if !block.free.contains(id) => tailCalledOnly(id, body)
+    case _ => tailPositions(stmt) match {
       case Some(positions) =>
         !positions.before.contains(id) && positions.forall(tailCalledOnly(id, _))
 
@@ -525,4 +582,5 @@ object StaticResumptions {
         case other => !other.free.contains(id)
       }
     }
+  }
 }

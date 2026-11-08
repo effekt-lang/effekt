@@ -454,7 +454,7 @@ object Type {
       val Typing(bodyTpe, bodyCapt, bodyCs) = body.typing
       valuesShouldEqual(to, bodyTpe)
       valuesShouldEqual(to, delimiter)
-      Typing(from, bodyCapt ++ Set(id), bodyCs)
+      Typing(from, (bodyCapt -- capt) ++ Set(id), bodyCs)
 
     case Stmt.Shift(prompt, BlockParam(k, tpe, capt), body) =>
       typeError(s"Block parameter of shift have wrong type: ${k}: ${tpe}")
@@ -610,7 +610,7 @@ object Type {
       body.capt ++ annotatedCapt
     case Stmt.Reset(body) => body.capt
     case Stmt.Shift(prompt, k, body) =>
-      body.capt ++ Set(prompt.id)
+      (body.capt -- k.capt) ++ Set(prompt.id)
     case Stmt.Resume(k, body) =>
       body.capt ++ k.annotatedCapt
     case Stmt.Hole(annotatedTpe, span) => Set.empty
