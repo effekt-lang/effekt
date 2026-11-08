@@ -21,13 +21,15 @@ import scala.collection.mutable
  *
  * [[names]] gives every block argument a name, [[instances]] finds, starting from every definition, the shapes of the
  * blocks passed to known definitions, [[specialize]] makes a copy for each of them, [[aliases]] removes the names
- * given to block arguments again, and [[optimizer.cleanup]] removes what is left unused and inlines what is called once.
+ * given to block arguments again, [[merge]] merges the parameters of a copy that are always passed the same, and
+ * [[optimizer.cleanup]] removes what is left unused and inlines what is called once.
  * Toplevel and local definitions are treated alike; the definitions themselves stay for every other use.
  */
 def specialization(m: ModuleDecl): ModuleDecl = {
   val named = names(m)
   val known = sites(named)
-  optimizer.cleanup(aliases(specialize(named, known, instances(named, known))))
+  val (specialized, copies) = specialize(named, known, instances(named, known))
+  optimizer.cleanup(merge(aliases(specialized), copies))
 }
 
 object Specialize extends Phase[CoreTransformed, CoreTransformed] {
@@ -211,7 +213,7 @@ def instances(m: ModuleDecl, known: Map[Id, Site]): List[Instance] = {
  * callee, so that a recursive call with the same blocks calls the copy again.
  * A call to a copy keeps the captures of the blocks it no longer passes, since they are still used in the copy.
  */
-def specialize(m: ModuleDecl, known: Map[Id, Site], all: List[Instance]): ModuleDecl = {
+def specialize(m: ModuleDecl, known: Map[Id, Site], all: List[Instance]): (ModuleDecl, Set[Id]) = {
   given Map[Id, Site] = known
   val toplevel: Set[Id] = m.definitions.map(_.id).toSet
   val copies: Map[Instance, Id] = all.map { i =>
@@ -375,7 +377,7 @@ def specialize(m: ModuleDecl, known: Map[Id, Site], all: List[Instance]): Module
     case Toplevel.Def(id, block) => Toplevel.Def(id, specializing.rewrite(block)(using Map.empty))
     case Toplevel.Val(id, binding) => Toplevel.Val(id, specializing.rewrite(binding)(using Map.empty))
   }
-  m.copy(definitions = rewritten ++ all.map(copy))
+  (m.copy(definitions = rewritten ++ all.map(copy)), copies.values.toSet)
 }
 
 
@@ -400,4 +402,119 @@ def aliases(m: ModuleDecl): ModuleDecl = {
     }
   }
   dealiasing.rewrite(m)(using Map.empty)
+}
+
+
+// Merge
+// -----
+
+/**
+ * Merges the parameters of a copy that every call passes the same variable, where in the copy itself two parameters
+ * merged count as the same:
+ *
+ *   def f(x, y) = … f(x, x) …;  f(a, a)   ~>   def f(x) = … f(x) …;  f(a)
+ *
+ * The pairs of parameters are the greatest fixed point: we start with all of them and drop those some call separates.
+ */
+def merge(m: ModuleDecl, copies: Set[Id]): ModuleDecl = {
+  val definitions: Map[Id, BlockLit] = m.definitions.collect {
+    case Toplevel.Def(id, block: BlockLit) if copies.contains(id) => id -> block
+  }.toMap
+
+  object collecting extends Tree.Query[Unit, Map[Id, List[(List[Expr], List[Block])]]] {
+    def empty = Map.empty
+    def combine = (a, b) => (a.keySet ++ b.keySet).map { k => k -> (a.getOrElse(k, Nil) ++ b.getOrElse(k, Nil)) }.toMap
+    override def stmt(using Unit) = {
+      case Stmt.App(Block.BlockVar(f, _, _), targs, vargs, bargs) if definitions.contains(f) =>
+        combine(Map(f -> List((vargs, bargs))), combine(all(vargs, query), all(bargs, query)))
+    }
+  }
+  val calls = collecting.query(m)(using ())
+
+  /** For each position, the position whose parameter it is merged into. */
+  def merged(f: Id): (List[Int], List[Int]) = {
+    val block = definitions(f)
+    val valueIndex = block.vparams.map(_.id).zipWithIndex.toMap
+    val blockIndex = block.bparams.map(_.id).zipWithIndex.toMap
+
+    def pairs[P](params: List[P], tpe: P => Any): Set[(Int, Int)] =
+      (for { i <- params.indices; j <- params.indices if i < j && tpe(params(i)) == tpe(params(j)) } yield (i, j)).toSet
+
+    def same(related: Set[(Int, Int)], index: Map[Id, Int])(a: Option[Id], b: Option[Id]): Boolean = (a, b) match {
+      case (Some(x), Some(y)) if x == y => true
+      case (Some(x), Some(y)) => (index.get(x), index.get(y)) match {
+        case (Some(i), Some(j)) => related.contains((i min j, i max j))
+        case _ => false
+      }
+      case _ => false
+    }
+
+    def value(e: Expr): Option[Id] = e match {
+      case Expr.ValueVar(id, _) => Some(id)
+      case _ => None
+    }
+
+    def variable(b: Block): Option[Id] = b match {
+      case Block.BlockVar(id, _, _) => Some(id)
+      case _ => None
+    }
+
+    var values = pairs(block.vparams, _.tpe)
+    var blocks = pairs(block.bparams, _.tpe)
+    var changed = true
+    while (changed) {
+      val nextValues = values.filter { case (i, j) =>
+        calls.getOrElse(f, Nil).forall { case (vargs, _) => same(values, valueIndex)(value(vargs(i)), value(vargs(j))) }
+      }
+      val nextBlocks = blocks.filter { case (i, j) =>
+        calls.getOrElse(f, Nil).forall { case (_, bargs) => same(blocks, blockIndex)(variable(bargs(i)), variable(bargs(j))) }
+      }
+      changed = nextValues != values || nextBlocks != blocks
+      values = nextValues
+      blocks = nextBlocks
+    }
+    def representatives(n: Int, related: Set[(Int, Int)]): List[Int] =
+      (0 until n).toList.map { j => (0 until j).find { i => related.contains((i, j)) }.getOrElse(j) }
+    (representatives(block.vparams.size, values), representatives(block.bparams.size, blocks))
+  }
+
+  val representatives: Map[Id, (List[Int], List[Int])] = definitions.keys.map { f => f -> merged(f) }.toMap
+
+  def kept[A](representative: List[Int], as: List[A]): List[A] =
+    (as zip representative).zipWithIndex.collect { case ((a, r), i) if r == i => a }
+
+  def retyped(f: Id, tpe: BlockType): BlockType = tpe match {
+    case BlockType.Function(tparams, cparams, vparams, bparams, result) =>
+      val (vs, bs) = representatives(f)
+      BlockType.Function(tparams, kept(bs, cparams), kept(vs, vparams), kept(bs, bparams), result)
+    case other => other
+  }
+
+  object merging extends Tree.Rewrite {
+    override def rewrite(s: Stmt): Stmt = s match {
+      case Stmt.App(Block.BlockVar(f, tpe, capt), targs, vargs, bargs) if representatives.contains(f) =>
+        val (vs, bs) = representatives(f)
+        Stmt.App(Block.BlockVar(f, retyped(f, tpe), capt), targs, kept(vs, vargs.map(rewrite)), kept(bs, bargs.map(rewrite)))
+      case other => super.rewrite(other)
+    }
+  }
+
+  m.copy(definitions = m.definitions.map {
+    case Toplevel.Def(f, block: BlockLit) if representatives.contains(f) =>
+      val (vs, bs) = representatives(f)
+      val substitution = Substitution(DB.empty,
+        DB.from(block.bparams.zipWithIndex.collect { case (p, i) if bs(i) != i => p.capt.map { c => c -> block.bparams(bs(i)).capt } }.flatten),
+        DB.from(block.vparams.zipWithIndex.collect { case (p, i) if vs(i) != i =>
+          val r = block.vparams(vs(i))
+          p.id -> Expr.ValueVar(r.id, r.tpe)
+        }),
+        DB.from(block.bparams.zipWithIndex.collect { case (p, i) if bs(i) != i =>
+          val r = block.bparams(bs(i))
+          p.id -> Block.BlockVar(r.id, r.tpe, r.capt)
+        }))
+      val body = merging.rewrite(substitute(block.body)(using substitution))
+      Toplevel.Def(f, BlockLit(block.tparams, kept(bs, block.cparams), kept(vs, block.vparams), kept(bs, block.bparams), body))
+    case Toplevel.Def(f, block) => Toplevel.Def(f, merging.rewrite(block))
+    case Toplevel.Val(f, binding) => Toplevel.Val(f, merging.rewrite(binding))
+  })
 }
