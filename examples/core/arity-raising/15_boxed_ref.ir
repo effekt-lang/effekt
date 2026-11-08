@@ -1,0 +1,52 @@
+// A reference of record type that is boxed keeps the record, also where it is passed as a block.
+
+type Point {
+  MkPoint(x: Int, y: Int)
+}
+
+def moveToOrigin(){position: Ref[Point]} = {
+  let origin = make Point MkPoint(0, 0)
+  put position @ position = origin: Point;
+  return ()
+}
+
+def main() = {
+  let start = make Point MkPoint(1, 2)
+  var position @ local = start: Point;
+  let boxed = box {local} (position: Ref[Point] @ {local})
+  val done: Unit = (moveToOrigin: (){position: Ref[Point]} => Unit @ {})(){position: Ref[Point] @ {local}};
+  get current: Point = ! position @ local;
+  current: Point match [Int] {
+    MkPoint: { (x: Int, y: Int) => return x: Int }
+  }
+}
+
+/// ARITY_RAISE
+
+type Point {
+  MkPoint(x: Int, y: Int)
+}
+
+def moveToOrigin(){position: Ref[Point]} = {
+  let origin_0 = 0
+  let origin_1 = 0
+  put position @ position = make Point MkPoint(origin_0: Int, origin_1: Int);
+  return ()
+}
+
+def main() = {
+  let start_0 = 1
+  let start_1 = 2
+  var position @ local = make Point MkPoint(start_0: Int, start_1: Int);
+  let boxed = box {local} (position: Ref[Point] @ {local})
+  val done: Unit = (moveToOrigin: (){position: Ref[Point]} => Unit @ {})(){position: Ref[Point] @ {local}};
+  get current: Point = ! position @ local;
+  val x: Int, y: Int = current: Point match [Int, Int] {
+    MkPoint: { (x: Int, y: Int) => return x: Int, y: Int }
+  };
+  let current_0 = x: Int
+  let current_1 = y: Int
+  let x2 = current_0: Int
+  let y2 = current_1: Int
+  return x2: Int
+}

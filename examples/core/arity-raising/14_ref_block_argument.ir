@@ -1,0 +1,49 @@
+// A local variable of record type whose reference is passed to a function as a block argument.
+
+type Point {
+  MkPoint(x: Int, y: Int)
+}
+
+def moveToOrigin(){position: Ref[Point]} = {
+  let origin = make Point MkPoint(0, 0)
+  put position @ position = origin: Point;
+  return ()
+}
+
+def main() = {
+  let start = make Point MkPoint(1, 2)
+  var position @ local = start: Point;
+  val done: Unit = (moveToOrigin: (){position: Ref[Point]} => Unit @ {})(){position: Ref[Point] @ {local}};
+  get current: Point = ! position @ local;
+  current: Point match [Int] {
+    MkPoint: { (x: Int, y: Int) => return x: Int }
+  }
+}
+
+// The reference is split into one reference per field, also as a block parameter.
+/// ARITY_RAISE
+
+type Point {
+  MkPoint(x: Int, y: Int)
+}
+
+def moveToOrigin(){position_0 @ position: Ref[Int]} {position_1 @ position: Ref[Int]} = {
+  let origin_0 = 0
+  let origin_1 = 0
+  put position_0 @ position = origin_0: Int;
+  put position_1 @ position = origin_1: Int;
+  return ()
+}
+
+def main() = {
+  let start_0 = 1
+  let start_1 = 2
+  var position_0 @ local = start_0: Int;
+  var position_1 @ local = start_1: Int;
+  val done: Unit = (moveToOrigin: (){position: Ref[Int]} {position: Ref[Int]} => Unit @ {})(){position_0: Ref[Int] @ {local}} {position_1: Ref[Int] @ {local}};
+  get current_0: Int = ! position_0 @ local;
+  get current_1: Int = ! position_1 @ local;
+  let x = current_0: Int
+  let y = current_1: Int
+  return x: Int
+}

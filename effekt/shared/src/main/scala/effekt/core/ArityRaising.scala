@@ -134,8 +134,8 @@ object ArityRaising extends Phase[CoreTransformed, CoreTransformed] {
     val callSites = mutable.ListBuffer.empty[CallSite]
     val interfaceArguments = mutable.ListBuffer.empty[ValueType]
     val matched = mutable.Set.empty[ValueType]
-    // references used as blocks escape and keep the original representation
-    val blockVars = mutable.Set.empty[Id]
+    val states = mutable.Set.empty[ValueType]
+    val boxedStates = mutable.Set.empty[ValueType]
 
     visitAll(m.definitions) {
       case Expr.PureApp(BlockVar(f, _, _), targs, _) if externs.contains(f) =>
@@ -145,10 +145,20 @@ object ArityRaising extends Phase[CoreTransformed, CoreTransformed] {
       case Stmt.App(BlockVar(f, _, _), targs, _, _) if externs.contains(f) =>
         callSites += CallSite(externs(f), targs, true)
       case Stmt.Match(scrutinee, _, _, _) => matched += scrutinee.tpe
+      case Box(b, _) => b.tpe match {
+        case Type.TState(t) => boxedStates += t
+        case _ => ()
+      }
+      case ValueType.Boxed(Type.TState(t), _) => boxedStates += t
+      case Type.TState(t) => states += t
       case BlockType.Interface(_, targs) => interfaceArguments ++= targs
-      case BlockVar(id, _, _) => blockVars += id
       case _ => ()
     }
+
+    val frozenStates: Set[ValueType] =
+      (boxedStates ++ callSites.flatMap(boundary).flatMap(occurrences).collect { case ValueType.Boxed(Type.TState(t), _) => t }).toSet
+
+    interfaceArguments ++= states.filter(frozenStates.contains)
 
     val frozen: Set[ValueType] =
       (callSites.filterNot(site => !site.control && componentwise(site.f)).flatMap(boundary) ++ interfaceArguments)
@@ -209,11 +219,19 @@ object ArityRaising extends Phase[CoreTransformed, CoreTransformed] {
 
     def repr(tpe: BlockType): BlockType = tpe match {
       case BlockType.Function(tparams, cparams, vparams, bparams, result) =>
-        BlockType.Function(tparams, cparams, vparams.flatMap(repr), bparams.map(repr), result.flatMap(repr))
+        BlockType.Function(tparams, componentCaptures(cparams, bparams), vparams.flatMap(repr), bparams.flatMap(reprs), result.flatMap(repr))
       case BlockType.Interface(_, _) => tpe
       case BlockType.Prompt(answer) => BlockType.Prompt(answer.flatMap(repr))
       case BlockType.Resume(result, answer) => BlockType.Resume(result.flatMap(repr), answer.flatMap(repr))
     }
+
+    def reprs(tpe: BlockType): List[BlockType] = tpe match {
+      case Type.TState(t) if !frozenStates.contains(t) => repr(t).map(Type.TState(_))
+      case other => List(repr(other))
+    }
+
+    def componentCaptures(cparams: List[Id], bparams: List[BlockType]): List[Id] =
+      cparams.zip(bparams).flatMap { case (c, b) => reprs(b).map(_ => c) }
 
     def binders(id: Id, tpe: ValueType): List[ValueParam] = repr(tpe) match {
       case List(t) => List(ValueParam(id, t))
@@ -312,6 +330,7 @@ object ArityRaising extends Phase[CoreTransformed, CoreTransformed] {
     // Statements
     // ----------
     def stmt(s: Stmt)(using env: Env): Stmt = s match {
+      case Stmt.Def(id, BlockVar(ref, _, _), body) if env.refs.contains(ref) => stmt(body)(using env.bindRef(id, env.refs(ref)))
       case Stmt.Def(id, b, body) => Stmt.Def(id, block(b), stmt(body))
 
       case Stmt.Let(id, e, body) => expr(e).run { es =>
@@ -339,11 +358,11 @@ object ArityRaising extends Phase[CoreTransformed, CoreTransformed] {
         }
 
       case Stmt.App(callee, targs, vargs, bargs) => exprs(vargs).run { vs =>
-        Stmt.App(block(callee), targs, vs, bargs.map(block))
+        Stmt.App(block(callee), targs, vs, bargs.flatMap(blockArguments))
       }
 
       case Stmt.Invoke(callee, method, tpe, targs, vargs, bargs) => exprs(vargs).run { vs =>
-        Stmt.Invoke(block(callee), method, repr(tpe), targs, vs, bargs.map(block))
+        Stmt.Invoke(block(callee), method, repr(tpe), targs, vs, bargs.flatMap(blockArguments))
       }
 
       case Stmt.If(cond, thn, els) => expr(cond).run { cs => Stmt.If(single(cs), stmt(thn), stmt(els)) }
@@ -369,7 +388,7 @@ object ArityRaising extends Phase[CoreTransformed, CoreTransformed] {
       case Stmt.Region(b) => Stmt.Region(blockLit(b))
 
       case Stmt.Alloc(id, init, region, body) => expr(init).run { es =>
-        if blockVars.contains(id) then Stmt.Alloc(id, pack(init.tpe, es), region, stmt(body))
+        if frozenStates.contains(init.tpe) then Stmt.Alloc(id, pack(init.tpe, es), region, stmt(body))
         else {
           val refs = references(id, es.size)
           refs.zip(es).foldRight(stmt(body)(using env.bindRef(id, refs))) { case ((r, e), rest) => Stmt.Alloc(r, e, region, rest) }
@@ -378,7 +397,7 @@ object ArityRaising extends Phase[CoreTransformed, CoreTransformed] {
 
       // all components share the capture of the original variable
       case Stmt.Var(ref, init, capture, body) => expr(init).run { es =>
-        if blockVars.contains(ref) then Stmt.Var(ref, pack(init.tpe, es), capture, stmt(body))
+        if frozenStates.contains(init.tpe) then Stmt.Var(ref, pack(init.tpe, es), capture, stmt(body))
         else {
           val refs = references(ref, es.size)
           refs.zip(es).foldRight(stmt(body)(using env.bindRef(ref, refs))) { case ((r, e), rest) => Stmt.Var(r, e, capture, rest) }
@@ -424,21 +443,39 @@ object ArityRaising extends Phase[CoreTransformed, CoreTransformed] {
       case New(Implementation(interface, operations)) => New(Implementation(interface, operations.map(operation)))
     }
 
+    def blockArguments(b: Block)(using env: Env): List[Block] = b match {
+      case BlockVar(id, tpe, capt) if env.refs.contains(id) => env.refs(id).zip(reprs(tpe)).map { case (r, t) => BlockVar(r, t, capt) }
+      case _ => List(block(b))
+    }
+
     def blockVar(b: BlockVar): BlockVar =
       if externs.contains(b.id) then b else BlockVar(b.id, repr(b.annotatedTpe), b.annotatedCapt)
 
     def blockParam(p: BlockParam): BlockParam = BlockParam(p.id, repr(p.tpe), p.capt)
 
+    def blockParams(bparams: List[BlockParam])(using env: Env): (List[BlockParam], Env) =
+      bparams.foldRight((List.empty[BlockParam], env)) { case (p, (ps, env)) =>
+        val tpes = reprs(p.tpe)
+        val refs = references(p.id, tpes.size)
+        val params = refs.zip(tpes).map { case (r, t) => BlockParam(r, t, p.capt) }
+        p.tpe match {
+          case Type.TState(t) if !frozenStates.contains(t) => (params ++ ps, env.bindRef(p.id, refs))
+          case _ => (params ++ ps, env)
+        }
+      }
+
     def blockLit(b: BlockLit)(using env: Env): BlockLit = b match {
       case BlockLit(tparams, cparams, vparams, bparams, body) =>
         val params = vparams.map(p => binders(p.id, p.tpe))
-        BlockLit(tparams, cparams, params.flatten, bparams.map(blockParam), stmt(body)(using env.bind(vparams.map(_.id), params)))
+        val (bps, bodyEnv) = blockParams(bparams)
+        BlockLit(tparams, componentCaptures(cparams, bparams.map(_.tpe)), params.flatten, bps, stmt(body)(using bodyEnv.bind(vparams.map(_.id), params)))
     }
 
     def operation(op: Operation)(using env: Env): Operation = op match {
       case Operation(name, tparams, cparams, vparams, bparams, body) =>
         val params = vparams.map(p => binders(p.id, p.tpe))
-        Operation(name, tparams, cparams, params.flatten, bparams.map(blockParam), stmt(body)(using env.bind(vparams.map(_.id), params)))
+        val (bps, bodyEnv) = blockParams(bparams)
+        Operation(name, tparams, componentCaptures(cparams, bparams.map(_.tpe)), params.flatten, bps, stmt(body)(using bodyEnv.bind(vparams.map(_.id), params)))
     }
 
     // Module
