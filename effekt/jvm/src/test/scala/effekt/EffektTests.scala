@@ -39,6 +39,21 @@ trait EffektTests extends munit.FunSuite {
   // Test files that should be run with optimizations disabled
   def withoutOptimizations: Set[File] = Set()
 
+  // Use `EFFEKT_UPDATE_CHECKFILES=1 sbt testBackendJS` to update check files instead of failing (then review with `git diff`)
+  def updateCheckFiles = sys.env.get("EFFEKT_UPDATE_CHECKFILES").nonEmpty
+
+  def snapshotTest(input: File, mode: String, expected: Option[String])(obtained: => String): Unit =
+    test(s"${input.getPath} (${mode})") {
+      if (updateCheckFiles) {
+        CheckFiles.update(input, s"${getClass.getSimpleName} (${mode})", obtained, expected).foreach { conflict => fail(conflict) }
+      } else {
+        assertNoDiff(obtained, expected.getOrElse { fail(s"Missing checkfile for ${input.getPath}") })
+      }
+    }
+
+  override def afterAll(): Unit =
+    if (updateCheckFiles) CheckFiles.report(getClass.getSimpleName, negatives ++ positives ++ withoutOptimizations)
+
   def runTestFor(input: File, expected: String): Unit =
     test(input.getPath + s" (${backendName})") {
       assertNoDiff(run(input, true), expected)
@@ -105,33 +120,23 @@ trait EffektTests extends munit.FunSuite {
 
   def runWithoutOptimizations(dir: File): Unit =
     foreachFileIn(dir) {
-      case (f, None) => sys error s"Missing checkfile for ${f.getPath}"
-      case (f, Some(expected)) =>
-        test(s"${f.getPath} (${backendName}-noopt)") {
-          assertNoDiff(run(f, false), expected)
-        }
+      case (f, None) if !updateCheckFiles => sys error s"Missing checkfile for ${f.getPath}"
+      case (f, expected) => snapshotTest(f, s"${backendName}-noopt", expected) { run(f, false) }
     }
 
   def runPositiveTestsIn(dir: File): Unit =
     foreachFileIn(dir) {
-      case (f, None) => sys error s"Missing checkfile for ${f.getPath}"
-      case (f, Some(expected)) =>
-        test(s"${f.getPath} (${backendName})") {
-          assertNoDiff(run(f, true), expected)
-        }
+      case (f, None) if !updateCheckFiles => sys error s"Missing checkfile for ${f.getPath}"
+      case (f, expected) => snapshotTest(f, backendName, expected) { run(f, true) }
     }
 
   def runNegativeTestsIn(dir: File): Unit =
     foreachFileIn(dir) {
-      case (f, Some(expected)) =>
-        test(s"${f.getPath} (${backendName})") {
-          assertNoDiff(run(f, true), expected)
-        }
-
-      case (f, None) =>
+      case (f, None) if !updateCheckFiles || hasInlineExpectations(f) =>
         test(s"${f.getPath} (${backendName})") {
           validateErrors(f, compile(f))
         }
+      case (f, expected) => snapshotTest(f, backendName, expected) { run(f, true) }
     }
 
   def validateErrors(f: File, messages: List[Diagnostic]): Unit =
@@ -140,8 +145,6 @@ trait EffektTests extends munit.FunSuite {
     val messageWithFormat = messages.map { msg => (msg, messaging.formatContent(msg)) }
 
     assert(messages.nonEmpty, s"File ${f} is supposed to report at least one error.")
-
-    val rx = """//\s*(ERROR|WARN)\s*(.*)$""".r
 
     def findError(severity: Severity, lineNo: Int, contents: String): Unit =
       val couldFind = messageWithFormat.exists {
@@ -161,7 +164,7 @@ trait EffektTests extends munit.FunSuite {
     // for each line with a comment, check whether a corresponding message exists
     IO.readLines(f).zipWithIndex.foreach {
       case (line, no) =>
-        rx.findFirstMatchIn(line).foreach { res =>
+        inlineExpectation.findFirstMatchIn(line).foreach { res =>
           val severity = res.group(1) match {
             case "ERROR" => Severity.Error
             case "WARN" => Severity.Warning
@@ -187,10 +190,64 @@ trait EffektTests extends munit.FunSuite {
   runTests()
 }
 
+def checkFileFor(f: File): File =
+  f.getParentFile / (f.getName.stripSuffix(".md").stripSuffix(".effekt") + ".check")
+
 def expectedResultFor(f: File): Option[String] = {
-  val path = f.getParentFile
-  val baseName = f.getName.stripSuffix(".md").stripSuffix(".effekt")
-  val checkfile = path / (baseName + ".check")
+  val checkfile = checkFileFor(f)
   if checkfile.exists() then Some(IO.read(checkfile)) else None
+}
+
+/** A line of a negative test stating a diagnostic it expects, for example `// ERROR Expected Int`. */
+val inlineExpectation = """//\s*(ERROR|WARN)\s*(.*)$""".r
+
+/** A negative test with inline expectations checks only those, so it has no check file. */
+def hasInlineExpectations(f: File): Boolean =
+  IO.readLines(f).exists { line => inlineExpectation.findFirstIn(line).nonEmpty }
+
+object CheckFiles {
+  private val written = java.util.concurrent.ConcurrentHashMap[File, (String, String)]()
+  private case class Change(writer: String, kind: String, checkfile: File)
+  private val changes = java.util.concurrent.ConcurrentLinkedQueue[Change]()
+
+  private def same(obtained: String, expected: String): Boolean = munit.diff.Diff(obtained, expected).isEmpty
+
+  /** Writes the check file for `input` unless it already says `obtained`; returns a conflict, if any. */
+  def update(input: File, writer: String, obtained: String, expected: Option[String]): Option[String] = {
+    val checkfile = checkFileFor(input).getCanonicalFile
+    val content = obtained.replaceAll("\u001B\\[[;\\d]*m", "")
+    val first = written.putIfAbsent(checkfile, (writer, content))
+
+    if (first != null && !same(content, first._2)) {
+      Some(s"${writer} and ${first._1} disagree on ${checkFileFor(input).getPath}; it keeps the output of ${first._1}")
+    } else {
+      if (!expected.exists { e => same(content, e) }) {
+        // keep the file's own ending, so that the diff shows only what the test compares
+        val toWrite = expected.fold(content) { e => if (e.endsWith("\n")) content else content.replaceAll("\n+\\z", "") }
+        IO.write(checkfile, toWrite)
+        changes.add(Change(writer, if (expected.isEmpty) "added" else "updated", checkFileFor(input)))
+      }
+      None
+    }
+  }
+
+  /** Prints which check files `suite` changed, and the prphaned check files in `dirs` (without a test). */
+  def report(suite: String, dirs: Set[File]): Unit = {
+    import scala.jdk.CollectionConverters.*
+    changes.asScala
+      .filter { c => c.writer.startsWith(suite + " ") }
+      .map { c => s"${c.kind}: ${c.checkfile.getPath}" }
+      .toList.distinct.sorted.foreach(println)
+
+    def orphans(f: File): List[File] =
+      if (f.isDirectory) {
+        f.listFiles.toList.flatMap(orphans)
+      } else {
+        val base = f.getPath.stripSuffix(".check")
+        if (f.getName.endsWith(".check") && !File(base + ".effekt").exists && !File(base + ".effekt.md").exists) List(f) else Nil
+      }
+    dirs.toList.flatMap(orphans).map(_.getPath)
+        .distinct.sorted.foreach { f => println(s"orphaned: $f") }
+  }
 }
 
