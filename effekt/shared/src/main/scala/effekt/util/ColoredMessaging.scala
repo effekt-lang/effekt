@@ -29,6 +29,17 @@ trait ColoredMessaging extends EffektMessaging with Style {
     }
 
   override def formatMessage(message: Diagnostic): String =
+    (message :: message.subdiagnostics.map { s => asInfo(message, s) }).map(formatOne).mkString("")
+
+  private def asInfo(d: Diagnostic, s: Subdiagnostic): Diagnostic = {
+    val at = s match {
+      case Subdiagnostic.Note(_, Some(span)) => Some(Label(span))
+      case _ => d.primary
+    }
+    Diagnostic(Severity.Info, at, Nil, Message(s.text), d.phase)
+  }
+
+  private def formatOne(message: Diagnostic): String =
     message.range match {
       case Some(range) if range.from.line == range.to.line => formatMessage(message, range.from, range.to)
       case Some(range) => formatMessage(message, range.from)

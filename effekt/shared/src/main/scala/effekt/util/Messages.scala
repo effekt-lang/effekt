@@ -13,9 +13,33 @@ object messages {
 
   case class Label(span: Span)
 
-  case class Diagnostic(severity: Severity, primary: Option[Label], reason: Reason, phase: Option[String]) {
+  case class Diagnostic(severity: Severity, primary: Option[Label], subdiagnostics: List[Subdiagnostic], reason: Reason, phase: Option[String]) {
     def range: Option[Range] = primary.map(_.span.range)
   }
+
+  enum Subdiagnostic {
+    /** A fact about the diagnostic, possibly at its own place. */
+    case Note(text: StructuredMessage, at: Option[Span])
+    /** A way to fix the diagnostic. */
+    case Help(text: StructuredMessage)
+
+    def text: StructuredMessage
+  }
+
+  final class Subdiagnostics private () {
+    private[messages] val collected = scala.collection.mutable.ListBuffer.empty[Subdiagnostic]
+  }
+  object Subdiagnostics {
+    /** Handler for Subdiagnostics. */
+    def apply(block: Subdiagnostics ?=> Unit): List[Subdiagnostic] = {
+      val S = new Subdiagnostics()
+      block(using S)
+      S.collected.toList
+    }
+  }
+
+  def help(text: StructuredMessage)(using S: Subdiagnostics): Unit = S.collected += Subdiagnostic.Help(text)
+  def note(text: StructuredMessage, at: Option[Span] = None)(using S: Subdiagnostics): Unit = S.collected += Subdiagnostic.Note(text, at)
 
   /** The exact (open) kind of an issue of a diagnostic. */
   trait Reason {
@@ -31,6 +55,11 @@ object messages {
     def indent(s: String): String = s.linesIterator.map(l => "  " + l).mkString("\n")
 
     def content(d: Diagnostic): String = d.reason.render(using this)
+
+    def subdiagnostic(s: Subdiagnostic): String = Message(s.text).render(using this)
+
+    def contentWithSubdiagnostics(d: Diagnostic): String =
+      (content(d) :: d.subdiagnostics.map(subdiagnostic)).mkString("\n")
   }
 
   case class StructuredMessage(stringContext: StringContext, args: Seq[Any])
@@ -49,7 +78,7 @@ object messages {
       case t: Captures         => S.code(TypePrinter.show(t))
       case t: Effects          => S.code(TypePrinter.show(t))
       case n: Int              => S.code(n.toString)
-      case nested: Diagnostic  => S.content(nested)
+      case nested: Diagnostic  => S.contentWithSubdiagnostics(nested)
       case other               => other.toString
     }*)
   }
@@ -87,7 +116,7 @@ object messages {
 
       val explanations = failedAttempts map {
         case (sym, tpe, msgs) =>
-          val nestedErrors = msgs.map(S.content).mkString("\n")
+          val nestedErrors = msgs.map(S.contentWithSubdiagnostics).mkString("\n")
 
           val header = S.candidate(pp"Possible overload: ${S.code(fullname(sym.name))}") + S.candidate(pp" of type ${tpe}")
           s"$header\n${S.indent(nestedErrors)}"
@@ -118,7 +147,7 @@ object messages {
         case Some(e) => S.indent(e) + "\n"
         case None => ""
       }
-      val nestedErrors = S.indent(stencil.msgs.map(S.content).mkString("\n"))
+      val nestedErrors = S.indent(stencil.msgs.map(S.contentWithSubdiagnostics).mkString("\n"))
 
       title + mainMessage + "\n" + info + nestedErrors + "\n"
     }
@@ -142,17 +171,17 @@ object messages {
 
   def TODO(msg: String = ""): Nothing =
     val explanation = if (msg.isEmpty) "Not implemented, yet" else s"Not implemented, yet: ${msg}"
-    throw CompilerPanic(Diagnostic(Severity.Error, None, Message(explanation), None))
+    throw CompilerPanic(Diagnostic(Severity.Error, None, Nil, Message(explanation), None))
 
   def FIXME[A](a: A, msg: String = ""): A = a
 
   def NOT_SUPPORTED(msg: String = ""): Nothing =
     val explanation = if (msg.isEmpty) "Currently not supported" else s"Currently not supported: ${msg}"
-    throw CompilerPanic(Diagnostic(Severity.Error, None, Message(explanation), None))
+    throw CompilerPanic(Diagnostic(Severity.Error, None, Nil, Message(explanation), None))
 
   def INTERNAL_ERROR(msg: String = ""): Nothing =
     val explanation = if (msg.isEmpty) "Internal compiler error" else s"Internal compiler error: ${msg}"
-    throw CompilerPanic(Diagnostic(Severity.Error, None, Message(explanation), None))
+    throw CompilerPanic(Diagnostic(Severity.Error, None, Nil, Message(explanation), None))
 
   /**
    * Stores messages in a mutable field
@@ -226,7 +255,7 @@ object messages {
 
     def diagnostic(reason: Reason, severity: Severity, at: Option[Span]): Diagnostic =
       // spans with a missing origin give no position
-      Diagnostic(severity, at.filter { s => s.origin != Origin.Missing }.map(Label(_)), reason, phase)
+      Diagnostic(severity, at.filter { s => s.origin != Origin.Missing }.map(Label(_)), Nil, reason, phase)
 
     def diagnostic(reason: Reason, severity: Severity): Diagnostic =
       diagnostic(reason, severity, spanOf(focus))
@@ -241,6 +270,8 @@ object messages {
 
     def error(msg: String): Unit = report(plainMessage(msg, Severity.Error))
     def error(msg: StructuredMessage): Unit = report(structuredMessage(msg, Severity.Error))
+    def error(msg: StructuredMessage)(subdiagnostics: Subdiagnostics ?=> Unit): Unit =
+      report(structuredMessage(msg, Severity.Error).copy(subdiagnostics = Subdiagnostics(subdiagnostics)))
 
     def panic(msg: Diagnostic): Nothing = throw CompilerPanic(msg)
     def panic(msg: String): Nothing = panic(plainMessage(msg, Severity.Error))
