@@ -24,7 +24,7 @@ enum CallingConvention {
   /** Extern / native FFI functions. **/
   case Ccc()
   /** Effekt functions: entered only by tailcalls, no native caller regains control inbetween, so no callee-saved registers */
-  case Tailcc(musttail: Boolean)
+  case Tailcc()
 }
 export CallingConvention.*
 
@@ -64,7 +64,7 @@ export AliasInfo.*
  *  see: https://hackage.haskell.org/package/llvm-hs-pure-9.0.0/docs/LLVM-AST-Instruction.html#t:Instruction
  */
 enum Instruction {
-  case Call(result: String, callingConvention: CallingConvention, resultType: Type, function: Operand, arguments: List[Operand])
+  case Call(result: String, callingConvention: CallingConvention, resultType: Type, function: Operand, arguments: List[Operand], musttail: Boolean = false)
   case Load(result: String, tpe: Type, address: Operand, alias: AliasInfo)
   case Store(address: Operand, value: Operand, alias: AliasInfo)
   case GetElementPtr(result: String, tpe: Type, address: Operand, indices: List[Int])

@@ -66,7 +66,7 @@ object Transformer {
         val transformedParameters = parameters.map { case machine.Variable(name, tpe) => Parameter(transform(tpe), name) }
         if (async) {
           // receives only the stack, its stack pointer saved in it (see `ForeignJump`)
-          emit(VerbatimFunction(Tailcc(true), VoidType(), functionName, Parameter(stackType, "stack") :: transformedParameters, transform(body)))
+          emit(VerbatimFunction(Tailcc(), VoidType(), functionName, Parameter(stackType, "stack") :: transformedParameters, transform(body)))
         } else {
           emit(VerbatimFunction(Ccc(), transform(returnType), functionName, transformedParameters, transform(body)))
         }
@@ -409,7 +409,7 @@ object Transformer {
         // the foreign code receives the stack, so its stack pointer is saved in it
         val saved = LocalReference(stackType, freshName("saved"))
         emit(Call(saved.name, Ccc(), stackType, saveStackPointer, stackArguments))
-        emit(Call("_", Tailcc(true), VoidType(), ConstantGlobal(foreign), saved :: values.map(transform)))
+        emit(Call("_", Tailcc(), VoidType(), ConstantGlobal(foreign), saved :: values.map(transform), musttail = true))
         RetVoid()
 
       case machine.ForeignCall(variable @ machine.Variable(resultName, resultType), foreign, values, rest) =>
@@ -611,7 +611,7 @@ object Transformer {
     val instructions = BC.instructions; BC.instructions = null;
 
     val entryBlock = BasicBlock("entry", instructions, terminator);
-    val function = Function(Private(), Tailcc(true), VoidType(), name, stackParameters ++ parameters, entryBlock :: basicBlocks, prefix);
+    val function = Function(Private(), Tailcc(), VoidType(), name, stackParameters ++ parameters, entryBlock :: basicBlocks, prefix);
 
     emit(function)
   }
@@ -621,10 +621,10 @@ object Transformer {
     ConstantArray(IntegerType64(), List(ConstantOffset(sharer.name, returnAddressName), ConstantOffset(eraser.name, returnAddressName)))
 
   def callLabel(name: Operand, arguments: List[Operand])(using BlockContext): Instruction =
-    Call("_", Tailcc(true), VoidType(), name, stackArguments ++ arguments)
+    Call("_", Tailcc(), VoidType(), name, stackArguments ++ arguments, musttail = true)
 
   def callLabelTransition(name: Operand, arguments: List[Operand])(using BlockContext): Instruction =
-    Call("_", Tailcc(false), VoidType(), name, stackArguments ++ arguments)
+    Call("_", Tailcc(), VoidType(), name, stackArguments ++ arguments)
 
   def initialEnvironmentPointer = LocalReference(environmentType, "environment")
 
@@ -654,12 +654,22 @@ object Transformer {
       kind match {
         case ObjectEraser =>
           val eraser = ConstantGlobal(freshName("eraser"));
-          defineFunction(eraser.name, List(Parameter(environmentType, "environment"))) {
+          defineFunction(eraser.name, List(Parameter(objectType, "object"))) {
             emit(Comment(s"${kind} eraser, ${freshEnvironment.length} free variables"))
 
+            val environment = LocalReference(environmentType, freshName("environment"))
+            emit(Call(environment.name, Ccc(), environmentType, objectEnvironment, List(LocalReference(objectType, "object"))));
             // TODO avoid unnecessary loads
-            loadEnvironmentAt(LocalReference(environmentType, "environment"), freshEnvironment, Object);
-            eraseValues(freshEnvironment, Set());
+            loadEnvironmentAt(environment, freshEnvironment, Object);
+            emit(Call("_", Ccc(), VoidType(), free, List(LocalReference(objectType, "object"))));
+            // the last field that holds an object is erased by a guaranteed tail call (see eraseObject in rts.ll)
+            val last = freshEnvironment.findLast { value => value.tpe == machine.Positive() || value.tpe == machine.Negative() }
+            eraseValues(freshEnvironment, last.toSet)
+            last.foreach { value =>
+              val lastObject = LocalReference(objectType, freshName("object"))
+              emit(ExtractValue(lastObject.name, transform(value), 1))
+              emit(Call("_", Ccc(), VoidType(), eraseObject, List(lastObject), musttail = true))
+            }
             RetVoid()
           };
           eraser
@@ -867,6 +877,7 @@ object Transformer {
   val eraseFrames = ConstantGlobal("eraseFrames");
 
   val freeStack = ConstantGlobal("freeStack")
+  val free = ConstantGlobal("free")
 
   val hole = ConstantGlobal("hole");
   val unmatchedTag = ConstantGlobal("unmatched_tag");

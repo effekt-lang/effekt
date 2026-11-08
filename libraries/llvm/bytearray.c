@@ -14,16 +14,16 @@
  *       | Rc  | Eraser | Contents ... |
  *       +--------------+--------------+
  *
- * The eraser does nothing.
+ * The eraser only frees the object.
  */
 
 
-void c_bytearray_erase_noop(void *envPtr) { (void)envPtr; }
+void c_bytearray_erase(void *object) { free(object); }
 
 struct Pos c_bytearray_new(const Int size) {
   void *objPtr = malloc(sizeof(struct Header) + size);
   struct Header *headerPtr = objPtr;
-  *headerPtr = (struct Header) { .rc = 0, .eraser = c_bytearray_erase_noop, };
+  *headerPtr = (struct Header) { .rc = 0, .eraser = c_bytearray_erase, };
   return (struct Pos) {
     .tag = size,
     .obj = objPtr,

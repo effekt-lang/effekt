@@ -45,12 +45,12 @@ define ${show(callingConvention)} ${show(returnType)} ${globalName(name)}(${comm
 
   def attributes(callingConvention: CallingConvention): LLVMString = callingConvention match {
     case Ccc() => ""
-    case Tailcc(_) => " \"no_callee_saved_registers\"" // x64 only, other targets ignore it
+    case Tailcc() => " \"no_callee_saved_registers\"" // x64 only, other targets ignore it
   }
 
   def show(callingConvention: CallingConvention): LLVMString = callingConvention match {
     case Ccc() => "ccc"
-    case Tailcc(_) => "tailcc"
+    case Tailcc() => "tailcc"
   }
 
   def show(basicBlock: BasicBlock)(using Context): LLVMString = basicBlock match {
@@ -64,22 +64,13 @@ ${indentedLines(instructions.map(show).mkString("\n"))}
 
   def show(instruction: Instruction)(using C: Context): LLVMString = instruction match {
 
-    case Call(_, Ccc(), VoidType(), ConstantGlobal(name), arguments) =>
-      s"call ccc void ${globalName(name)}(${commaSeparated(arguments.map(show))})"
-    case Call(result, Ccc(), tpe, ConstantGlobal(name), arguments) =>
-      s"${localName(result)} = call ccc ${show(tpe)} ${globalName(name)}(${commaSeparated(arguments.map(show))})"
-    case Call(_, Ccc(), VoidType(), LocalReference(_, name), arguments) =>
-      s"call ccc void ${localName(name)}(${commaSeparated(arguments.map(show))})"
-    case Call(_, Ccc(), _, nonglobal, _) =>
-      C.abort(s"cannot call non-global operand: $nonglobal") // why not?
-    case Call(_, Tailcc(false), VoidType(), ConstantGlobal(name), arguments) =>
-      s"call tailcc void ${globalName(name)}(${commaSeparated(arguments.map(show))})${attributes(Tailcc(false))}"
-    case Call(_, Tailcc(false), VoidType(), LocalReference(_, name), arguments) =>
-      s"call tailcc void ${localName(name)}(${commaSeparated(arguments.map(show))})${attributes(Tailcc(false))}"
-    case Call(result, Tailcc(true), resultType, function, arguments) =>
-      s"musttail ${show(Call(result, Tailcc(false), resultType, function, arguments))}"
-    case Call(_, Tailcc(_), tpe, _, _) =>
-      C.abort(s"tail call to non-void function returning: $tpe")
+    case Call(result, callingConvention, resultType, function, arguments, musttail) =>
+      val (_, callee) = showOperand(function)
+      val call = s"${if musttail then "musttail " else ""}call ${show(callingConvention)} ${show(resultType)} $callee(${commaSeparated(arguments.map(show))})${attributes(callingConvention)}"
+      resultType match {
+        case VoidType() => call
+        case _ => s"${localName(result)} = $call"
+      }
 
     case Load(result, tpe, LocalReference(PointerType(), name), alias) =>
       s"${localName(result)} = load ${show(tpe)}, ${show(LocalReference(PointerType(), name))}, !noalias ${alias.noalias}, !alias.scope ${alias.scope}"
