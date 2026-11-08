@@ -25,4 +25,22 @@ def main() = {
     })
   )
   println("received " ++ bytes.get.show ++ " bytes")
+
+  // a character split between two chunks of output arrives whole
+  var expected = "é\n"
+  each(0, 17) { _ => expected = expected ++ expected }
+  val received = ref("")
+  val _ = spawn(
+    "sh",
+    ["-c", "yes é | head -n 131072"].fromList,
+    default().onStdout(box { chunk =>
+      received.set(received.get ++ chunk)
+    })
+  )
+  println(
+    if (received.get == expected) {
+      "multi-byte output arrived whole"
+    } else {
+      "multi-byte output was corrupted"
+  })
 }
