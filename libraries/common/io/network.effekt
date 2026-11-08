@@ -88,31 +88,24 @@ def streaming[R](connection: Connection) { program: () => R / {next[ByteArray], 
 
 namespace internal {
 
-  // TODO: also in `io/filesystem`, perhaps we want this in a common place?
-  extern js """
-    function toBuffer(buffer) {
-      return Buffer.from(buffer.buffer, buffer.byteOffset, buffer.byteLength);
-    }
-  """
-
   extern jsNode """
-    const net = require('net');
+    const network$net = require('net');
 
     // Error results are negative libuv codes, as Node reports them in `err.errno` (see `io/filesystem`).
     // Their numbers differ between platforms, so the ones used here are looked up by name.
-    const tcp$code = {};
-    for (const [code, [name]] of require('node:util').getSystemErrorMap()) tcp$code[name] = code;
-    function tcp$errno(err) { return (typeof err.errno === 'number' && err.errno < 0) ? err.errno : tcp$code.UNKNOWN; }
+    const network$code = {};
+    for (const [code, [name]] of require('node:util').getSystemErrorMap()) network$code[name] = code;
+    function network$errno(err) { return (typeof err.errno === 'number' && err.errno < 0) ? err.errno : network$code.UNKNOWN; }
 
-    const tcp$handles = new Map();
-    let   tcp$next    = 1;
-    function tcp$alloc(entry) { const h = tcp$next++; tcp$handles.set(h, entry); return h; }
-    function tcp$free(h)      { tcp$handles.delete(h); }
+    const network$handles = new Map();
+    let   network$next    = 1;
+    function network$alloc(entry) { const h = network$next++; network$handles.set(h, entry); return h; }
+    function network$free(h)      { network$handles.delete(h); }
 
     // A connection records errors and end of file as they happen, and wakes the one which is pending a read.
     // Its listeners stay attached for its whole life, so an error with no read pending is kept
     // for the next operation instead of crashing the process.
-    function tcp$connection(socket) {
+    function network$connection(socket) {
       const conn = { socket, error: null, ended: false, waiter: null };
       const wake = () => { const w = conn.waiter; if (w) { conn.waiter = null; w(); } };
       socket.on('readable', wake);
@@ -122,36 +115,36 @@ namespace internal {
       return conn;
     }
 
-    function tcp$connect(host, port, callback) {
-      const socket = net.createConnection({ host, port });
+    function network$connect(host, port, callback) {
+      const socket = network$net.createConnection({ host, port });
       socket.pause();
       const onConnect = () => {
         socket.removeListener('error', onError);
-        callback(tcp$alloc(tcp$connection(socket)));
+        callback(network$alloc(network$connection(socket)));
       };
       const onError = err => {
         socket.removeListener('connect', onConnect);
         socket.destroy();
-        callback(tcp$errno(err));
+        callback(network$errno(err));
       };
       socket.once('connect', onConnect);
       socket.once('error',   onError);
     }
 
-    function tcp$read(handle, buffer, offset, size, callback) {
-      const conn = tcp$handles.get(handle);
-      if (!conn || !conn.socket) { callback(tcp$code.EBADF); return; }
-      if (conn.waiter) { callback(tcp$code.EALREADY); return; }
+    function network$read(handle, buffer, offset, size, callback) {
+      const conn = network$handles.get(handle);
+      if (!conn || !conn.socket) { callback(network$code.EBADF); return; }
+      if (conn.waiter) { callback(network$code.EALREADY); return; }
 
       const attempt = () => {
         const chunk = conn.socket.read();
         if (chunk !== null) {
           const n = Math.min(size, chunk.length);
-          chunk.copy(toBuffer(buffer), offset, 0, n);
+          chunk.copy(io$toBuffer(buffer), offset, 0, n);
           if (n < chunk.length) conn.socket.unshift(chunk.subarray(n));
           callback(n);
         } else if (conn.error) {
-          callback(tcp$errno(conn.error));
+          callback(network$errno(conn.error));
         } else if (conn.ended || conn.socket.readableEnded) {
           callback(0);
         } else {
@@ -162,67 +155,67 @@ namespace internal {
       attempt();
     }
 
-    function tcp$write(handle, buffer, offset, size, callback) {
-      const conn = tcp$handles.get(handle);
-      if (!conn || !conn.socket) { callback(tcp$code.EBADF); return; }
-      if (conn.error) { callback(tcp$errno(conn.error)); return; }
+    function network$write(handle, buffer, offset, size, callback) {
+      const conn = network$handles.get(handle);
+      if (!conn || !conn.socket) { callback(network$code.EBADF); return; }
+      if (conn.error) { callback(network$errno(conn.error)); return; }
 
-      conn.socket.write(toBuffer(buffer).subarray(offset, offset + size), err => {
-        if (err) callback(tcp$errno(err)); else callback(size);
+      conn.socket.write(io$toBuffer(buffer).subarray(offset, offset + size), err => {
+        if (err) callback(network$errno(err)); else callback(size);
       });
     }
 
-    function tcp$close(handle, callback) {
-      const conn = tcp$handles.get(handle);
+    function network$close(handle, callback) {
+      const conn = network$handles.get(handle);
       if (!conn || !conn.socket) { callback($effekt.unit); return; }
-      tcp$free(handle);
+      network$free(handle);
       const { socket } = conn;
       if (socket.destroyed) { callback($effekt.unit); return; }
       socket.end(() => { socket.destroy(); callback($effekt.unit); });
     }
 
     // Node binds only when listening, so `bind` listens already, and keeps connections alive until `listen` takes them.
-    function tcp$bind(host, port, callback) {
-      const server = net.createServer();
+    function network$bind(host, port, callback) {
+      const server = network$net.createServer();
       const entry = { server, accept: null, pending: [], finished: null };
       server.on('connection', socket => {
         socket.pause();
         if (entry.accept) entry.accept(socket); else entry.pending.push(socket);
       });
 
-      const onError = err => callback(tcp$errno(err));
+      const onError = err => callback(network$errno(err));
       server.once('error', onError);
       server.listen(port, host, () => {
         server.removeListener('error', onError);
         server.on('error', _err => {});
-        callback(tcp$alloc(entry));
+        callback(network$alloc(entry));
       });
     }
 
-    function tcp$port(listenerHandle) {
-      const entry = tcp$handles.get(listenerHandle);
-      if (!entry || !entry.server) return tcp$code.EBADF;
+    function network$port(listenerHandle) {
+      const entry = network$handles.get(listenerHandle);
+      if (!entry || !entry.server) return network$code.EBADF;
       return entry.server.address().port;
     }
 
     // Settles with `EBADF` if the listener was shut down, and with 0 once `shutdown` is called.
     // On the other hand, errors of listening, such as `EADDRINUSE`, are raised by `bind`.
-    function tcp$listen(listenerHandle, handler, callback) {
-      const entry = tcp$handles.get(listenerHandle);
-      if (!entry || !entry.server) { callback(tcp$code.EBADF); return; }
+    function network$listen(listenerHandle, handler, callback) {
+      const entry = network$handles.get(listenerHandle);
+      if (!entry || !entry.server) { callback(network$code.EBADF); return; }
 
       entry.finished = () => callback(0);
       entry.accept = socket => {
-        const connHandle = tcp$alloc(tcp$connection(socket));
+        const connHandle = network$alloc(network$connection(socket));
         $effekt.runToplevel((ks, k) => handler(connHandle, ks, k));
       };
       entry.pending.splice(0).forEach(entry.accept);
     }
 
-    function tcp$shutdown(listenerHandle, callback) {
-      const entry = tcp$handles.get(listenerHandle);
+    function network$shutdown(listenerHandle, callback) {
+      const entry = network$handles.get(listenerHandle);
       if (!entry || !entry.server) { callback($effekt.unit); return; }
-      tcp$free(listenerHandle);
+      network$free(listenerHandle);
       // Stop accepting without waiting for open connections to end (to avoid a deadlock on Node)
       entry.server.close();
       if (entry.finished) entry.finished();
@@ -231,56 +224,56 @@ namespace internal {
   """
 
   extern def connect(host: String, port: Int) at async: Int =
-    jsNode "$effekt.capture(k => tcp$connect(${host}, ${port}, k))"
+    jsNode "$effekt.capture(k => network$connect(${host}, ${port}, k))"
     llvm """
       notail call void @c_tcp_connect(%Pos ${host}, %Int ${port}, %Stack %stack)
       ret void
     """
 
   extern def read(handle: Int, buffer: ByteArray, offset: Int, size: Int) at async: Int =
-    jsNode "$effekt.capture(k => tcp$read(${handle}, ${buffer}, ${offset}, ${size}, k))"
+    jsNode "$effekt.capture(k => network$read(${handle}, ${buffer}, ${offset}, ${size}, k))"
     llvm """
       notail call void @c_tcp_read(%Int ${handle}, %Pos ${buffer}, %Int ${offset}, %Int ${size}, %Stack %stack)
       ret void
     """
 
   extern def write(handle: Int, buffer: ByteArray, offset: Int, size: Int) at async: Int =
-    jsNode "$effekt.capture(k => tcp$write(${handle}, ${buffer}, ${offset}, ${size}, k))"
+    jsNode "$effekt.capture(k => network$write(${handle}, ${buffer}, ${offset}, ${size}, k))"
     llvm """
       notail call void @c_tcp_write(%Int ${handle}, %Pos ${buffer}, %Int ${offset}, %Int ${size}, %Stack %stack)
       ret void
     """
 
   extern def close(handle: Int) at async: Unit =
-    jsNode "$effekt.capture(k => tcp$close(${handle}, k))"
+    jsNode "$effekt.capture(k => network$close(${handle}, k))"
     llvm """
       notail call void @c_tcp_close(%Int ${handle}, %Stack %stack)
       ret void
     """
 
   extern def bind(host: String, port: Int) at async: Int =
-    jsNode "$effekt.capture(k => tcp$bind(${host}, ${port}, k))"
+    jsNode "$effekt.capture(k => network$bind(${host}, ${port}, k))"
     llvm """
       notail call void @c_tcp_bind(%Pos ${host}, %Int ${port}, %Stack %stack)
       ret void
     """
 
   extern def port(listener: Int) at io: Int =
-    jsNode "tcp$port(${listener})"
+    jsNode "network$port(${listener})"
     llvm """
       %result = call %Int @c_tcp_port(%Int ${listener})
       ret %Int %result
     """
 
   extern def listen(listener: Int, handler: Connection => Unit at {io, async, global}) at async: Int =
-    jsNode "$effekt.capture(k => tcp$listen(${listener}, ${handler}, k))"
+    jsNode "$effekt.capture(k => network$listen(${listener}, ${handler}, k))"
     llvm """
       notail call void @c_tcp_listen(%Int ${listener}, %Neg ${handler}, %Stack %stack)
       ret void
     """
 
   extern def shutdown(handle: Int) at async: Unit =
-    jsNode "$effekt.capture(k => tcp$shutdown(${handle}, k))"
+    jsNode "$effekt.capture(k => network$shutdown(${handle}, k))"
     llvm """
       notail call void @c_tcp_shutdown(%Int ${handle}, %Stack %stack)
       ret void

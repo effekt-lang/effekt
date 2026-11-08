@@ -23,14 +23,14 @@ def console[R] { program: () => R / Console }: R = {
 namespace js {
 
   extern jsNode """
-    const readline = require('node:readline');
+    const console$readline = require('node:readline');
   """
 
   extern type JSConsole =
-    js "readline.createInterface return type"
+    js "console$readline.createInterface return type"
 
   extern def newConsole() at io: JSConsole =
-    jsNode """readline.createInterface({
+    jsNode """console$readline.createInterface({
         input: process.stdin,
         output: process.stdout,
       })"""

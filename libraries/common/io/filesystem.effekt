@@ -206,47 +206,37 @@ def mkdir(path: String): Unit / Exception[IOError] = {
 
 namespace internal {
 
-  extern js """
-    /**
-     * Nodejs file operations expect buffers, but we represent buffers as typed arrays.
-     * This function converts between the two without copying.
-     */
-    function toBuffer(buffer) {
-      return Buffer.from(buffer.buffer, buffer.byteOffset, buffer.byteLength)
-    }
-  """
-
   extern jsNode """
-    const fs = require("fs");
+    const filesystem$node = require("fs");
 
-    function open(path, flags, callback) {
-      fs.open(path, flags, (err, file) => {
+    function filesystem$open(path, flags, callback) {
+      filesystem$node.open(path, flags, (err, file) => {
         if (err) { callback(err.errno) } else { callback(file) }
       })
     }
 
-    function read(file, buffer, offset, size, position, callback) {
+    function filesystem$read(file, buffer, offset, size, position, callback) {
       let positionOrNull = position === -1 ? null : position;
-      fs.read(file, toBuffer(buffer), offset, size, positionOrNull, (err, bytesRead) => {
+      filesystem$node.read(file, io$toBuffer(buffer), offset, size, positionOrNull, (err, bytesRead) => {
         if (err) { callback(err.errno) } else { callback(bytesRead) }
       })
     }
 
-    function write(file, buffer, offset, size, position, callback) {
+    function filesystem$write(file, buffer, offset, size, position, callback) {
       let positionOrNull = position === -1 ? null : position;
-      fs.write(file, toBuffer(buffer), offset, size, positionOrNull, (err, bytesWritten) => {
+      filesystem$node.write(file, io$toBuffer(buffer), offset, size, positionOrNull, (err, bytesWritten) => {
         if (err) { callback(err.errno) } else { callback(bytesWritten) }
       })
     }
 
-    function close(file, callback) {
-      fs.close(file, (err) => {
+    function filesystem$close(file, callback) {
+      filesystem$node.close(file, (err) => {
         if (err) { callback(err.errno) } else { callback(0) }
       })
     }
 
-    function mkdir(path, callback) {
-      fs.mkdir(path, (err) => {
+    function filesystem$mkdir(path, callback) {
+      filesystem$node.mkdir(path, (err) => {
         if (err) { callback(err.errno) } else { callback(0) }
       })
     }
@@ -263,49 +253,49 @@ namespace internal {
   """
 
   extern def openForReading(path: String) at async: Int =
-    jsNode "$effekt.capture(callback => open(${path}, 'r', callback))"
+    jsNode "$effekt.capture(callback => filesystem$open(${path}, 'r', callback))"
     llvm """
       notail call void @c_fs_open_reading(%Pos ${path}, %Stack %stack)
       ret void
     """
 
   extern def openForWriting(path: String) at async: Int =
-    jsNode "$effekt.capture(callback => open(${path}, 'w', callback))"
+    jsNode "$effekt.capture(callback => filesystem$open(${path}, 'w', callback))"
     llvm """
       notail call void @c_fs_open_writing(%Pos ${path}, %Stack %stack)
       ret void
     """
 
   extern def openForAppending(path: String) at async: Int =
-    jsNode "$effekt.capture(callback => open(${path}, 'a', callback))"
+    jsNode "$effekt.capture(callback => filesystem$open(${path}, 'a', callback))"
     llvm """
       notail call void @c_fs_open_appending(%Pos ${path}, %Stack %stack)
       ret void
     """
 
   extern def read(file: Int, buffer: ByteArray, offset: Int, size: Int, position: Int) at async: Int =
-    jsNode "$effekt.capture(callback => read(${file}, ${buffer}, ${offset}, ${size}, ${position}, callback))"
+    jsNode "$effekt.capture(callback => filesystem$read(${file}, ${buffer}, ${offset}, ${size}, ${position}, callback))"
     llvm """
       notail call void @c_fs_read(%Int ${file}, %Pos ${buffer}, %Int ${offset}, %Int ${size}, %Int ${position}, %Stack %stack)
       ret void
     """
 
   extern def write(file: Int, buffer: ByteArray, offset: Int, size: Int, position: Int) at async: Int =
-    jsNode "$effekt.capture(callback => write(${file}, ${buffer}, ${offset}, ${size}, ${position}, callback))"
+    jsNode "$effekt.capture(callback => filesystem$write(${file}, ${buffer}, ${offset}, ${size}, ${position}, callback))"
     llvm """
       notail call void @c_fs_write(%Int ${file}, %Pos ${buffer}, %Int ${offset}, %Int ${size}, %Int ${position}, %Stack %stack)
       ret void
     """
 
   extern def close(file: Int) at async: Int =
-    jsNode "$effekt.capture(callback => close(${file}, callback))"
+    jsNode "$effekt.capture(callback => filesystem$close(${file}, callback))"
     llvm """
       notail call void @c_fs_close(%Int ${file}, %Stack %stack)
       ret void
     """
 
   extern def mkdir(path: String) at async: Int =
-    jsNode "$effekt.capture(callback => mkdir(${path}, callback))"
+    jsNode "$effekt.capture(callback => filesystem$mkdir(${path}, callback))"
     llvm """
       notail call void @c_fs_mkdir(%Pos ${path}, %Stack %stack)
       ret void
