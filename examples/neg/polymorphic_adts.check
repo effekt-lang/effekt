@@ -1,7 +1,7 @@
-[error] examples/neg/polymorphic_adts.effekt:36:33: Expected Bool but got Int.
+[error] examples/neg/polymorphic_adts.effekt:36:33: Expected Bool but got Int. [typer]
         case Pair2(n, t) => if (t) { n + 1 } else { 0 }
                                 ^
-[error] examples/neg/polymorphic_adts.effekt:36:38: Cannot typecheck call.
+[error] examples/neg/polymorphic_adts.effekt:36:38: Cannot typecheck call. [typer]
 There are multiple overloads, which all fail to check:
 
 Possible overload: effekt::infixPlus of type (Int, Int) => Int

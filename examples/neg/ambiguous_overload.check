@@ -1,4 +1,4 @@
-[error] examples/neg/ambiguous_overload.effekt:4:14: Cannot typecheck call.
+[error] examples/neg/ambiguous_overload.effekt:4:14: Cannot typecheck call. [typer]
 There are multiple overloads, which all fail to check:
 
 Possible overload: effekt::infixPlus of type (Int, Int) => Int

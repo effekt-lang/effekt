@@ -1,4 +1,4 @@
-[error] examples/neg/typer/expected_value_got_block_overload.effekt:5:11: Cannot typecheck call.
+[error] examples/neg/typer/expected_value_got_block_overload.effekt:5:11: Cannot typecheck call. [typer]
 There are multiple overloads, which all fail to check:
 
 Possible overload: expected_value_got_block_overload::apply of type (Int => Int at {}) => Int

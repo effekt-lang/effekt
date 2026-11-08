@@ -169,7 +169,7 @@ class LSPTests extends FunSuite {
       val diagnostic = new Diagnostic()
       diagnostic.setRange(range)
       diagnostic.setSeverity(DiagnosticSeverity.Error)
-      diagnostic.setSource("effekt")
+      diagnostic.setSource("effekt [typer]")
       diagnostic.setMessage("Main must return Unit, please use `exit(n)` to return an error code.")
 
       val diagnosticsWithError = new util.ArrayList[Diagnostic]()
@@ -201,7 +201,7 @@ class LSPTests extends FunSuite {
       val diagnostic = new Diagnostic()
       diagnostic.setRange(range)
       diagnostic.setSeverity(DiagnosticSeverity.Error)
-      diagnostic.setSource("effekt")
+      diagnostic.setSource("effekt [typer]")
       diagnostic.setMessage("Multiple main functions defined: test::main, test::main")
 
       val diagnosticsWithError = new util.ArrayList[Diagnostic]()
@@ -235,7 +235,7 @@ class LSPTests extends FunSuite {
       val diagnostic = new Diagnostic()
       diagnostic.setRange(range)
       diagnostic.setSeverity(DiagnosticSeverity.Error)
-      diagnostic.setSource("effekt")
+      diagnostic.setSource("effekt [typer]")
       diagnostic.setMessage("Main cannot have effects, but includes effects: { Eff }")
 
       val diagnosticsWithError = new util.ArrayList[Diagnostic]()
@@ -280,7 +280,7 @@ class LSPTests extends FunSuite {
       val diagnostic = new Diagnostic()
       diagnostic.setRange(range)
       diagnostic.setSeverity(DiagnosticSeverity.Error)
-      diagnostic.setSource("effekt")
+      diagnostic.setSource("effekt [typer]")
       diagnostic.setMessage("Expected Int but got String.")
 
       val diagnosticsWithError = new util.ArrayList[Diagnostic]()
@@ -310,7 +310,7 @@ class LSPTests extends FunSuite {
       val diagnostic = new Diagnostic()
       diagnostic.setRange(range)
       diagnostic.setSeverity(DiagnosticSeverity.Error)
-      diagnostic.setSource("effekt")
+      diagnostic.setSource("effekt [namer]")
       diagnostic.setMessage(
         """Expected value type, but got a second-class function type (Int, Int) => Bool.
           |Did you mean to use braces in order to receive a block type `(Int, Int) => Bool`?

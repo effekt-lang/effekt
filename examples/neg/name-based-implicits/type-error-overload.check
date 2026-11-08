@@ -1,4 +1,4 @@
-[error] examples/neg/name-based-implicits/type-error-overload.effekt:8:19: Cannot typecheck call.
+[error] examples/neg/name-based-implicits/type-error-overload.effekt:8:19: Cannot typecheck call. [typer]
 There are multiple overloads, which all fail to check:
 
 Possible overload: type-error-overload::baz of type {() => Int} => String

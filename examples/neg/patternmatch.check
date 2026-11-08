@@ -1,7 +1,7 @@
-[error] examples/neg/patternmatch.effekt:6:10: Pattern matches against type Foo but scrutinee has type Int.
+[error] examples/neg/patternmatch.effekt:6:10: Pattern matches against type Foo but scrutinee has type Int. [typer]
     case Bar() => 42
          ^^^^^
-[error] examples/neg/patternmatch.effekt:13:20: Different arms of a conditional/match have incompatible types.
+[error] examples/neg/patternmatch.effekt:13:20: Different arms of a conditional/match have incompatible types. [typer]
 
 One arm has type
   Box[Int]
@@ -11,7 +11,7 @@ while another one has type
 Type mismatch between Bool and Int.
 def join(f: Foo) = f match {
                    ^
-[error] examples/neg/patternmatch.effekt:13:20: Expected Box[A] but got Box[A].
+[error] examples/neg/patternmatch.effekt:13:20: Expected Box[A] but got Box[A]. [typer]
 
 Type mismatch between Int and Bool.
 def join(f: Foo) = f match {

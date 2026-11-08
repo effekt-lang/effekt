@@ -206,7 +206,7 @@ class Server(config: EffektConfig, compileOnChange: Boolean=false) extends Drive
 
   def toLSP(diagnostic: EffektDiagnostic): Diagnostic = {
     val range = diagnostic.range.map(convertRange).getOrElse(emptyRange)
-    new Diagnostic(range, lspMessaging.contentWithSubdiagnostics(diagnostic), toLSP(diagnostic.severity), "effekt")
+    new Diagnostic(range, lspMessaging.contentWithSubdiagnostics(diagnostic), toLSP(diagnostic.severity), lspMessaging.lspSource(diagnostic))
   }
 
   def toLSP(severity: Severity): DiagnosticSeverity = severity match {

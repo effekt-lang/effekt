@@ -1,4 +1,4 @@
-[error] examples/neg/name-based-implicits/qualified-error.effekt:8:27: Cannot instantiate implicit argument.
+[error] examples/neg/name-based-implicits/qualified-error.effekt:8:27: Cannot instantiate implicit argument. [typer]
 Cannot instantiate 1st block argument compare of type (A, A) => Ordering.
   Ambiguous overload.
   There are multiple overloads, which all would type check:
