@@ -6,7 +6,6 @@ import effekt.PhaseResult.CoreTransformed
 import effekt.core.substitutions.{ Substitution, substitute }
 import effekt.util.DB
 
-
 /**
  * Specializes definitions to the local definitions passed to them as blocks, placing each copy right after the last
  * of these definitions, where it sees everything all of them see:
@@ -63,7 +62,7 @@ type Key = (Id, List[Option[Id]])
 
 /**
  * What is in scope: the local definitions of literals and objects, the aliases `def x = y`, the copies, and the
- * callees of the copies we are in.
+ * definitions whose bodies we are in.
  */
 case class Scope(
   definitions: Map[Id, Block],
@@ -83,7 +82,8 @@ case class Scope(
  * where `g` is a local definition and `h` is not.
  * A copy asking for another copy with blocks defined outside of it, which is not in scope, gets it at its beginning,
  * so that mutual recursion `ping(…){g}`, `pong(…){g}` ends up nested.
- * Within a copy of `f`, we make no new copy of `f`, so that a block built up recursively stays a block.
+ * A definition is not specialized within its own body, be it the definition itself or a copy of it, so that a block
+ * built up recursively stays a block.
  */
 def specialize(m: ModuleDecl): ModuleDecl = {
   val toplevel: Map[Id, BlockLit] = m.definitions.collect {
@@ -190,7 +190,7 @@ def specialize(m: ModuleDecl): ModuleDecl = {
       case Stmt.Def(id, block @ (_: BlockLit | _: Block.New), body) =>
         val defined = scope.copy(definitions = scope.definitions + (id -> block))
         val (named, withCopies) = provide(body, defined) { case (f, arguments) => f == id || arguments.contains(Some(id)) }
-        Stmt.Def(id, rewrite(block)(using defined), bind(named, withCopies, rewrite(body)(using withCopies)))
+        Stmt.Def(id, rewrite(block)(using defined.copy(within = defined.within + id)), bind(named, withCopies, rewrite(body)(using withCopies)))
 
       case Stmt.App(callee @ Block.BlockVar(f, _, capt), targs, vargs, bargs) if bargs.nonEmpty =>
         val arguments = bargs.map {
@@ -217,7 +217,7 @@ def specialize(m: ModuleDecl): ModuleDecl = {
 
   val empty = Scope(Map.empty, Map.empty, Map.empty, Set.empty)
   m.copy(definitions = m.definitions.map {
-    case Toplevel.Def(id, block) => Toplevel.Def(id, specializing.rewrite(block)(using empty))
+    case Toplevel.Def(id, block) => Toplevel.Def(id, specializing.rewrite(block)(using empty.copy(within = Set(id))))
     case Toplevel.Val(id, binding) => Toplevel.Val(id, specializing.rewrite(binding)(using empty))
   })
 }
