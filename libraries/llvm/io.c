@@ -388,7 +388,9 @@ void c_tcp_close(Int handle, Stack stack) {
     uv_close(uv_handle, c_tcp_close_cb);
 }
 
-Int c_tcp_bind(String host, Int port) {
+void c_tcp_listen_cb(uv_stream_t* server, int status);
+
+void c_tcp_bind(String host, Int port, Stack stack) {
     char* host_str = c_bytearray_into_nullterminated_string(host);
     erasePositive(host);
 
@@ -398,7 +400,8 @@ Int c_tcp_bind(String host, Int port) {
     if (result < 0) {
         free(tcp_handle);
         free(host_str);
-        return result;
+        resume_Int(stack, result);
+        return;
     }
 
     tcp_handle->data = NULL;  // no listen yet
@@ -409,16 +412,34 @@ Int c_tcp_bind(String host, Int port) {
 
     if (result < 0) {
         uv_close((uv_handle_t*)tcp_handle, (uv_close_cb)free);
-        return result;
+        resume_Int(stack, result);
+        return;
     }
 
     result = uv_tcp_bind(tcp_handle, (const struct sockaddr*)&addr, 0);
     if (result < 0) {
         uv_close((uv_handle_t*)tcp_handle, (uv_close_cb)free);
-        return result;
+        resume_Int(stack, result);
+        return;
     }
 
-    return (int64_t)tcp_handle;
+    // Listening already, so that the address is reserved (errors such as `EADDRINUSE` arise here),
+    // but connections are only accepted once `listen` starts (see `c_tcp_listen_cb`).
+    result = uv_listen((uv_stream_t*)tcp_handle, SOMAXCONN, c_tcp_listen_cb);
+    if (result < 0) {
+        uv_close((uv_handle_t*)tcp_handle, (uv_close_cb)free);
+        resume_Int(stack, result);
+        return;
+    }
+
+    resume_Int(stack, (int64_t)tcp_handle);
+}
+
+Int c_tcp_port(Int listener) {
+    struct sockaddr_in addr;
+    int length = sizeof(addr);
+    int result = uv_tcp_getsockname((uv_tcp_t*)listener, (struct sockaddr*)&addr, &length);
+    return result < 0 ? result : ntohs(addr.sin_port);
 }
 
 typedef struct {
@@ -426,13 +447,9 @@ typedef struct {
     struct Neg handler;
 } tcp_listen_closure_t;
 
-void c_tcp_listen_cb(uv_stream_t* server, int status) {
+// Accepts a connection and runs the handler of `listen` on it.
+void c_tcp_accept(uv_stream_t* server) {
     tcp_listen_closure_t* listen_closure = (tcp_listen_closure_t*)server->data;
-
-    // An error while accepting concerns that one client, not the listener:
-    // listen returns only once shutdown is called (as on the JS backend),
-    // so skip the client and keep listening.
-    if (status < 0) return;
 
     uv_tcp_t* client = malloc(sizeof(uv_tcp_t));
     if (uv_tcp_init(uv_default_loop(), client) < 0) {
@@ -450,6 +467,17 @@ void c_tcp_listen_cb(uv_stream_t* server, int status) {
     run_Int(handler, (int64_t)client);
 }
 
+void c_tcp_listen_cb(uv_stream_t* server, int status) {
+    // An error while accepting concerns that one client, as opposed to the listener:
+    // listen returns only once shutdown is called (as on the JS backend), so skip the client and keep listening.
+    if (status < 0) return;
+
+    // Before `listen` starts, libuv keeps the connection alive, and stops accepting until `uv_accept` takes it.
+    if (server->data == NULL) return;
+
+    c_tcp_accept(server);
+}
+
 void c_tcp_listen(Int listener, struct Neg handler, Stack stack) {
     uv_stream_t* server = (uv_stream_t*)listener;
 
@@ -458,13 +486,7 @@ void c_tcp_listen(Int listener, struct Neg handler, Stack stack) {
     listen_closure->handler = handler;
     server->data = listen_closure;
 
-    int result = uv_listen(server, SOMAXCONN, c_tcp_listen_cb);
-    if (result < 0) {
-        free(listen_closure);
-        eraseNegative(handler);
-        resume_Int(stack, result);
-        return;
-    }
+    c_tcp_accept(server);
 }
 
 void c_tcp_shutdown(Int handle, Stack stack) {

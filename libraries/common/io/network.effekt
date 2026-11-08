@@ -49,11 +49,16 @@ def close(handle: Connection): Unit =
 /// A TCP listener. Should not be inspected.
 type Listener = Int
 
-/// Creates a TCP listener bound to the specified host and port.
+/// Creates a TCP listener bound to the specified host and port, reserving the address (o/w raising `EADDRINUSE`).
+/// Port 0 asks the system for a free port, which `port` then returns.
 def bind(host: String, port: Int): Listener / Exception[IOError] =
   internal::checkResult(internal::bind(host, port))
 
-/// Starts listening for incoming connections and handles each with the provided handler.
+/// The port which the given `listener` is bound to.
+def port(listener: Listener): Int / Exception[IOError] =
+  internal::checkResult(internal::port(listener))
+
+/// Starts listening for incoming connections and handles each with the given `handler`, including those which arrived since `bind`.
 /// Returns only once `shutdown` is called on this `Listener`, so it is usually run with `spawn`.
 def listen(listener: Listener, handler: Connection => Unit at {io, async, global}): Unit / Exception[IOError] = {
   internal::checkResult(internal::listen(listener, handler)); ()
@@ -176,27 +181,41 @@ namespace internal {
       socket.end(() => { socket.destroy(); callback($effekt.unit); });
     }
 
-    function tcp$bind(host, port) {
-      return tcp$alloc({ server: net.createServer(), host, port, finished: null });
+    // Node binds only when listening, so `bind` listens already, and keeps connections alive until `listen` takes them.
+    function tcp$bind(host, port, callback) {
+      const server = net.createServer();
+      const entry = { server, accept: null, pending: [], finished: null };
+      server.on('connection', socket => {
+        socket.pause();
+        if (entry.accept) entry.accept(socket); else entry.pending.push(socket);
+      });
+
+      const onError = err => callback(tcp$errno(err));
+      server.once('error', onError);
+      server.listen(port, host, () => {
+        server.removeListener('error', onError);
+        server.on('error', _err => {});
+        callback(tcp$alloc(entry));
+      });
+    }
+
+    function tcp$port(listenerHandle) {
+      const entry = tcp$handles.get(listenerHandle);
+      if (!entry || !entry.server) return tcp$code.EBADF;
+      return entry.server.address().port;
     }
 
     // Settles with an error if listening fails, and with 0 once `shutdown` is called.
     function tcp$listen(listenerHandle, handler, callback) {
       const entry = tcp$handles.get(listenerHandle);
       if (!entry || !entry.server) { callback(tcp$code.EBADF); return; }
-      const { server, host, port } = entry;
-      const onError = err => callback(tcp$errno(err));
-      server.once('error', onError);
-      server.listen(port, host, () => {
-        server.removeListener('error', onError);
-        server.on('error', _err => {});
-        entry.finished = () => callback(0);
-        server.on('connection', socket => {
-          socket.pause();
-          const connHandle = tcp$alloc(tcp$connection(socket));
-          $effekt.runToplevel((ks, k) => handler(connHandle, ks, k));
-        });
-      });
+
+      entry.finished = () => callback(0);
+      entry.accept = socket => {
+        const connHandle = tcp$alloc(tcp$connection(socket));
+        $effekt.runToplevel((ks, k) => handler(connHandle, ks, k));
+      };
+      entry.pending.splice(0).forEach(entry.accept);
     }
 
     function tcp$shutdown(listenerHandle, callback) {
@@ -238,10 +257,17 @@ namespace internal {
       ret void
     """
 
-  extern def bind(host: String, port: Int) at io: Int =
-    jsNode "tcp$bind(${host}, ${port})"
+  extern def bind(host: String, port: Int) at async: Int =
+    jsNode "$effekt.capture(k => tcp$bind(${host}, ${port}, k))"
     llvm """
-      %result = call %Int @c_tcp_bind(%Pos ${host}, %Int ${port})
+      notail call void @c_tcp_bind(%Pos ${host}, %Int ${port}, %Stack %stack)
+      ret void
+    """
+
+  extern def port(listener: Int) at io: Int =
+    jsNode "tcp$port(${listener})"
+    llvm """
+      %result = call %Int @c_tcp_port(%Int ${listener})
       ret %Int %result
     """
 
@@ -264,7 +290,8 @@ namespace internal {
     declare void @c_tcp_read(%Int, %Pos, %Int, %Int, %Stack)
     declare void @c_tcp_write(%Int, %Pos, %Int, %Int, %Stack)
     declare void @c_tcp_close(%Int, %Stack)
-    declare %Int @c_tcp_bind(%Pos, %Int)
+    declare void @c_tcp_bind(%Pos, %Int, %Stack)
+    declare %Int @c_tcp_port(%Int)
     declare void @c_tcp_listen(%Int, %Neg, %Stack)
     declare void @c_tcp_shutdown(%Int, %Stack)
   """
