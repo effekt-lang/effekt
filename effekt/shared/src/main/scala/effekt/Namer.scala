@@ -1171,13 +1171,11 @@ trait NamerOps extends ContextOps { Context: Context =>
         if (blocks.isEmpty) {
           val ops = scope.lookupOperation(id.path, id.name).flatten
 
-          // Provide specific info messages for operations
-          ops.foreach { op =>
-            info(pretty"There is an equally named effect operation ${op} of interface ${op.interface}. Use syntax `do ${id}()` to call it.")
+          abort(pretty"Cannot find a function named `${id}`.") {
+            ops.foreach { op =>
+              help(pretty"There is an equally named effect operation ${op} of interface ${op.interface}. Use syntax `do ${id}()` to call it.")
+            }
           }
-
-          // Always abort with the generic message
-          abort(pretty"Cannot find a function named `${id}`.")
         }
         assignSymbol(id, CallTarget(blocks, Some(scope.scope)))
     }

@@ -286,6 +286,8 @@ object messages {
     def abort(msg: Diagnostic): Nothing = throw FatalPhaseError(msg)
     def abort(msg: String): Nothing = abort(plainMessage(msg, Severity.Error))
     def abort(msg: StructuredMessage): Nothing = abort(structuredMessage(msg, Severity.Error))
+    def abort(msg: StructuredMessage)(subdiagnostics: Subdiagnostics ?=> Unit): Nothing =
+      abort(structuredMessage(msg, Severity.Error).copy(subdiagnostics = Subdiagnostics(subdiagnostics)))
     def abort(reason: Reason): Nothing = abort(diagnostic(reason, Severity.Error))
 
     def reraise(msg: EffektMessages): Unit = messaging.append(msg)

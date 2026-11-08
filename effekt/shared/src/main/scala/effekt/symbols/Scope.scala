@@ -2,7 +2,7 @@ package effekt
 package symbols
 
 import effekt.source.IdRef
-import effekt.util.messages.ErrorReporter
+import effekt.util.messages.{ErrorMessageReifier, ErrorReporter, StructuredMessage, Subdiagnostics, help}
 
 /**
  * An immutable container of bindings.
@@ -212,13 +212,13 @@ object scopes {
     //
     // NOTE: We might also want to generalize to return more possible candidates than one
     //       (1 works fine for types, but maybe not for fields/methods/functions/...)
-    private def didYouMean(nameNotFound: String, candidates: => Set[String], specificHeuristic: String => Option[String] = _ => None)(using E: ErrorReporter): Unit =
+    private def didYouMean(nameNotFound: String, candidates: => Set[String], specificHeuristic: String => Option[StructuredMessage] = _ => None)(using Subdiagnostics): Unit =
       // Priority 1: A specific heuristic
       specificHeuristic(nameNotFound) orElse {
         // Priority 2: Exact case-insensitive match
         candidates
           .find { name => name.toUpperCase == nameNotFound.toUpperCase }
-          .map { exactMatch => pp"Did you mean $exactMatch?" }
+          .map { exactMatch => pretty"Did you mean $exactMatch?" }
           .orElse {
             // Priority 3: Edit distance
             val threshold = ((nameNotFound.length + 2) max 3) / 3
@@ -230,24 +230,24 @@ object scopes {
               }
               .sorted
               .headOption
-              .map { case (_, name) => pp"Did you mean $name?" }
+              .map { case (_, name) => pretty"Did you mean $name?" }
           }
-      } foreach { msg => E.info(msg) }
+      } foreach { msg => help(msg) }
 
     // NOTE: Most of these should be covered by the edit distance anyway...
-    private def didYouMeanTypeHeuristic(name: String): Option[String] = name match {
-      case "Boolean" | "boolean" => Some(pp"Did you mean Bool?")
-      case "Str" | "str" => Some(pp"Did you mean String?")
+    private def didYouMeanTypeHeuristic(name: String): Option[StructuredMessage] = name match {
+      case "Boolean" | "boolean" => Some(pretty"Did you mean Bool?")
+      case "Str" | "str" => Some(pretty"Did you mean String?")
       case "Integer" | "Int32" | "Int64" | "I32" | "I64" | "i32" | "i64" =>
-        Some(pp"Did you mean Int?")
+        Some(pretty"Did you mean Int?")
       case "UInt32" | "UInt64" | "UInt" | "U32" | "U64" | "u32" | "u64" =>
-        Some(pp"Effekt only supports signed integers, did you mean Int?")
+        Some(pretty"Effekt only supports signed integers, did you mean Int?")
       case "Int8" | "UInt8" | "I8" | "U8" | "i8" | "u8" =>
-        Some(pp"Did you mean Byte (8 bits) or Char (32 bits)?")
+        Some(pretty"Did you mean Byte (8 bits) or Char (32 bits)?")
       case "Float" | "float" | "F64" | "F32" | "f64" | "f32" =>
-        Some(pp"Effekt only supports 64bit floating numbers, did you mean Double?")
-      case "Maybe" | "maybe" => Some(pp"Did you mean Option?")
-      case "Void" | "void" => Some(pp"Did you mean Unit?")
+        Some(pretty"Effekt only supports 64bit floating numbers, did you mean Double?")
+      case "Maybe" | "maybe" => Some(pretty"Did you mean Option?")
+      case "Void" | "void" => Some(pretty"Did you mean Unit?")
       case _ => None
     }
 
@@ -259,9 +259,9 @@ object scopes {
           _.types.keys.toList
         }.flatten.toSet
 
-        didYouMean(id.name, availableTypes, didYouMeanTypeHeuristic)
-
-        E.abort(pp"Could not resolve type $id")
+        E.abort(pretty"Could not resolve type $id") {
+          didYouMean(id.name, availableTypes, didYouMeanTypeHeuristic)
+        }
       }
 
     def lookupTypeOption(path: List[String], name: String)(using E: ErrorReporter): Option[TypeSymbol] =
