@@ -257,9 +257,17 @@ object Normalizer { normal =>
     case Stmt.Def(id, block, body) if isUnused(id) =>
       normalize(body)
 
-    case Stmt.Def(id, block, body) =>
-      val normalized = active(block).dealiased
-      Stmt.Def(id, normalized, normalize(body)(using C.bind(id, normalized)))
+    case Stmt.Def(id, block, body) => active(block).dealiased match {
+      case Block.New(impl) =>
+        val lifted = liftMethods(id, impl)
+        val (methods, forwarding) = called(impl, lifted, _ => true)
+        val bound = methods.foldLeft(C) { case (context, (method, literal)) => context.bind(method, literal) }
+        val rest = normalize(body)(using bound.bind(id, Block.New(forwarding)))
+        val (calledMethods, calledForwarding) = called(impl, lifted, method => rest.free.blocks.isDefinedAt(method))
+        calledMethods.foldRight(Stmt.Def(id, Block.New(calledForwarding), rest)) { case ((method, literal), rest) => Stmt.Def(method, literal, rest) }
+      case normalized =>
+        Stmt.Def(id, normalized, normalize(body)(using C.bind(id, normalized)))
+    }
 
     case Stmt.Let(id, expr, body) =>
       active(expr) match {
@@ -296,7 +304,7 @@ object Normalizer { normal =>
       active(b) match {
         case n @ NormalizedBlock.Known(Block.New(impl), boundBy) =>
           selectOperation(impl, method) match {
-            case b: BlockLit if LiftMethods.forwards(b.tparams, b.vparams, b.bparams, b.body) || shouldInline(b, boundBy, vargs, bargs) =>
+            case b: BlockLit if forwards(b.tparams, b.vparams, b.bparams, b.body) || shouldInline(b, boundBy, vargs, bargs) =>
               reduce(b, targs, vargs.map(normalize), bargs.map(normalize))
             case _ => Stmt.Invoke(n.shared, method, methodTpe, targs, vargs.map(normalize), bargs.map(normalize))
           }
@@ -574,6 +582,41 @@ object Normalizer { normal =>
     val body = substitutions.substitute(renamedLit, targs, vargs, bvars)
 
     normalize(Binding(bindings, body))
+  }
+
+  /** def o = new I { def m(x) = s }   ~>   def m'(x) = s; def o = new I { def m(x) = m'(x) } */
+  private def liftMethods(id: Id, impl: Implementation)(using C: Context): List[(Operation, Option[(Id, BlockLit)])] =
+    impl.operations.map {
+      case op @ Operation(name, tparams, cparams, vparams, bparams, body)
+          if forwards(tparams, vparams, bparams, body) || body.free.freeIds.contains(id) =>
+        (op, None)
+      case Operation(name, tparams, cparams, vparams, bparams, body) =>
+        val literal: BlockLit = BlockLit(tparams, cparams, vparams, bparams, body)
+        val (block, renamedIds) = Renamer.rename(literal)
+        renamedIds.foreach { case (fresh, original) => C.usage.get(original).foreach { usage => C.usage.update(fresh, usage) } }
+        val method = Id(name)
+        C.usage.update(method, C.usage.getOrElse(id, Usage.Never))
+        val call = Stmt.App(Block.BlockVar(method, block.tpe, block.capt),
+          tparams.map(ValueType.Var.apply),
+          vparams.map { p => Expr.ValueVar(p.id, p.tpe) },
+          bparams.map { p => Block.BlockVar(p.id, p.tpe, p.capt) })
+        (Operation(name, tparams, cparams, vparams, bparams, call), Some(method -> block))
+    }
+
+  private def called(impl: Implementation, lifted: List[(Operation, Option[(Id, BlockLit)])], isCalled: Id => Boolean): (List[(Id, BlockLit)], Implementation) = {
+    val kept = (impl.operations zip lifted).map {
+      case (_, (forwarding, Some((method, literal)))) if isCalled(method) => (Some(method -> literal), forwarding)
+      case (original, _) => (None, original)
+    }
+    (kept.flatMap(_._1), Implementation(impl.interface, kept.map(_._2)))
+  }
+
+  private def forwards(tparams: List[Id], vparams: List[ValueParam], bparams: List[BlockParam], body: Stmt): Boolean = body match {
+    case Stmt.App(Block.BlockVar(_, _, _), targs, vargs, bargs) =>
+      targs == tparams.map(ValueType.Var.apply) &&
+        vargs.size == vparams.size && vargs.collect { case Expr.ValueVar(x, _) => x } == vparams.map(_.id) &&
+        bargs.size == bparams.size && bargs.collect { case Block.BlockVar(x, _, _) => x } == bparams.map(_.id)
+    case _ => false
   }
 
   private def selectOperation(impl: Implementation, method: Id): Block.BlockLit =

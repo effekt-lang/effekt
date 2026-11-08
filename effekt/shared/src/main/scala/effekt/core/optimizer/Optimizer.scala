@@ -45,8 +45,7 @@ object Optimizer extends Phase[CoreTransformed, CoreTransformed] {
 
     def normalize(m: ModuleDecl) = {
       val anfed = BindSubexpressions.transform(m)
-      val lifted = LiftMethods.transform(anfed)
-      val normalized = Normalizer.normalize(Set(mainSymbol), lifted, policy)
+      val normalized = Normalizer.normalize(Set(mainSymbol), anfed, policy)
       val live = Deadcode.remove(mainSymbol, normalized)
       val tailRemoved = StaticResumptions(live)
       val contified = DirectStyle.rewrite(tailRemoved)

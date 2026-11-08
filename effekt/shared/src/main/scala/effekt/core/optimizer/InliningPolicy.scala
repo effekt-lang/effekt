@@ -76,6 +76,15 @@ class Default(threshold: Int, onceLimit: Option[Int], carryingLimit: Int) extend
       !movesAScopeIntoAPrompt(site) // somewhat costly, so we're trying this only at the end
 
   private def shiftsToAnEnclosingPrompt(impl: Implementation)(using C: Context): Boolean =
+    impl.operations.exists { operation => operation.body match {
+      case Stmt.App(Block.BlockVar(method, _, _), _, _, _) => C.blocks.get(method).exists {
+        case BlockLit(_, _, _, _, body) => shiftsToAnEnclosingPrompt(body)
+        case _ => false
+      }
+      case body => shiftsToAnEnclosingPrompt(body)
+    }}
+
+  private def shiftsToAnEnclosingPrompt(stmt: Stmt)(using C: Context): Boolean =
     object query extends Tree.Query[Unit, Boolean] {
       def empty = false
       def combine = _ || _
@@ -83,7 +92,7 @@ class Default(threshold: Int, onceLimit: Option[Int], carryingLimit: Int) extend
         case Stmt.Shift(prompt, _, _) => C.prompts.contains(prompt.id)
       }
     }
-    query.query(impl)(using ())
+    query.query(stmt)(using ())
 
   /** Does the body fit the budget this call site can afford? */
   private def affordable(site: CallSite)(using Context): Boolean =
