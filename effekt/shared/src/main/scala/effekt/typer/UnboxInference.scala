@@ -54,7 +54,8 @@ object UnboxInference extends Phase[NameResolved, NameResolved] {
       // TODO maybe we should synthesize a call to get here already?
       case sym: (ValueSymbol | symbols.RefBinder) => v
       case sym: BlockSymbol =>
-        C.error(pretty"Expected a value, but ${sym.name} is a computation. Use `box ${sym.name}` to pass it as a value instead") {
+        C.error(pretty"Expected a value, but ${sym.name} is a computation.") {
+          help(pretty"Use `box ${sym.name}` to pass it as a value.")
           // Heuristic for a specific misunderstanding: Scala sometimes allows calling nullary fns without args, we do not
           sym match {
             case UserFunction(_, _, Nil, Nil, _, _, _, _)
@@ -69,11 +70,15 @@ object UnboxInference extends Phase[NameResolved, NameResolved] {
     }
 
     case n: New =>
-      C.error(pp"Expected a value, but `new` creates a computation (an object instance). Use `box new ${n.impl.id}[...] { ... }` to pass it as a value instead")
+      C.error(pretty"Expected a value, but `new` creates a computation (an object instance).") {
+        help(pretty"Use `box new ${n.impl.id}[...] { ... }` to pass it as a value.")
+      }
       rewriteAsBlock(n)
 
     case b: BlockLiteral =>
-      C.error(pp"Expected a value, but block (function) literals are computations. Use `box { (${b.vparams.map(_.id).mkString(", ")}) => ... }` to pass it as a value instead")
+      C.error(pretty"Expected a value, but block (function) literals are computations.") {
+        help(pretty"Use `box { (${b.vparams.map(_.id).mkString(", ")}) => ... }` to pass it as a value.")
+      }
       rewriteAsBlock(b)
 
     case l: Literal => l

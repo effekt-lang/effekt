@@ -1,4 +1,7 @@
-[error] examples/neg/must_box_resume.effekt:6:17: Expected a value, but resume is a computation. Use `box resume` to pass it as a value instead [unbox]
+[error] examples/neg/must_box_resume.effekt:6:17: Expected a value, but resume is a computation. [unbox]
+} with e: exc { resume }
+                ^^^^^^
+[info] examples/neg/must_box_resume.effekt:6:17: Use `box resume` to pass it as a value.
 } with e: exc { resume }
                 ^^^^^^
 [info] examples/neg/must_box_resume.effekt:6:17: Did you mean to resume using `resume(...)`?

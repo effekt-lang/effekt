@@ -1,3 +1,6 @@
-[error] examples/neg/must_box_block_param.effekt:3:36: Expected a value, but block is a computation. Use `box block` to pass it as a value instead [unbox]
+[error] examples/neg/must_box_block_param.effekt:3:36: Expected a value, but block is a computation. [unbox]
+def foo { block: (Int) => Unit } = block
+                                   ^^^^^
+[info] examples/neg/must_box_block_param.effekt:3:36: Use `box block` to pass it as a value.
 def foo { block: (Int) => Unit } = block
                                    ^^^^^

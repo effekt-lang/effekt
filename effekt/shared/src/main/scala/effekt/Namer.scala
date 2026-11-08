@@ -10,7 +10,7 @@ import effekt.typer.Substitutions
 import effekt.source.{Def, Id, IdDef, IdRef, Many, MatchGuard, ModuleDecl, Term, Tree, sourceOf, GenerateImplicitArgs}
 import effekt.symbols.*
 import effekt.util.messages.ErrorMessageReifier
-import effekt.util.messages.help
+import effekt.util.messages.{help, note}
 import effekt.symbols.scopes.*
 import effekt.context.Try
 
@@ -59,8 +59,9 @@ object Namer extends Phase[Parsed, NameResolved] {
   private def recursiveProtect[R](mod: ModuleDecl)(body: => R)(using Context): R = {
     if (currentlyNaming.value.exists { m => m.span.source == mod.span.source }) {
       val cycle = mod :: currentlyNaming.value.takeWhile{ m => m.span.source != mod.span.source }.reverse
-      Context.abort(
-        pretty"""Cyclic import: ${mod.path} depends on itself, via:\n\t${cycle.map(_.path).mkString(" -> ")} -> ${mod.path}""")
+      Context.abort(pretty"Cyclic import: ${mod.path} depends on itself.") {
+        note(pretty"Import cycle: ${cycle.map(_.path).mkString(" -> ")} -> ${mod.path}")
+      }
     } else {
       currentlyNaming.withValue(mod :: currentlyNaming.value) {
         body
@@ -732,7 +733,9 @@ object Namer extends Phase[Parsed, NameResolved] {
 
           val cs = Context.allConstructorsFor(p.name)
           if (cs.nonEmpty) {
-            Context.warning(pp"Pattern binds variable ${p.name}. Maybe you meant to match on equally named constructor of type ${cs.head.tpe}?")
+            Context.warning(pretty"Pattern binds variable ${p.name}.") {
+              help(pretty"Maybe you meant to match on equally named constructor of type ${cs.head.tpe}?")
+            }
           }
           names = names + p.name
         }

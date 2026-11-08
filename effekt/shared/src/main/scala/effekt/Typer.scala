@@ -307,7 +307,9 @@ object Typer extends Phase[NameResolved, Typechecked] {
             val allExplicit = capabilities.forall { c => explicitCapabilities contains c }
 
             if (!allExplicit)
-              Context.warning(pp"There are multiple handlers for effect ${effect}; this might not be intended.\nMaybe bind capabilities explicitly (e.g. `try { ... } with c: MyEffect { ... }`)?")
+              Context.warning(pretty"There are multiple handlers for effect ${effect}; this might not be intended.") {
+                help(pretty"Maybe bind capabilities explicitly (e.g. `try { ... } with c: MyEffect { ... }`)?")
+              }
           case _ => ()
         }
         capabilityGroups.foreach {
@@ -608,7 +610,9 @@ object Typer extends Phase[NameResolved, Typechecked] {
                     // Since this `unbox` was synthesized by the compiler from `def foo = E`,
                     // it's possible that the user simply doesn't know that they should have used the `val` keyword to specify a value
                     // instead of using `def`; see [issue #130](https://github.com/effekt-lang/effekt/issues/130) for more details
-                    Context.abort(pretty"Expected the right-hand side of a `def` binding to be a block, but got a value of type $vtpe.\nMaybe try `val` if you're defining a value.")
+                    Context.abort(pretty"Expected the right-hand side of a `def` binding to be a block, but got a value of type $vtpe.") {
+                      help(pretty"Maybe try `val` if you're defining a value.")
+                    }
                   case Some(source.IdTarget(id)) =>
                     // Since this `unbox` was synthesized by the compiler when trying to call a value as if it was a function (e.g., `myArray(0)`),
                     // we provide a more helpful error message; see [issue #737](https://github.com/effekt-lang/effekt/issues/737)
@@ -627,7 +631,9 @@ object Typer extends Phase[NameResolved, Typechecked] {
           usingCapture(capt)
           Result(tpe, Pure)
         case e: ValueSymbol =>
-          Context.abort(pretty"Expected a block variable, but ${id} is a value. Maybe use explicit syntax: { () => ${id} }")
+          Context.abort(pretty"Expected a block variable, but ${id} is a value.") {
+            help(pretty"Maybe use explicit syntax: { () => ${id} }")
+          }
       }
 
       case source.New(impl, _) =>
@@ -1903,7 +1909,9 @@ trait TyperOps extends ContextOps { self: Context =>
      .orElse(functionTypeOption(s))
      .getOrElse {
        if (s.name.name == "resume")
-        abort(pretty"Cannot find `resume`. Maybe you are trying to resume inside of an object literal and not as part of `try { ... } with ...`?")
+        abort(pretty"Cannot find `resume`.") {
+          help(pretty"Maybe you are trying to resume inside of an object literal and not as part of `try { ... } with ...`?")
+        }
        else
         abort(pretty"Cannot find type for ${s.name} -- forward uses and recursive functions need annotated return types.")
      }
