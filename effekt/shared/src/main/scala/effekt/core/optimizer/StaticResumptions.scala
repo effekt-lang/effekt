@@ -492,6 +492,11 @@ object StaticResumptions {
         case Stmt.App(Block.BlockVar(f, BlockType.Function(tps, cps, vps, bps, _), capt), targs, vargs, bargs) if transparent.contains(f) =>
           Stmt.App(Block.BlockVar(f, BlockType.Function(tps, cps, vps, bps, result), capt), targs, vargs, bargs)
 
+        // an abort to another prompt never returns, whatever type it was given
+        case Stmt.Shift(prompt, BlockParam(k2, BlockType.Resume(_, answer), capt), body)
+            if prompt.id != shift.stmt.prompt.id && !body.free.contains(k2) && !body.free.contains(k) =>
+          Stmt.Shift(prompt, BlockParam(k2, BlockType.Resume(result, answer), capt), body)
+
         // an exit that never returns is no exit
         case h: Stmt.Hole => retypeAnswer(h, result)
         case exit if atPrompt || exit.tpe.contains(Type.TBottom) => retypeAnswer(exit, result)
