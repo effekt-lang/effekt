@@ -1,0 +1,7 @@
+interface Greet { def greet(): Unit }
+
+def hello(): Unit = ()
+
+def main() = {
+  val _: Greet at {} = box hello
+}

@@ -1,0 +1,5 @@
+def main() = {
+  val empty = Nil()
+  val _: List[Int] = empty
+  val _: List[String] = empty
+}

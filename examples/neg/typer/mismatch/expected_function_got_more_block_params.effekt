@@ -1,0 +1,7 @@
+def apply(f: () => Unit at {}): Unit = ()
+
+def twice() { b: () => Unit }: Unit = { b(); b() }
+
+def main() = {
+  val _ = apply(box twice)
+}

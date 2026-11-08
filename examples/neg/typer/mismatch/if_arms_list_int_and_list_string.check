@@ -1,0 +1,15 @@
+[error] examples/neg/typer/mismatch/if_arms_list_int_and_list_string.effekt:1:23: Different arms of a conditional/match have incompatible types. [typer]
+
+One arm has type
+  List[Int]
+while another one has type
+  List[String]
+
+Type mismatch between String and Int.
+def choose(b: Bool) = if (b) [1] else ["hello"]
+                      ^^^^^^^^^^^^^^^^^^^^^^^^^
+[error] examples/neg/typer/mismatch/if_arms_list_int_and_list_string.effekt:1:23: Expected List[A] but got List[A]. [typer]
+
+Type mismatch between Int and String.
+def choose(b: Bool) = if (b) [1] else ["hello"]
+                      ^^^^^^^^^^^^^^^^^^^^^^^^^

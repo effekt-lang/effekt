@@ -1,0 +1,4 @@
+def main() = {
+  val words = Cons("hello", Nil())
+  val _: List[Int] = words
+}
