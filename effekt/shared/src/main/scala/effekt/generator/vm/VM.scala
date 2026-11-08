@@ -38,7 +38,7 @@ class VM extends Compiler[(Id, symbols.Module, ModuleDecl)] {
   }
 
   lazy val Optimized = allToCore(Core) `andThen` Aggregate `andThen` Deadcode `andThen`
-    core.Show `andThen` core.Mono `andThen` core.Specialize `andThen` core.ArityRaising `andThen`
+    core.Show `andThen` core.Mono `andThen` core.ArityRaising `andThen` core.Specialize `andThen`
     core.optimizer.Optimizer `andThen` core.optimizer.DropBindings map {
     case input @ CoreTransformed(source, tree, mod, core) =>
       val mainSymbol = Context.ensureMainExists(mod)
