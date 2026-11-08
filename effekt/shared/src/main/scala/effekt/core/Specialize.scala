@@ -74,18 +74,16 @@ case class Site(block: Block, values: List[ValueParam], blocks: List[BlockParam]
 /**
  * Every definition whose block is a literal or an object. Toplevel definitions capture nothing, and no definition
  * captures itself.
- * A definition capturing a continuation or a prompt is none: a shift to a prompt passed as a parameter cannot be
- * resolved statically anymore.
  */
 def sites(m: ModuleDecl): Map[Id, Site] = {
   val globals: Set[Id] = m.definitions.map(_.id).toSet ++ m.externs.collect { case d: Extern.Def => d.id }
 
-  def local(self: Id, block: Block): Option[Site] = {
+  def local(self: Id, block: Block): Site = {
     val free = block.free
     val values = free.values.toMap.toList.sortBy(_._1.id).map { case (id, tpe) => ValueParam(id, tpe) }
     val blocks = free.blocks.toMap.toList.filterNot { case (id, _) => globals.contains(id) || id == self }.sortBy(_._1.id)
       .map { case (id, (tpe, capt)) => BlockParam(id, tpe, capt) }
-    Option.unless(blocks.exists { b => b.tpe.isInstanceOf[BlockType.Resume] || b.tpe.isInstanceOf[BlockType.Prompt] })(Site(block, values, blocks))
+    Site(block, values, blocks)
   }
 
   object collecting extends Tree.Query[Unit, Map[Id, Site]] {
@@ -93,7 +91,7 @@ def sites(m: ModuleDecl): Map[Id, Site] = {
     def combine = _ ++ _
     override def stmt(using Unit) = {
       case Stmt.Def(id, block @ (_: BlockLit | _: Block.New), body) =>
-        local(id, block).map { site => Map(id -> site) }.getOrElse(Map.empty) ++ query(block) ++ query(body)
+        Map(id -> local(id, block)) ++ query(block) ++ query(body)
     }
   }
   m.definitions.collect { case Toplevel.Def(id, block: BlockLit) => id -> Site(block, Nil, Nil) }.toMap ++
