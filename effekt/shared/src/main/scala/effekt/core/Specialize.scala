@@ -6,7 +6,6 @@ import effekt.PhaseResult.CoreTransformed
 import effekt.core.substitutions.{ Substitution, substitute }
 import effekt.util.DB
 
-import scala.collection.mutable
 
 /**
  * Specializes definitions to the local definitions passed to them as blocks, placing each copy right after the last
@@ -64,13 +63,13 @@ type Key = (Id, List[Option[Id]])
 
 /**
  * What is in scope: the local definitions of literals and objects, the aliases `def x = y`, the copies, and the
- * keys of the copies we are in, by where their names come from.
+ * callees of the copies we are in.
  */
 case class Scope(
   definitions: Map[Id, Block],
   aliases: Map[Id, Id],
   copies: Map[Key, Id],
-  within: Set[Key]
+  within: Set[Id]
 ) {
   def resolve(id: Id): Id = aliases.get(id).map(resolve).getOrElse(id)
 }
@@ -84,25 +83,14 @@ case class Scope(
  * where `g` is a local definition and `h` is not.
  * A copy asking for another copy with blocks defined outside of it, which is not in scope, gets it at its beginning,
  * so that mutual recursion `ping(…){g}`, `pong(…){g}` ends up nested.
- * A copy of `f` for blocks defined at the same places as the blocks of a copy of `f` we are in is built up
- * recursively, so we do not make it.
+ * Within a copy of `f`, we make no new copy of `f`, so that a block built up recursively stays a block.
  */
 def specialize(m: ModuleDecl): ModuleDecl = {
   val toplevel: Map[Id, BlockLit] = m.definitions.collect {
     case Toplevel.Def(id, block: BlockLit) => id -> block
   }.toMap
 
-  val origin = mutable.Map.empty[Id, Id]
-  def originOf(id: Id): Id = origin.get(id).map(originOf).getOrElse(id)
-  def originsOf(key: Key): Key = key match {
-    case (f, arguments) => (originOf(f), arguments.map(_.map(originOf)))
-  }
-
-  def fresh(block: BlockLit): BlockLit = {
-    val (renamed, renaming) = Renamer.rename(block)
-    renaming.foreach { case (fresh, old) => origin(fresh) = old }
-    renamed
-  }
+  def fresh(block: BlockLit): BlockLit = Renamer.rename(block)._1
 
   /** The definition taking blocks that [[f]] stands for. */
   def callee(f: Id, scope: Scope): Option[BlockLit] =
@@ -156,7 +144,7 @@ def specialize(m: ModuleDecl): ModuleDecl = {
     val requests = calls(s, scope).toList.collect {
       case (f, arguments) if !arguments.flatten.exists(later.contains) => key(f, arguments, scope)
     }.flatten.distinct.filter { k =>
-      !scope.copies.contains(k) && wanted(k) && !scope.within.contains(originsOf(k))
+      !scope.copies.contains(k) && wanted(k) && !scope.within.contains(k._1)
     }
     val named = requests.map { case k @ (f, arguments) =>
       k -> Id((f.name.name :: arguments.flatten.map(_.name.name)).mkString("_"))
@@ -176,7 +164,7 @@ def specialize(m: ModuleDecl): ModuleDecl = {
       DB.from(passed.map { case (_, capture, variable) => capture -> variable.capt }), DB.empty,
       DB.from(passed.map { case (param, _, variable) => param.id -> variable })))
     val kept = (block.bparams zip block.cparams zip arguments).collect { case ((param, capture), None) => (param, capture) }
-    val inner = scope.copy(within = scope.within + originsOf(k))
+    val inner = scope.copy(within = scope.within + f)
     val (outside, withOutside) = provide(body, inner) { _ => true }
     BlockLit(block.tparams, kept.map(_._2), block.vparams, kept.map(_._1),
       bind(outside, withOutside, specializing.rewrite(body)(using withOutside)))
