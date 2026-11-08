@@ -8,7 +8,8 @@ import bytearray
 def main() = {
   with on[IOError].panic
 
-  val listener = bind("127.0.0.1", 8080);
+  val listener = bind("127.0.0.1", 0);
+  val serverPort = port(listener)
   spawn(box {
     with on[IOError].panic
     listen(listener, box { connection =>
@@ -22,7 +23,7 @@ def main() = {
       close(connection)
   })});
 
-  val connection = connect("127.0.0.1", 8080)
+  val connection = connect("127.0.0.1", serverPort)
   streaming(connection) {
     with boundary
     val request = "abcd".fromString

@@ -9,7 +9,11 @@ import io/error
 /// A TCP handle. Should not be inspected.
 type Connection = Int
 
-/// Reads data from a TCP connection into a buffer at the given offset.
+/// Reads up to `size` bytes from a TCP connection into `buffer`, starting at `offset`.
+///
+/// Returns as soon as at least one byte is available, so the result may be smaller than `size`.
+/// Returns 0 once the peer has closed the connection (end of file), and every subsequent call returns 0 too.
+/// At most one read can be pending on a connection: another one raises `EALREADY`.
 /// Panics unless:
 /// - `size` is positive (a read of nothing would look like end of file), and
 /// - `[offset, offset + size)` is a valid range inside `buffer` (like `bytearray::copy`).
@@ -22,7 +26,9 @@ def read(handle: Connection, buffer: ByteArray, offset: Int, size: Int): Int / E
   }
 }
 
-/// Writes data from a buffer at the given offset to a TCP connection.
+/// Writes `size` bytes from `buffer`, starting at `offset`, to a TCP connection.
+///
+/// Returns once all bytes are written, and returns `size`.
 /// Panics unless `[offset, offset + size)` is a valid range inside `buffer` (like `bytearray::copy`).
 def write(handle: Connection, buffer: ByteArray, offset: Int, size: Int): Int / Exception[IOError] = {
   if (buffer.inBounds(offset, size)) {
@@ -43,12 +49,17 @@ def close(handle: Connection): Unit =
 /// A TCP listener. Should not be inspected.
 type Listener = Int
 
-/// Creates a TCP listener bound to the specified host and port.
+/// Creates a TCP listener bound to the specified host and port, reserving the address (o/w raising `EADDRINUSE`).
+/// Port 0 asks the system for a free port, which `port` then returns.
 def bind(host: String, port: Int): Listener / Exception[IOError] =
   internal::checkResult(internal::bind(host, port))
 
-/// Starts listening for incoming connections and handles them with the provided handler function.
-/// Runs until `shutdown` is called on this `Listener`.
+/// The port which the given `listener` is bound to.
+def port(listener: Listener): Int / Exception[IOError] =
+  internal::checkResult(internal::port(listener))
+
+/// Starts listening for incoming connections and handles each with the given `handler`, including those which arrived since `bind`.
+/// Returns only once `shutdown` is called on this `Listener`, so it is usually run with `spawn`.
 def listen(listener: Listener, handler: Connection => Unit at {io, async, global}): Unit / Exception[IOError] = {
   internal::checkResult(internal::listen(listener, handler)); ()
 }
@@ -57,6 +68,9 @@ def listen(listener: Listener, handler: Connection => Unit at {io, async, global
 def shutdown(listener: Listener): Unit =
   internal::shutdown(listener)
 
+/// Runs `program` with `emit` writing to the connection and `next` reading from it.
+/// `next` returns the bytes read so far (at most 4096) and performs `stop` at end of file,
+/// so a loop over `next` ends when the peer closes the connection.
 def streaming[R](connection: Connection) { program: () => R / {next[ByteArray], emit[ByteArray]} }: R / Exception[IOError] =
   try {
     program()
@@ -66,6 +80,7 @@ def streaming[R](connection: Connection) { program: () => R / {next[ByteArray], 
   } with next[ByteArray] { () =>
     val bytes = bytearray::allocate(4096)
     read(connection, bytes, 0, bytes.size) match {
+      case 0 => resume { do stop() }
       case r and r == bytes.size => resume { return bytes }
       case r => resume { bytes.resize(r) }
     }
@@ -83,79 +98,135 @@ namespace internal {
   extern jsNode """
     const net = require('net');
 
+    // Error results are negative libuv codes, as Node reports them in `err.errno` (see `io/filesystem`).
+    // Their numbers differ between platforms, so the ones used here are looked up by name.
+    const tcp$code = {};
+    for (const [code, [name]] of require('node:util').getSystemErrorMap()) tcp$code[name] = code;
+    function tcp$errno(err) { return (typeof err.errno === 'number' && err.errno < 0) ? err.errno : tcp$code.UNKNOWN; }
+
     const tcp$handles = new Map();
     let   tcp$next    = 1;
     function tcp$alloc(entry) { const h = tcp$next++; tcp$handles.set(h, entry); return h; }
     function tcp$free(h)      { tcp$handles.delete(h); }
 
+    // A connection records errors and end of file as they happen, and wakes the one which is pending a read.
+    // Its listeners stay attached for its whole life, so an error with no read pending is kept
+    // for the next operation instead of crashing the process.
+    function tcp$connection(socket) {
+      const conn = { socket, error: null, ended: false, waiter: null };
+      const wake = () => { const w = conn.waiter; if (w) { conn.waiter = null; w(); } };
+      socket.on('readable', wake);
+      socket.on('end',   () => { conn.ended = true; wake(); });
+      socket.on('error', err => { if (!conn.error) conn.error = err; wake(); });
+      socket.on('close', () => { conn.ended = true; wake(); });
+      return conn;
+    }
+
     function tcp$connect(host, port, callback) {
       const socket = net.createConnection({ host, port });
-      socket.once('connect', () => { socket.pause(); callback(tcp$alloc({ socket })); });
-      socket.once('error',   err => callback(-(err.errno || 1)));
+      socket.pause();
+      const onConnect = () => {
+        socket.removeListener('error', onError);
+        callback(tcp$alloc(tcp$connection(socket)));
+      };
+      const onError = err => {
+        socket.removeListener('connect', onConnect);
+        socket.destroy();
+        callback(tcp$errno(err));
+      };
+      socket.once('connect', onConnect);
+      socket.once('error',   onError);
     }
 
     function tcp$read(handle, buffer, offset, size, callback) {
-      const { socket } = tcp$handles.get(handle);
-      function cleanup() {
-        socket.removeListener('readable', onReadable);
-        socket.removeListener('end',      onEnd);
-        socket.removeListener('error',    onError);
-      }
-      function onReadable() { cleanup(); tryRead(); }
-      function onEnd()      { cleanup(); callback(0); }
-      function onError(err) { cleanup(); callback(-(err.errno || 1)); }
-      function tryRead() {
-        const chunk = socket.read(size);
-        if (chunk !== null) { chunk.copy(toBuffer(buffer), offset); callback(chunk.length); return; }
-        if (socket.readableEnded) { callback(0); return; }
-        socket.once('readable', onReadable);
-        socket.once('end',      onEnd);
-        socket.once('error',    onError);
-      }
-      tryRead();
+      const conn = tcp$handles.get(handle);
+      if (!conn || !conn.socket) { callback(tcp$code.EBADF); return; }
+      if (conn.waiter) { callback(tcp$code.EALREADY); return; }
+
+      const attempt = () => {
+        const chunk = conn.socket.read();
+        if (chunk !== null) {
+          const n = Math.min(size, chunk.length);
+          chunk.copy(toBuffer(buffer), offset, 0, n);
+          if (n < chunk.length) conn.socket.unshift(chunk.subarray(n));
+          callback(n);
+        } else if (conn.error) {
+          callback(tcp$errno(conn.error));
+        } else if (conn.ended || conn.socket.readableEnded) {
+          callback(0);
+        } else {
+          conn.waiter = attempt;
+        }
+      };
+
+      attempt();
     }
 
     function tcp$write(handle, buffer, offset, size, callback) {
-      const { socket } = tcp$handles.get(handle);
-      socket.write(toBuffer(buffer).slice(offset, offset + size), err => {
-        if (err) callback(-(err.errno || 1)); else callback(size);
+      const conn = tcp$handles.get(handle);
+      if (!conn || !conn.socket) { callback(tcp$code.EBADF); return; }
+      if (conn.error) { callback(tcp$errno(conn.error)); return; }
+
+      conn.socket.write(toBuffer(buffer).subarray(offset, offset + size), err => {
+        if (err) callback(tcp$errno(err)); else callback(size);
       });
     }
 
     function tcp$close(handle, callback) {
-      const entry = tcp$handles.get(handle);
-      if (!entry || !entry.socket) { callback($effekt.unit); return; }
+      const conn = tcp$handles.get(handle);
+      if (!conn || !conn.socket) { callback($effekt.unit); return; }
       tcp$free(handle);
-      const { socket } = entry;
+      const { socket } = conn;
       if (socket.destroyed) { callback($effekt.unit); return; }
-      socket.once('error', _err => {});
       socket.end(() => { socket.destroy(); callback($effekt.unit); });
     }
 
-    function tcp$bind(host, port) {
-      return tcp$alloc({ server: net.createServer(), host, port });
+    // Node binds only when listening, so `bind` listens already, and keeps connections alive until `listen` takes them.
+    function tcp$bind(host, port, callback) {
+      const server = net.createServer();
+      const entry = { server, accept: null, pending: [], finished: null };
+      server.on('connection', socket => {
+        socket.pause();
+        if (entry.accept) entry.accept(socket); else entry.pending.push(socket);
+      });
+
+      const onError = err => callback(tcp$errno(err));
+      server.once('error', onError);
+      server.listen(port, host, () => {
+        server.removeListener('error', onError);
+        server.on('error', _err => {});
+        callback(tcp$alloc(entry));
+      });
     }
 
+    function tcp$port(listenerHandle) {
+      const entry = tcp$handles.get(listenerHandle);
+      if (!entry || !entry.server) return tcp$code.EBADF;
+      return entry.server.address().port;
+    }
+
+    // Settles with `EBADF` if the listener was shut down, and with 0 once `shutdown` is called.
+    // On the other hand, errors of listening, such as `EADDRINUSE`, are raised by `bind`.
     function tcp$listen(listenerHandle, handler, callback) {
-      const { server, host, port } = tcp$handles.get(listenerHandle);
-      server.once('error', err => callback(-(err.errno || 1)));
-      server.listen(port, host, () => {
-        server.removeAllListeners('error');
-        server.on('error', _err => {});
-        server.on('connection', socket => {
-          socket.pause();
-          const connHandle = tcp$alloc({ socket });
-          $effekt.runToplevel((ks, k) => handler(connHandle, ks, k));
-        });
-        callback(0);
-      });
+      const entry = tcp$handles.get(listenerHandle);
+      if (!entry || !entry.server) { callback(tcp$code.EBADF); return; }
+
+      entry.finished = () => callback(0);
+      entry.accept = socket => {
+        const connHandle = tcp$alloc(tcp$connection(socket));
+        $effekt.runToplevel((ks, k) => handler(connHandle, ks, k));
+      };
+      entry.pending.splice(0).forEach(entry.accept);
     }
 
     function tcp$shutdown(listenerHandle, callback) {
       const entry = tcp$handles.get(listenerHandle);
       if (!entry || !entry.server) { callback($effekt.unit); return; }
       tcp$free(listenerHandle);
-      entry.server.close(() => callback($effekt.unit));
+      // Stop accepting without waiting for open connections to end (to avoid a deadlock on Node)
+      entry.server.close();
+      if (entry.finished) entry.finished();
+      callback($effekt.unit);
     }
   """
 
@@ -187,10 +258,17 @@ namespace internal {
       ret void
     """
 
-  extern def bind(host: String, port: Int) at io: Int =
-    jsNode "tcp$bind(${host}, ${port})"
+  extern def bind(host: String, port: Int) at async: Int =
+    jsNode "$effekt.capture(k => tcp$bind(${host}, ${port}, k))"
     llvm """
-      %result = call %Int @c_tcp_bind(%Pos ${host}, %Int ${port})
+      notail call void @c_tcp_bind(%Pos ${host}, %Int ${port}, %Stack %stack)
+      ret void
+    """
+
+  extern def port(listener: Int) at io: Int =
+    jsNode "tcp$port(${listener})"
+    llvm """
+      %result = call %Int @c_tcp_port(%Int ${listener})
       ret %Int %result
     """
 
@@ -213,8 +291,9 @@ namespace internal {
     declare void @c_tcp_read(%Int, %Pos, %Int, %Int, %Stack)
     declare void @c_tcp_write(%Int, %Pos, %Int, %Int, %Stack)
     declare void @c_tcp_close(%Int, %Stack)
-    declare %Int @c_tcp_bind(%Pos, %Int)
-    declare void @c_tcp_listen(%Int, %Pos, %Stack)
+    declare void @c_tcp_bind(%Pos, %Int, %Stack)
+    declare %Int @c_tcp_port(%Int)
+    declare void @c_tcp_listen(%Int, %Neg, %Stack)
     declare void @c_tcp_shutdown(%Int, %Stack)
   """
 }
