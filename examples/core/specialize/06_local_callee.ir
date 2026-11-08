@@ -15,21 +15,21 @@ run ↦ [f]
 
 /// SPECIALIZE
 
-def x0(x2: Int) = {
-  def x3(){x5 @ x5: (Int) => Int} = {
-    x5: (Int) => Int @ {x5}(x2: Int)
+def main(n: Int) = {
+  def run(){h @ h: (Int) => Int} = {
+    h: (Int) => Int @ {h}(n: Int)
   }
-  def x6(x7: Int) = {
-    return x7: Int
+  def f(x: Int) = {
+    return x: Int
   }
-  x1: (Int) => Int @ {}(x2: Int)
+  run_f: (Int) => Int @ {}(n: Int)
 }
-def x1(x8: Int) = {
-  def x9(){x11 @ x11: (Int) => Int} = {
-    x11: (Int) => Int @ {x11}(x8: Int)
+def run_f(n: Int) = {
+  def run(){h @ h: (Int) => Int} = {
+    h: (Int) => Int @ {h}(n: Int)
   }
-  def x12(x13: Int) = {
-    return x13: Int
+  def f(x: Int) = {
+    return x: Int
   }
-  x12: (Int) => Int @ {x12}(x8: Int)
+  f: (Int) => Int @ {f}(n: Int)
 }

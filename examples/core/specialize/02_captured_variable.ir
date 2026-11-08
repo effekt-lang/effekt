@@ -18,21 +18,21 @@ apply ↦ [f(?)]
 
 /// SPECIALIZE
 
-def x0(x4: Int){x5 @ x5: (Int) => Int} = {
-  x5: (Int) => Int @ {x5}(x4: Int)
+def apply(x: Int){f @ f: (Int) => Int} = {
+  f: (Int) => Int @ {f}(x: Int)
 }
-def x1() = {
-  var x6 @ r = 0;
-  def x7(x8: Int) = {
-    put x6 @ r = x8: Int;
-    return x8: Int
+def main() = {
+  var c @ r = 0;
+  def f(x: Int) = {
+    put c @ r = x: Int;
+    return x: Int
   }
-  x2: (Int){x9: Ref[Int]} => Int @ {r}(1){x6: Ref[Int] @ {r}}
+  apply_f: (Int){c: Ref[Int]} => Int @ {r}(1){c: Ref[Int] @ {r}}
 }
-def x2(x11: Int){x12 @ x12: Ref[Int]} = {
-  def x13(x14: Int) = {
-    put x12 @ x12 = x14: Int;
-    return x14: Int
+def apply_f(x: Int){c @ c: Ref[Int]} = {
+  def f(y: Int) = {
+    put c @ c = y: Int;
+    return y: Int
   }
-  x13: (Int) => Int @ {x13}(x11: Int)
+  f: (Int) => Int @ {f}(x: Int)
 }
