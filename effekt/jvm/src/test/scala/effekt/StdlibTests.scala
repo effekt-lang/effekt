@@ -44,7 +44,7 @@ abstract class StdlibChezTests extends StdlibTests {
     examplesDir / "stdlib" / "io",
     examplesDir / "stdlib" / "stream" / "characters.effekt",
     examplesDir / "stdlib" / "stream" / "fuse_newlines.effekt",
-    examplesDir / "stdlib" / "network" / "streaming.effekt",
+    examplesDir / "stdlib" / "network",
   )
 }
 class StdlibChezSchemeCPSTests extends StdlibChezTests {

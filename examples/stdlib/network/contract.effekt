@@ -1,0 +1,127 @@
+import io
+import io/error
+import io/network
+import io/promise
+import io/time
+import bytearray
+import stream
+
+/// Runs the given `handler` on the first connection to `port`, then shuts the listener down.
+def serveOnce(port: Int, handler: Connection => Unit at {io, async, global}): Unit / Exception[IOError] = {
+  val listener = bind("127.0.0.1", port)
+  val _ = spawn(box {
+    with on[IOError].panic
+    listen(listener, box { connection =>
+      shutdown(listener)
+      handler(connection)
+      close(connection)
+    })
+  })
+}
+
+def send(connection: Connection, text: String): Int / Exception[IOError] = {
+  val bytes = text.fromString
+  write(connection, bytes, 0, bytes.size)
+}
+
+def main() = {
+  with on[IOError].panic
+
+  // `read` returns what is there, without waiting for `size` bytes
+  serveOnce(18101, box { connection =>
+    with on[IOError].panic
+    val buffer = bytearray::allocate(64)
+    val n = read(connection, buffer, 0, 16)
+    val _ = send(connection, "server read " ++ n.show ++ " bytes")
+  })
+  val c1 = connect("127.0.0.1", 18101)
+  println("write returned " ++ send(c1, "hello").show)
+  val reply = bytearray::allocate(64)
+  val r = read(c1, reply, 0, 64)
+  println(reply.resize(r).toString)
+  close(c1)
+
+  // `read` writes at most `size` bytes, at `offset`
+  serveOnce(18102, box { connection =>
+    with on[IOError].panic
+    val _ = send(connection, "XXXXXXXXXXXXXXXX")
+  })
+  val c2 = connect("127.0.0.1", 18102)
+  val small = bytearray::allocate(8)
+  each(0, 8) { i => small.set(i, 46.toByte) }
+  val n2 = read(c2, small, 6, 2)
+  var shown = ""
+  each(0, 8) { i => shown = shown ++ (if (small.get(i).toInt == 88) "X" else ".") }
+  println("read " ++ n2.show ++ " bytes at offset 6: " ++ shown)
+  close(c2)
+
+  // end of file is 0, and stays 0
+  serveOnce(18103, box { connection =>
+    with on[IOError].panic
+    val _ = send(connection, "abc")
+  })
+  val c3 = connect("127.0.0.1", 18103)
+  val buffer3 = bytearray::allocate(16)
+  val first = read(c3, buffer3, 0, 16)
+  val second = read(c3, buffer3, 0, 16)
+  val third = read(c3, buffer3, 0, 16)
+  println("reads until end of file: " ++ first.show ++ ", " ++ second.show ++ ", " ++ third.show)
+  close(c3)
+
+  // `streaming`'s `next` performs `stop` at end of file
+  serveOnce(18104, box { connection =>
+    with on[IOError].panic
+    val _ = send(connection, "abcd")
+  })
+  val c4 = connect("127.0.0.1", 18104)
+  var total = 0
+  streaming(c4) {
+    loop { total = total + do next[ByteArray]().size }
+  }
+  println("streamed " ++ total.show ++ " bytes, then end of stream")
+  close(c4)
+
+  // a read which is still pending when the connection is closed returns 0, like if it were at end of file
+  serveOnce(18107, box { connection =>
+    with on[IOError].panic
+    val reply = bytearray::allocate(4)
+    val _ = read(connection, reply, 0, 4)
+  })
+  val c7 = connect("127.0.0.1", 18107)
+  val pending = promise(box {
+    with on[IOError].result
+    read(c7, bytearray::allocate(4), 0, 4)
+  })
+  close(c7)
+  println("pending read after close returned " ++ pending.await.value.show)
+
+  // at most one read is pending on a connection: another one raises EALREADY, but the first still completes
+  serveOnce(18108, box { connection =>
+    with on[IOError].panic
+    sleep(200)
+    val _ = send(connection, "x")
+  })
+  val c8 = connect("127.0.0.1", 18108)
+  def readOrError(): Int =
+    try read(c8, bytearray::allocate(4), 0, 4)
+    with Exception[IOError] { 
+      def raise(e, msg) = e match {
+        case EALREADY() => -1
+        case _ => -2
+      }
+    }
+  val r1 = promise(box { readOrError() })
+  val r2 = promise(box { readOrError() })
+  val a = r1.await
+  val b = r2.await
+  println("two pending reads: one returned " ++ max(a, b).show ++ ", the other " ++ (if (min(a, b) == -1) "raised EALREADY" else min(a, b).show))
+  close(c8)
+
+  // a refused connection raises
+  try { 
+    val _ = connect("127.0.0.1", 18105);
+    println("connect to a closed port succeeded")
+  } with Exception[IOError] { 
+    def raise(e, msg) = println("connect to a closed port raised: " ++ msg)
+  }
+}

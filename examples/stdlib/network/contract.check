@@ -1,0 +1,8 @@
+write returned 5
+server read 5 bytes
+read 2 bytes at offset 6: ......XX
+reads until end of file: 3, 0, 0
+streamed 4 bytes, then end of stream
+pending read after close returned 0
+two pending reads: one returned 1, the other raised EALREADY
+connect to a closed port raised: connection refused
