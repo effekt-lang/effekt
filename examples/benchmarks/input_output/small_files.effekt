@@ -22,11 +22,11 @@ def run(n: Int) = {
     if (file < 0) {
       panic("failed open for writing")
     }
-    val m = internal::write(file, buffer, 0, size, -1)
+    val m = internal::write(internal::file(file), buffer, 0, size, -1)
     if (m < buffer.size) {
       panic("failed write")
     }
-    val _ = internal::close(file)
+    val _ = internal::close(internal::file(file))
     ()
   }
 
@@ -36,11 +36,11 @@ def run(n: Int) = {
     if (file < 0) {
       panic("failed open for reading")
     }
-    val m = internal::read(file, buffer, 0, size, -1)
+    val m = internal::read(internal::file(file), buffer, 0, size, -1)
     if (m < buffer.size) {
       panic("failed read")
     }
-    val _ = internal::close(file)
+    val _ = internal::close(internal::file(file))
     ()
   }
 

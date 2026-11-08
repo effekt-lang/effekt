@@ -18,12 +18,12 @@ def run(n: Int) = {
     val outputBuffer = bytearray(size, 0x21)
     outputBuffer.set(999, 0x0A)
     repeat(n) {
-      val m = internal::write(file, outputBuffer, 0, size, -1)
+      val m = internal::write(internal::file(file), outputBuffer, 0, size, -1)
       if (m < outputBuffer.size) {
         panic("failed write")
       }
     }
-    internal::close(file)
+    internal::close(internal::file(file))
   }
 
   val file = internal::openForReading(filename)
@@ -32,12 +32,12 @@ def run(n: Int) = {
   }
   val inputBuffer = bytearray::allocate(size)
   repeat(n) {
-    val m = internal::read(file, inputBuffer, 0, size, -1)
+    val m = internal::read(internal::file(file), inputBuffer, 0, size, -1)
     if (m < inputBuffer.size) {
       panic("failed read")
     }
   }
-  internal::close(file)
+  internal::close(internal::file(file))
 
   return 0
 }
