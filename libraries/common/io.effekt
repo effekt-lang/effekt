@@ -4,6 +4,12 @@ module io
 // Event Loop
 // ----------
 
+extern jsNode """
+  function io$toBuffer(bytes) {
+    return Buffer.from(bytes.buffer, bytes.byteOffset, bytes.byteLength);
+  }
+"""
+
 // Files, connections and listeners are generational handles into a single table of open I/O resources,
 // as on the LLVM backend (see `io.c`): a slot of the table, and the generation which the slot had when it was opened.
 // Closing a resource starts the next generation of its slot, so its handles no longer match.

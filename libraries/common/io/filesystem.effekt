@@ -214,37 +214,37 @@ namespace internal {
     const filesystem$node = require("fs");
 
     // Resumes with the handle of the opened file (see `io`), or with the (negative) error.
-    function open(path, flags, callback) {
-      fs.open(path, flags, (err, fd) => {
+    function filesystem$open(path, flags, callback) {
+      filesystem$node.open(path, flags, (err, fd) => {
         if (err) { callback(err.errno) } else { callback(io$open(fd)) }
       })
     }
 
-    function read(file, buffer, offset, size, position, callback) {
+    function filesystem$read(file, buffer, offset, size, position, callback) {
       const fd = io$get(file);
       if (fd === undefined) { callback(error$code.EBADF); return; }
 
       let positionOrNull = position === -1 ? null : position;
-      fs.read(fd, toBuffer(buffer), offset, size, positionOrNull, (err, bytesRead) => {
+      filesystem$node.read(fd, io$toBuffer(buffer), offset, size, positionOrNull, (err, bytesRead) => {
         if (err) { callback(err.errno) } else { callback(bytesRead) }
       })
     }
 
-    function write(file, buffer, offset, size, position, callback) {
+    function filesystem$write(file, buffer, offset, size, position, callback) {
       const fd = io$get(file);
       if (fd === undefined) { callback(error$code.EBADF); return; }
 
       let positionOrNull = position === -1 ? null : position;
-      fs.write(fd, toBuffer(buffer), offset, size, positionOrNull, (err, bytesWritten) => {
+      filesystem$node.write(fd, io$toBuffer(buffer), offset, size, positionOrNull, (err, bytesWritten) => {
         if (err) { callback(err.errno) } else { callback(bytesWritten) }
       })
     }
 
-    function close(file, callback) {
+    function filesystem$close(file, callback) {
       const fd = io$close(file);
       if (fd === undefined) { callback(error$code.EBADF); return; }
 
-      fs.close(fd, (err) => {
+      filesystem$node.close(fd, (err) => {
         if (err) { callback(err.errno) } else { callback(0) }
       })
     }
@@ -288,21 +288,21 @@ namespace internal {
     """
 
   extern def read(file: File, buffer: ByteArray, offset: Int, size: Int, position: Int) at async: Int =
-    jsNode "$effekt.capture(callback => read(${file}, ${buffer}, ${offset}, ${size}, ${position}, callback))"
+    jsNode "$effekt.capture(callback => filesystem$read(${file}, ${buffer}, ${offset}, ${size}, ${position}, callback))"
     llvm """
       notail call void @c_fs_read(%Int ${file}, %Pos ${buffer}, %Int ${offset}, %Int ${size}, %Int ${position}, %Stack %stack)
       ret void
     """
 
   extern def write(file: File, buffer: ByteArray, offset: Int, size: Int, position: Int) at async: Int =
-    jsNode "$effekt.capture(callback => write(${file}, ${buffer}, ${offset}, ${size}, ${position}, callback))"
+    jsNode "$effekt.capture(callback => filesystem$write(${file}, ${buffer}, ${offset}, ${size}, ${position}, callback))"
     llvm """
       notail call void @c_fs_write(%Int ${file}, %Pos ${buffer}, %Int ${offset}, %Int ${size}, %Int ${position}, %Stack %stack)
       ret void
     """
 
   extern def close(file: File) at async: Int =
-    jsNode "$effekt.capture(callback => close(${file}, callback))"
+    jsNode "$effekt.capture(callback => filesystem$close(${file}, callback))"
     llvm """
       notail call void @c_fs_close(%Int ${file}, %Stack %stack)
       ret void
