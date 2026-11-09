@@ -1,5 +1,4 @@
-// A copy of loop for a block defined at the same place as the block of a copy of loop we are in would be built up
-// recursively, so the call stays a call to the original loop.
+// A copy of loop within a copy of loop would be built up recursively, so the call stays a call to the original loop.
 
 def loop(b: Bool){k: (Int) => Int} = {
   if (b: Bool) {
@@ -48,14 +47,6 @@ def main(b: Bool) = {
     def g(x: Int) = {
       f: (Int) => Int @ {}(x: Int)
     }
-    let d = c: Bool
-    if (d: Bool) {
-      g: (Int) => Int @ {}(0)
-    } else {
-      def h(x: Int) = {
-        g: (Int) => Int @ {}(x: Int)
-      }
-      loop: (Bool){k: (Int) => Int} => Int @ {}(d: Bool){h: (Int) => Int @ {}}
-    }
+    loop: (Bool){k: (Int) => Int} => Int @ {}(c: Bool){g: (Int) => Int @ {}}
   }
 }
