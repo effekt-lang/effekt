@@ -1,4 +1,4 @@
 2
 [warning] examples/pos/parser_warnings_recover_completely.effekt:2:24: Missing whitespace around binary operator [parser]
-def main() = println(1 +1)
-                       ^
+2  def main() = println(1 +1)
+                          ^

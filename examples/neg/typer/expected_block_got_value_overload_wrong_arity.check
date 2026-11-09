@@ -8,5 +8,5 @@ Possible overload: expected_block_got_value_overload_wrong_arity::twice of type 
 Possible overload: expected_block_got_value_overload_wrong_arity::twice of type (Int, Int) => Int
   Wrong number of arguments to twice: expected 2 value arguments, but got 1 value argument
 
-  val _ = twice(box { (x: Int) => x + 1 })
-          ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+5    val _ = twice(box { (x: Int) => x + 1 })
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^

@@ -1,3 +1,3 @@
 [error] examples/neg/parsing/half-done-effect-type.effekt:1:26: Expected effect set but got } [parser]
-def foo{ body: => Unit / }: Unit = {
-                         ^
+1  def foo{ body: => Unit / }: Unit = {
+                            ^

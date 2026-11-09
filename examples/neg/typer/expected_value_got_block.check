@@ -1,6 +1,6 @@
 [error] examples/neg/typer/expected_value_got_block.effekt:4:11: Wrong number of arguments to apply: expected 1 value argument and 0 block arguments, but got 0 value arguments and 1 block argument [typer]
-  val _ = apply { (x: Int) => x + 1 }
-          ^^^^^^^^^^^^^^^^^^^^^^^^^^^
+4    val _ = apply { (x: Int) => x + 1 }
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^
 [info] examples/neg/typer/expected_value_got_block.effekt:4:11: Did you mean to pass 1 block argument as a value? e.g. box it using `box { ... }`
-  val _ = apply { (x: Int) => x + 1 }
-          ^^^^^^^^^^^^^^^^^^^^^^^^^^^
+4    val _ = apply { (x: Int) => x + 1 }
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^

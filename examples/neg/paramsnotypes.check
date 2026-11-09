@@ -1,3 +1,3 @@
 [error] examples/neg/paramsnotypes.effekt:1:15: Expected a type annotation but got ) [parser]
-def identity(x) = x
-              ^
+1  def identity(x) = x
+                 ^

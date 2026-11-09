@@ -1,9 +1,9 @@
 [error] examples/neg/must_box_block_param_nullary.effekt:3:33: Expected a value, but block is a computation. [unbox]
-def foo { block: () => Unit } = block
-                                ^^^^^
+3  def foo { block: () => Unit } = block
+                                   ^^^^^
 [info] examples/neg/must_box_block_param_nullary.effekt:3:33: Use `box block` to pass it as a value.
-def foo { block: () => Unit } = block
-                                ^^^^^
+3  def foo { block: () => Unit } = block
+                                   ^^^^^
 [info] examples/neg/must_box_block_param_nullary.effekt:3:33: Did you mean to call the function using `block()`?
-def foo { block: () => Unit } = block
-                                ^^^^^
+3  def foo { block: () => Unit } = block
+                                   ^^^^^

@@ -1,6 +1,6 @@
 [error] examples/neg/must_box_region.effekt:4:3: Expected a value, but r is a computation. [unbox]
-  r
-  ^
+4    r
+     ^
 [info] examples/neg/must_box_region.effekt:4:3: Use `box r` to pass it as a value.
-  r
-  ^
+4    r
+     ^

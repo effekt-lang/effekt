@@ -2,14 +2,14 @@
   (Int => Bool at {}) => String at {}
 but got type
   (Int => Unit at {}) => String at ?C
-  hof2(box { (f: (Int) => Unit at {}) => "" })
-       ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+13    hof2(box { (f: (Int) => Unit at {}) => "" })
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 [info] examples/neg/lambdas/inference.effekt:13:8: Expected Bool but got Unit.
-  hof2(box { (f: (Int) => Unit at {}) => "" })
-       ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+13    hof2(box { (f: (Int) => Unit at {}) => "" })
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 [error] examples/neg/lambdas/inference.effekt:13:15: Type Int => Unit at {} does not match the declared type Int => Bool at {}. [typer]
-  hof2(box { (f: (Int) => Unit at {}) => "" })
-              ^^^^^^^^^^^^^^^^^^^^^^
+13    hof2(box { (f: (Int) => Unit at {}) => "" })
+                  ^^^^^^^^^^^^^^^^^^^^^^
 [info] examples/neg/lambdas/inference.effekt:13:15: Expected Bool but got Unit.
-  hof2(box { (f: (Int) => Unit at {}) => "" })
-              ^^^^^^^^^^^^^^^^^^^^^^
+13    hof2(box { (f: (Int) => Unit at {}) => "" })
+                  ^^^^^^^^^^^^^^^^^^^^^^

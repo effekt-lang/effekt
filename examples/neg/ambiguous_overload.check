@@ -17,5 +17,5 @@ Possible overload: effekt::infixPlus of type (Double, Double) => Double
   Possible overload: ambiguous_overload::foo of type [A](A) => A
     Expected Double but got Int.
 
-def main() = foo(1) + 2 // nested overload!
-             ^^^^^^
+4  def main() = foo(1) + 2 // nested overload!
+                ^^^^^^

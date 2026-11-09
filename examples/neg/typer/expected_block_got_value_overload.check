@@ -9,5 +9,5 @@ Possible overload: expected_block_got_value_overload::twice of type String => In
   Expected String but got Int => Int at ?C.
   Expected String but got Int => Int at ?C.
 
-  val _ = twice(box { (x: Int) => x + 1 })
-          ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+5    val _ = twice(box { (x: Int) => x + 1 })
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^

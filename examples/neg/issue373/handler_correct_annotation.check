@@ -1,6 +1,6 @@
 [error] examples/neg/issue373/handler_correct_annotation.effekt:6:27: Expected String but got Int. [typer]
-  try { val msg: String = eff.op[Int]("hello"); println(msg) }
-                          ^^^^^^^^^^^^^^^^^^^^
+6    try { val msg: String = eff.op[Int]("hello"); println(msg) }
+                             ^^^^^^^^^^^^^^^^^^^^
 [error] examples/neg/issue373/handler_correct_annotation.effekt:6:39: Expected Int but got String. [typer]
-  try { val msg: String = eff.op[Int]("hello"); println(msg) }
-                                      ^^^^^^^
+6    try { val msg: String = eff.op[Int]("hello"); println(msg) }
+                                         ^^^^^^^
