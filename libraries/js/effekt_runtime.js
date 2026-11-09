@@ -255,3 +255,6 @@ $effekt.run = RUN
  * If a runtime is available, use `$effekt.run`, instead.
  */
 $effekt.runToplevel = RUN_TOPLEVEL
+
+/** Ends the currently running Effekt computation, without returning to it, used in `process::exit` */
+$effekt.abort = ABORT

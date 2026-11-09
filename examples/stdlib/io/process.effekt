@@ -1,6 +1,14 @@
 import process
 import stringbuffer
+import io/error
+
+def describe(status: ExitStatus): String = status match {
+  case Exited(code) => code.show
+  case Signaled(signal) => "signal " ++ signal.show
+}
+
 def main() = {
+  with on[IOError].panic
   val p = spawn("cat", [].fromList, default().onStdout(box { c =>
     println(s"Printed '${c}'")
   }).onStderr(box { c =>
@@ -10,8 +18,8 @@ def main() = {
     h.close()
   })
   )
-  println(p)
+  println(describe(p))
   val p2 = spawn("echo", ["Hello argument"].fromList, default())
-  println(p2)
+  println(describe(p2))
   ()
 }
