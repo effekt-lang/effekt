@@ -1,13 +1,19 @@
 import process
 import ref
+import io/error
 
 def main() = {
+  with on[IOError].panic
+
   // options are plain data: they can be dropped, or used for several processes.
   val _ = default().onStdout(box { _ => () })
   val shared = default()
   val first = spawn("echo", ["first"].fromList, shared)
   val second = spawn("echo", ["second"].fromList, shared)
-  println("exit codes " ++ first.show ++ " " ++ second.show)
+  (first, second) match {
+    case (Exited(a), Exited(b)) => println("exit codes " ++ a.show ++ " " ++ b.show)
+    case _ => println("a process did not exit")
+  }
 
   // a second callback for a stream runs after the first one
   val _ = spawn("echo", 

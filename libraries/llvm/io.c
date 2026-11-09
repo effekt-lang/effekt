@@ -854,9 +854,14 @@ static void subproc_alloc_cb(uv_handle_t* handle, size_t suggested_size, uv_buf_
     buf->len = suggested_size;
 }
 
+typedef struct subproc_proc_data subproc_proc_data_t;
+
 typedef struct {
   struct Neg handler;
+  subproc_proc_data_t* process;
 } subproc_stream_cb_closure_t;
+
+void subproc_finish(subproc_proc_data_t* pd);
 
 // Calling a handler consumes a reference to it,
 // so it is shared before each chunk and released once the stream ends (as in `c_tcp_listen_cb`).
@@ -868,21 +873,35 @@ void subproc_stream_cb(uv_stream_t *stream, ssize_t nread, const uv_buf_t *buf) 
     shareNegative(clos->handler);
     run_Pos(clos->handler, chunk);
   } else if (nread < 0) {
+    subproc_proc_data_t* pd = clos->process;
     uv_read_stop(stream);
     eraseNegative(clos->handler);
     free(clos);
     stream->data = NULL;
     if (buf->base) free(buf->base);
+    subproc_finish(pd);
   } else {
     if (buf->base) free(buf->base);  // 0: nothing read this time
   }
 }
 
-typedef struct {
+// `spawn` resumes once the process has exited and each of its piped outputs has ended,
+// so `pending` counts these, and `status` keeps the exit status until then.
+struct subproc_proc_data {
   char** args;
   Stack k;
+  uv_process_t* process;
   uv_pipe_t* pipes[3];  // NULL iff the stream is inherited
-} subproc_proc_data_t;
+  int pending;
+  Int status;
+};
+
+static void subproc_free_args(char** args) {
+    for (int i = 0; args[i] != NULL; i++) {
+        free(args[i]);
+    }
+    free(args);
+}
 
 void c_close_stream_callback_exit(uv_handle_t* req) {
     free(req);
@@ -899,18 +918,23 @@ void subproc_on_close(uv_handle_t* handle) {
     free(handle);
 }
 
-void subproc_on_exit(uv_process_t* proc, int64_t exit_status, int term_signal) {
-    (void)term_signal;
-    subproc_proc_data_t* pd = (subproc_proc_data_t*)proc->data;
-    if (pd->args) {
-        for(int i = 0; pd->args[i] != NULL; i++) {
-            free(pd->args[i]);
-        }
-        free(pd->args);
-    }
+void subproc_finish(subproc_proc_data_t* pd) {
+    pd->pending--;
+    if (pd->pending > 0) return;
+
     Stack k = pd->k;
-    uv_close((uv_handle_t*)proc, subproc_on_close);
-    resume_Int(k, exit_status);
+    Int status = pd->status;
+    uv_close((uv_handle_t*)pd->process, subproc_on_close);
+    resume_Int(k, status);
+}
+
+// The status is the exit code, or the signal times 2^32 (see `process::internal::exitStatus`).
+void subproc_on_exit(uv_process_t* proc, int64_t exit_status, int term_signal) {
+    subproc_proc_data_t* pd = (subproc_proc_data_t*)proc->data;
+    subproc_free_args(pd->args);
+    pd->args = NULL;
+    pd->status = term_signal != 0 ? (Int)term_signal * 4294967296 : exit_status;
+    subproc_finish(pd);
 }
 
 void c_close_stream_callback(uv_shutdown_t* req, int status) {
@@ -955,8 +979,8 @@ void c_write_stream(struct Pos writable, struct Pos buffer) {
     uv_write(req, str, &(data->buf), 1, c_write_stream_callback);
 }
 
-// Connects standard stream `id` to a new pipe running `handler` if `pipe` is 1, or inherits it.
-static uv_pipe_t* subproc_stdio(uv_stdio_container_t* stdio, int id, Int pipe, int flags, struct Neg handler) {
+// Connects standard stream `id` of the process `pd` to a new pipe running `handler` if `pipe` is 1, or inherits it.
+static uv_pipe_t* subproc_stdio(subproc_proc_data_t* pd, uv_stdio_container_t* stdio, int id, Int pipe, int flags, struct Neg handler) {
     if (!pipe) {
         eraseNegative(handler);
         stdio[id].flags = UV_INHERIT_FD;
@@ -968,6 +992,7 @@ static uv_pipe_t* subproc_stdio(uv_stdio_container_t* stdio, int id, Int pipe, i
     uv_pipe_init(uv_default_loop(), p, 1);
     subproc_stream_cb_closure_t* clos = (subproc_stream_cb_closure_t*)malloc(sizeof(subproc_stream_cb_closure_t));
     clos->handler = handler;
+    clos->process = pd;
     p->data = clos;
     stdio[id].flags = UV_CREATE_PIPE | flags;
     stdio[id].data.stream = (uv_stream_t*)p;
@@ -980,9 +1005,9 @@ void c_spawn(struct Pos cmd, struct Pos args, struct Neg on_stdin, struct Neg on
     subproc_proc_data_t* pd = (subproc_proc_data_t*)malloc(sizeof(subproc_proc_data_t));
 
     uv_stdio_container_t stdio[3];
-    pd->pipes[0] = subproc_stdio(stdio, 0, pipeStdin, UV_READABLE_PIPE, on_stdin);
-    pd->pipes[1] = subproc_stdio(stdio, 1, pipeStdout, UV_WRITABLE_PIPE, on_stdout);
-    pd->pipes[2] = subproc_stdio(stdio, 2, pipeStderr, UV_WRITABLE_PIPE, on_stderr);
+    pd->pipes[0] = subproc_stdio(pd, stdio, 0, pipeStdin, UV_READABLE_PIPE, on_stdin);
+    pd->pipes[1] = subproc_stdio(pd, stdio, 1, pipeStdout, UV_WRITABLE_PIPE, on_stdout);
+    pd->pipes[2] = subproc_stdio(pd, stdio, 2, pipeStderr, UV_WRITABLE_PIPE, on_stderr);
 
     // command
     char* cmd_s = c_bytearray_into_nullterminated_string(cmd);
@@ -1012,9 +1037,28 @@ void c_spawn(struct Pos cmd, struct Pos args, struct Neg on_stdin, struct Neg on
     pd->k = stack;
     uv_process_t* proc = (uv_process_t*)malloc(sizeof(uv_process_t));
     proc->data = pd;
+    pd->process = proc;
+    pd->pending = 1 + (pd->pipes[1] != NULL) + (pd->pipes[2] != NULL);
 
     // spawn process
     int err = uv_spawn(uv_default_loop(), proc, &opts);
+
+    // The loop keeps the process even if `uv_spawn` fails
+    if (err < 0) {
+        for (int i = 0; i < 3; i++) {
+            if (pd->pipes[i] != NULL) {
+                subproc_stream_cb_closure_t* clos = (subproc_stream_cb_closure_t*)(pd->pipes[i]->data);
+                eraseNegative(clos->handler);
+                free(clos);
+                uv_close((uv_handle_t*)pd->pipes[i], c_close_stream_callback_exit);
+            }
+        }
+        subproc_free_args(_args);
+        free(pd);
+        uv_close((uv_handle_t*)proc, (uv_close_cb)free);
+        resume_Int(stack, err);
+        return;
+    }
 
     if (pd->pipes[0] != NULL) {
         uv_stream_t* stream = (uv_stream_t*)pd->pipes[0];
@@ -1028,12 +1072,6 @@ void c_spawn(struct Pos cmd, struct Pos args, struct Neg on_stdin, struct Neg on
       uv_read_start((uv_stream_t*)pd->pipes[1], subproc_alloc_cb, subproc_stream_cb);
     if (pd->pipes[2] != NULL)
       uv_read_start((uv_stream_t*)pd->pipes[2], subproc_alloc_cb, subproc_stream_cb);
-
-    if(err) {
-        printf("%s\n", uv_strerror(err));
-        free(_args);
-        free(proc);
-    }
 }
 
 // Returns the required buffer size if the variable exists, or -1 if it does not.

@@ -1,8 +1,18 @@
 module process
 import array
+import io/error
 
+extern jsNode """
+  // Node writes to pipes in an async way, so we need to wait for them to finish.
+  function process$exit(code) {
+    process.stdout.write('', () => process.stderr.write('', () => process.exit(code)));
+    $effekt.abort();
+  }
+"""
+
+/// Ends the program with the given `errorCode`, once its standard output and error are written.
 extern def exit(errorCode: Int) at io: Nothing =
-  js   "(function() { process.exit(${errorCode}) })()"
+  jsNode "process$exit(${errorCode})"
   llvm """
     %exitCode = trunc i64 ${errorCode} to i32
     call void @exit(i32 %exitCode)
@@ -54,24 +64,32 @@ extern def close(to: WritableStream) at io: Unit =
     ret %Pos zeroinitializer
   """
 
-/// Runs `cmd` with `args`, connecting its standard streams as per `options`, returning its exit code.
-def spawn(cmd: String, args: Array[String], options: SpawnOptions): Int = {
-  val stdin: WritableStream => Unit at {io, global} = options.stdin match {
-    case Some(callback) => callback
-    case None() => box { _ => () }
-  }
-  val stdout: String => Unit at {io, global} = options.stdout match {
-    case Some(callback) => callback
-    case None() => box { _ => () }
-  }
-  val stderr: String => Unit at {io, global} = options.stderr match {
-    case Some(callback) => callback
-    case None() => box { _ => () }
-  }
-  internal::spawn(cmd, args,
-    internal::piped(options.stdin), stdin,
-    internal::piped(options.stdout), stdout,
-    internal::piped(options.stderr), stderr)
+/// How a process ended:
+/// - either it exited with a `code`, which is its result even if it is not 0,
+/// - or it was terminated by a `signal`, numbered in a platform-specific way.
+type ExitStatus {
+  Exited(code: Int)
+  Signaled(signal: Int)
+}
+
+/// Runs `cmd` with `args`, connecting its standard streams as per `options`.
+/// Returns an `ExitStatus` once it has exited and its piped output has ended, so that every callback for that output has run.
+/// Raises `IOError` if it cannot be started, such as `ENOENT` for a missing command.
+def spawn(cmd: String, args: Array[String], options: SpawnOptions): ExitStatus / Exception[IOError] = {
+  val stdin: WritableStream => Unit at {io, global} = options.stdin.getOrElse  { box { (_: WritableStream) => () } }
+  val stdout: String => Unit at {io, global}        = options.stdout.getOrElse { box { (_: String) => () } }
+  val stderr: String => Unit at {io, global}        = options.stderr.getOrElse { box { (_: String) => () } }
+
+  internal::exitStatus(
+    internal::checkResult(
+      internal::spawn(
+        cmd, args,
+        internal::piped(options.stdin), stdin,
+        internal::piped(options.stdout), stdout,
+        internal::piped(options.stderr), stderr
+      )
+    )
+  )
 }
 
 namespace internal {
@@ -81,6 +99,10 @@ namespace internal {
       case Some(f) => box { a => f(a); then(a) }
     }
 
+  /// The result of `spawn` is the exit code, or the signal times 2^32 (exit codes have 32 bits on every platform).
+  def exitStatus(status: Int): ExitStatus =
+    if (status >= 4294967296) Signaled(status / 4294967296) else Exited(status)
+
   /// 1 if a stream is piped to a callback, 0 if it is inherited.
   def piped[A](callback: Option[A]): Int = callback match {
     case Some(_) => 1
@@ -89,6 +111,7 @@ namespace internal {
 
   extern jsNode """
     const { spawn: process$nodeSpawn } = require('node:child_process');
+    const process$signals = require('node:os').constants.signals;
 
     function process$spawn(cmd, args, pipeStdin, stdin, pipeStdout, stdout, pipeStderr, stderr, callback) {
       const stdio = [pipeStdin ? 'pipe' : 'inherit', pipeStdout ? 'pipe' : 'inherit', pipeStderr ? 'pipe' : 'inherit'];
@@ -96,8 +119,14 @@ namespace internal {
       // Note: Decoded as UTF-8 by the stream itself, so that a character split between two chunks stays whole.
       if (pipeStdout) { p.stdout.setEncoding('utf8'); p.stdout.on('data', chunk => $effekt.runToplevel((ks, k) => stdout(chunk, ks, k))); }
       if (pipeStderr) { p.stderr.setEncoding('utf8'); p.stderr.on('data', chunk => $effekt.runToplevel((ks, k) => stderr(chunk, ks, k))); }
-      if (pipeStdin) p.on('spawn', () => $effekt.runToplevel((ks, k) => stdin(p.stdin, ks, k)));
-      p.on('close', (exitCode, _signal) => callback(exitCode));
+      if (pipeStdin) { p.on('spawn', () => $effekt.runToplevel((ks, k) => stdin(p.stdin, ks, k))); }
+      let error = null;
+      p.on('error', err => { error = err; });
+      p.on('close', (code, signal) => {
+        if (error !== null) { callback(error.errno); }
+        else if (signal !== null) { callback(process$signals[signal] * 4294967296); }
+        else { callback(code); }
+      });
     }
   """
 

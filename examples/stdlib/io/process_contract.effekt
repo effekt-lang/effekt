@@ -1,0 +1,35 @@
+import process
+import ref
+import io/error
+
+def describe(status: ExitStatus): String = status match {
+  case Exited(code) => "exited with " ++ code.show
+  case Signaled(signal) => "terminated by signal " ++ signal.show
+}
+
+def main() = {
+  with on[IOError].panic
+
+  // a command that cannot be started raises an error
+  try {
+    val _ = spawn("effekt-no-such-command", [].fromList, default())
+    println("starting a missing command succeeded")
+  } with Exception[IOError] {
+    def raise(e, msg) = println("starting a missing command raised: " ++ msg)
+  }
+
+  // a non-zero exit code is the result of the process, not an error
+  println(describe(spawn("sh", ["-c", "exit 3"].fromList, default())))
+
+  // a process terminated by a signal (`SIGKILL` is 9 everywhere, I think)
+  println(describe(spawn("sh", ["-c", "kill -9 $$"].fromList, default())))
+
+  // `spawn` returns once the output has ended, even if the process exited earlier
+  val output = ref("")
+  val status = spawn(
+    "sh", 
+    ["-c", "(sleep 0.1; echo late) & exit 0"].fromList,
+    default().onStdout(box { chunk => output.set(output.get ++ chunk) })
+  )
+  print(describe(status) ++ ", after its output: " ++ output.get)
+}
