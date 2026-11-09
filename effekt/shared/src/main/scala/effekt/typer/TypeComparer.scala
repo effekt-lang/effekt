@@ -83,11 +83,27 @@ trait TypeUnifier {
     val effs1 = eff1.toList.toSet
     val effs2 = eff2.toList.toSet
 
-    val hasUnknowns = (effs1 ++ effs2).exists { eff => unknowns(eff).nonEmpty }
+    // the sets are equal, so they are equal per type constructor
+    val byConstructor = (effs1 ++ effs2).map { eff => eff.typeConstructor }.toList.map { c =>
+      (effs1.filter { eff => eff.typeConstructor == c }, effs2.filter { eff => eff.typeConstructor == c })
+    }
+    def known(effs: Set[InterfaceType]) = effs.forall { eff => unknowns(eff).isEmpty }
 
-    // If we're sure that the effect sets are different, throw an error, otherwise defer it for later.
-    if (effs1 != effs2 && !hasUnknowns) {
+    // We're sure that the sets are different if only one has a type constructor, or if its effects are known and differ.
+    val different = byConstructor.exists { case (group1, group2) =>
+      group1.isEmpty || group2.isEmpty || (known(group1) && known(group2) && group1 != group2)
+    }
+
+    if (different) {
       error(pretty"Expected the effects ${eff2} but got ${eff1}", ctx)
+    } else {
+      byConstructor.foreach {
+        // a single effect with this type constructor equals each one on the other side
+        case (group1, group2) if !(known(group1) && known(group2)) && (group1.size == 1 || group2.size == 1) =>
+          for { e1 <- group1; e2 <- group2 } unifyInterfaceTypes(e1, e2, ctx)
+        // TODO otherwise... who knows
+        case _ => ()
+      }
     }
 
   def unifyFunctionTypes(tpe1: FunctionType, tpe2: FunctionType, ctx: ErrorContext): Unit = (tpe1, tpe2) match {

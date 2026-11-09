@@ -1,0 +1,18 @@
+import exception
+
+def g[E](x: Int) { act: Int => Int / Exception[E] }: Int / Exception[E] = act(x)
+
+// `E` is `RuntimeError`, from `act`, and not `MissingValue` from the closer handler
+def outer { act: Int => Int / Exception[RuntimeError] }: Int / Exception[RuntimeError] = {
+  with on[MissingValue].panic
+  g(1) {act}
+}
+
+def main() = {
+  val r = try {
+    outer { x => do raise(RuntimeError(), "raised by act"); x }
+  } with Exception[RuntimeError] {
+    def raise(e, msg) = { println("outer handler: " ++ msg); 0 }
+  }
+  println(r)
+}
