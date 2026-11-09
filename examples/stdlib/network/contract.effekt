@@ -177,6 +177,10 @@ def main() = {
     case Cons(address, Nil()) => println("127.0.0.1 resolves to " ++ address.toString)
     case _ => println("127.0.0.1 does not resolve to one address")
   }
+  resolve("::1") match {
+    case Cons(address, Nil()) => println("::1 resolves to " ++ address.toString)
+    case _ => println("::1 does not resolve to one address")
+  }
 
   // a host can be a name, whose addresses are tried in turn until one accepts
   val named = serveOnce(box { connection =>

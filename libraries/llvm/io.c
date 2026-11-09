@@ -335,6 +335,16 @@ void c_tcp_resolve(String host, Stack stack) {
     hints.ai_socktype = SOCK_STREAM;
     hints.ai_protocol = IPPROTO_TCP;
 
+    // A numeric host needs no resolver, so we parse it right away (`uv_getaddrinfo` without a callback is synchronous).
+    struct addrinfo numeric = hints;
+    numeric.ai_flags = AI_NUMERICHOST;
+    uv_getaddrinfo_t parsed;
+    if (uv_getaddrinfo(uv_default_loop(), &parsed, NULL, host_str, NULL, &numeric) == 0) {
+        free(host_str);
+        resume_Int(stack, io_handle_new((intptr_t)parsed.addrinfo));
+        return;
+    }
+
     uv_getaddrinfo_t* request = malloc(sizeof(uv_getaddrinfo_t));
     request->data = stack;
     int result = uv_getaddrinfo(uv_default_loop(), request, c_tcp_resolve_cb, host_str, NULL, &hints);
