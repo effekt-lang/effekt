@@ -1,0 +1,17 @@
+// A local definition is specialized like a toplevel one: the copy sits right after the later of the two definitions and sees what both of them see.
+
+def main(n: Int) = {
+  def run(){h: (Int) => Int} = {
+    (h: (Int) => Int @ {h})(n: Int)
+  }
+  (run: (){h: (Int) => Int} => Int @ {})(){(x: Int) =>
+    return x: Int
+  }
+}
+
+/// SPECIALIZE
+
+def main(n: Int) = {
+  let x = n: Int
+  return x: Int
+}

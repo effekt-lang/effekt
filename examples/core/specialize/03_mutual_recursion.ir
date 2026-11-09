@@ -1,0 +1,45 @@
+// The copies of ping and pong for the lambda call each other. Only main enters the group, at ping, so the copy of
+// ping gets the copy of pong at its beginning, where pong's copy calls it back; pong's copy is called once and goes.
+
+def ping(b: Bool){f: (Int) => Int} = {
+  if (b: Bool) {
+    (f: (Int) => Int @ {f})(1)
+  } else {
+    (pong: (Bool){f: (Int) => Int} => Int @ {})(b: Bool){f: (Int) => Int @ {f}}
+  }
+}
+
+def pong(b: Bool){f: (Int) => Int} = {
+  (ping: (Bool){f: (Int) => Int} => Int @ {})(b: Bool){f: (Int) => Int @ {f}}
+}
+
+def main(b: Bool, n: Int) = {
+  (ping: (Bool){f: (Int) => Int} => Int @ {})(b: Bool){(x: Int) =>
+    return n: Int
+  }
+}
+
+/// SPECIALIZE
+
+def ping(b: Bool){f @ f: (Int) => Int} = {
+  if (b: Bool) {
+    f: (Int) => Int @ {f}(1)
+  } else {
+    pong: (Bool){f: (Int) => Int} => Int @ {}(b: Bool){f: (Int) => Int @ {f}}
+  }
+}
+def pong(b: Bool){f @ f: (Int) => Int} = {
+  ping: (Bool){f: (Int) => Int} => Int @ {}(b: Bool){f: (Int) => Int @ {f}}
+}
+def main(b: Bool, n: Int) = {
+  def ping_f(c: Bool) = {
+    if (c: Bool) {
+      let x = 1
+      return n: Int
+    } else {
+      let d = c: Bool
+      ping_f: (Bool) => Int @ {}(d: Bool)
+    }
+  }
+  ping_f: (Bool) => Int @ {}(b: Bool)
+}

@@ -1,0 +1,27 @@
+// A boxed block is unknown, like `dyn` in Rust.
+
+def apply(x: Int){f: (Int) => Int} = {
+  (f: (Int) => Int @ {f})(x: Int)
+}
+
+def id(x: Int) = {
+  return x: Int
+}
+
+def main() = {
+  let g = box {} (id: (Int) => Int @ {})
+  (apply: (Int){f: (Int) => Int} => Int @ {})(0){unbox g: (Int) => Int at {}}
+}
+
+/// SPECIALIZE
+
+def apply(x: Int){f @ f: (Int) => Int} = {
+  f: (Int) => Int @ {f}(x: Int)
+}
+def id(x: Int) = {
+  return x: Int
+}
+def main() = {
+  let g = box {} id: (Int) => Int @ {}
+  apply: (Int){f: (Int) => Int} => Int @ {}(0){(unbox g: (Int) => Int at {})}
+}

@@ -1,0 +1,51 @@
+// visit and twice both call draw with the block passed to them; their copies for the lambda share one copy of draw,
+// which sits right after the lambda, before the copies calling it.
+
+def draw(n: Int){paint: (Int) => Int} = {
+  (paint: (Int) => Int @ {paint})(n: Int)
+}
+
+def twice(n: Int){paint: (Int) => Int} = {
+  val first: Int = (draw: (Int){paint: (Int) => Int} => Int @ {})(n: Int){paint: (Int) => Int @ {paint}};
+  (draw: (Int){paint: (Int) => Int} => Int @ {})(first: Int){paint: (Int) => Int @ {paint}}
+}
+
+def visit(n: Int){paint: (Int) => Int} = {
+  val drawn: Int = (twice: (Int){paint: (Int) => Int} => Int @ {})(n: Int){paint: (Int) => Int @ {paint}};
+  (draw: (Int){paint: (Int) => Int} => Int @ {})(drawn: Int){paint: (Int) => Int @ {paint}}
+}
+
+def main(n: Int) = {
+  let shade = 3
+  (visit: (Int){paint: (Int) => Int} => Int @ {})(n: Int){(x: Int) =>
+    return shade: Int
+  }
+}
+
+/// SPECIALIZE
+
+def draw(n: Int){paint @ paint: (Int) => Int} = {
+  paint: (Int) => Int @ {paint}(n: Int)
+}
+def twice(n: Int){paint @ paint: (Int) => Int} = {
+  val first = draw: (Int){paint: (Int) => Int} => Int @ {}(n: Int){paint: (Int) => Int @ {paint}};
+  draw: (Int){paint: (Int) => Int} => Int @ {}(first: Int){paint: (Int) => Int @ {paint}}
+}
+def visit(n: Int){paint @ paint: (Int) => Int} = {
+  val drawn = twice: (Int){paint: (Int) => Int} => Int @ {}(n: Int){paint: (Int) => Int @ {paint}};
+  draw: (Int){paint: (Int) => Int} => Int @ {}(drawn: Int){paint: (Int) => Int @ {paint}}
+}
+def main(n: Int) = {
+  let shade = 3
+  def draw_f(m: Int) = {
+    let x = m: Int
+    return shade: Int
+  }
+  let k = n: Int
+  val drawn = {
+    let j = k: Int
+    val first = draw_f: (Int) => Int @ {}(j: Int);
+    draw_f: (Int) => Int @ {}(first: Int)
+  };
+  draw_f: (Int) => Int @ {}(drawn: Int)
+}

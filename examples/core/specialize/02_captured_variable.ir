@@ -1,0 +1,26 @@
+// A mutable variable the block captures stays visible to the copy, which sits right after the block.
+
+def apply(x: Int){f: (Int) => Int} = {
+  (f: (Int) => Int @ {f})(x: Int)
+}
+
+def main() = {
+  var c @ r = 0;
+  (apply: (Int){f: (Int) => Int} => Int @ {})(1){(x: Int) =>
+    put c @ r = x: Int;
+    return x: Int
+  }
+}
+
+/// SPECIALIZE
+
+def apply(x: Int){f @ f: (Int) => Int} = {
+  f: (Int) => Int @ {f}(x: Int)
+}
+def main() = {
+  var c @ r = 0;
+  let x = 1
+  let y = x: Int
+  put c @ r = y: Int;
+  return y: Int
+}

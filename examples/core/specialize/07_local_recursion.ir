@@ -1,0 +1,29 @@
+// A local definition calling itself with the same block calls its copy again, which sits right after the later of
+// the two definitions and sees `n` there.
+
+def main(b: Bool, n: Int) = {
+  def loop(c: Bool){h: (Int) => Int} = {
+    if (c: Bool) {
+      (h: (Int) => Int @ {h})(n: Int)
+    } else {
+      (loop: (Bool){h: (Int) => Int} => Int @ {})(b: Bool){h: (Int) => Int @ {h}}
+    }
+  }
+  (loop: (Bool){h: (Int) => Int} => Int @ {})(b: Bool){(x: Int) =>
+    return x: Int
+  }
+}
+
+/// SPECIALIZE
+
+def main(b: Bool, n: Int) = {
+  def loop_f(c: Bool) = {
+    if (c: Bool) {
+      let x = n: Int
+      return x: Int
+    } else {
+      loop_f: (Bool) => Int @ {}(b: Bool)
+    }
+  }
+  loop_f: (Bool) => Int @ {}(b: Bool)
+}

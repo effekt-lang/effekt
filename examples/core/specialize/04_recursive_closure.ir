@@ -1,0 +1,37 @@
+// loop passes itself a block it defines, which captures the one before, so a copy for one block would ask for a copy
+// for the next, without end. loop is not specialized to its block at all.
+
+def loop(b: Bool){k: (Int) => Int} = {
+  if (b: Bool) {
+    (k: (Int) => Int @ {k})(0)
+  } else {
+    (loop: (Bool){k: (Int) => Int} => Int @ {})(b: Bool){(x: Int) =>
+      (k: (Int) => Int @ {k})(x: Int)
+    }
+  }
+}
+
+def main(b: Bool) = {
+  (loop: (Bool){k: (Int) => Int} => Int @ {})(b: Bool){(x: Int) =>
+    return x: Int
+  }
+}
+
+/// SPECIALIZE
+
+def loop(b: Bool){k @ k: (Int) => Int} = {
+  if (b: Bool) {
+    k: (Int) => Int @ {k}(0)
+  } else {
+    def g(x: Int) = {
+      k: (Int) => Int @ {k}(x: Int)
+    }
+    loop: (Bool){k: (Int) => Int} => Int @ {}(b: Bool){g: (Int) => Int @ {k}}
+  }
+}
+def main(b: Bool) = {
+  def f(x: Int) = {
+    return x: Int
+  }
+  loop: (Bool){k: (Int) => Int} => Int @ {}(b: Bool){f: (Int) => Int @ {}}
+}

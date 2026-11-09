@@ -1,0 +1,30 @@
+// A toplevel function passed as a block is named by a local definition, and the copy is made right after it.
+
+def twice(x: Int) = {
+  return x: Int
+}
+
+def apply(n: Int){f: (Int) => Int} = {
+  val once: Int = (f: (Int) => Int @ {f})(n: Int);
+  (f: (Int) => Int @ {f})(once: Int)
+}
+
+def main(n: Int) = {
+  (apply: (Int){f: (Int) => Int} => Int @ {})(n: Int){twice: (Int) => Int @ {}}
+}
+
+/// SPECIALIZE
+
+def twice(x: Int) = {
+  return x: Int
+}
+def apply(n: Int){f @ f: (Int) => Int} = {
+  val once = f: (Int) => Int @ {f}(n: Int);
+  f: (Int) => Int @ {f}(once: Int)
+}
+def main(n: Int) = {
+  def g = twice: (Int) => Int @ {}
+  let m = n: Int
+  val once = g: (Int) => Int @ {}(m: Int);
+  g: (Int) => Int @ {}(once: Int)
+}
