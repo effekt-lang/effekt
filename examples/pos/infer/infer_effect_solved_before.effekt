@@ -1,0 +1,19 @@
+effect emit[A](a: A): Unit
+
+def each[A, B](x: A) { act: A => Unit / { emit[A], emit[B] } }: List[B] = {
+  var bs: List[B] = Nil()
+  try { 
+    try { act(x) } with emit[A] { a => resume(()) } 
+  } with emit[B] { b => 
+    bs = Cons(b, bs); resume(())
+  }
+  bs
+}
+
+// comparing `act`'s type solves `A !-> Int` from its parameter before we compare the effects
+def outer { act: Int => Unit / { emit[Int], emit[String] } }: Unit = {
+  val bs = each(0) {act}
+  println(bs.size)
+}
+
+def main() = outer { n => do emit(n); do emit("one") }

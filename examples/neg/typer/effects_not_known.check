@@ -1,0 +1,6 @@
+[error] examples/neg/typer/effects_not_known.effekt:17:19: Effects need to be fully known, but effect emit[A]'s type parameter(s) A could not be inferred. [typer]
+17    val r = gather {act}
+                      ^^^
+[info] examples/neg/typer/effects_not_known.effekt:17:19: Maybe try annotating them?
+17    val r = gather {act}
+                      ^^^

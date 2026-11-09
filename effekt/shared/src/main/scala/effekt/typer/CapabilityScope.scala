@@ -41,6 +41,8 @@ object DummyUnifier extends TypeUnifier {
   override def requireUpperBound(x: symbols.UnificationVar, tpe: symbols.ValueType, ctx: ErrorContext): Unit = ()
   override def requireEqual(x: symbols.UnificationVar, tpe: symbols.ValueType, ctx: ErrorContext): Unit = ()
   override def requireSubregion(lower: symbols.Captures, upper: symbols.Captures, ctx: ErrorContext): Unit = ()
+  override def requireConcrete(eff: symbols.InterfaceType, ctx: ErrorContext): Unit = ()
+  override def unification(effs: symbols.Effects): symbols.Effects = effs
 
   override def abort(issue: StructuredMessage, ctx: ErrorContext): Nothing = throw UnificationFailed
   override def abort(left: symbols.Type, right: symbols.Type, ctx: ErrorContext): Nothing = throw UnificationFailed

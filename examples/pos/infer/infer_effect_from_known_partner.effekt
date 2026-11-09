@@ -1,0 +1,21 @@
+effect emit[A](a: A): Unit
+
+def collectWith[A, B](start: A) { act: () => Unit / { emit[A], emit[B] } }: (List[A], List[B]) = {
+  var as: List[A] = [start]
+  var bs: List[B] = Nil()
+  try { 
+    try { act() } with emit[A] { a => as = Cons(a, as); resume(()) }
+  } with emit[B] { b => 
+    bs = Cons(b, bs); resume(())
+  } 
+  (as, bs)
+}
+
+// we know that `A` is `Int` from `0`, so `emit[B]` can only be `emit[String]`, duh
+def outer { act: () => Unit / { emit[Int], emit[String] } }: Unit = {
+  val (as, bs) = collectWith(0) {act}
+  println(as.size)
+  println(bs.size)
+}
+
+def main() = outer { do emit(1); do emit("two"); do emit("three") }

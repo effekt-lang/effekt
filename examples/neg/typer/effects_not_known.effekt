@@ -1,0 +1,24 @@
+effect emit[A](a: A): Unit
+
+// handles both effects itself, so a call needs no capabilities for them
+def gather[A, B] { act: () => Unit / { emit[A], emit[B] } }: (List[A], List[B]) = {
+  var as: List[A] = Nil()
+  var bs: List[B] = Nil()
+  try { 
+    try { act() } with emit[A] { a => as = Cons(a, as); resume(()) }
+  } with emit[B] { b => 
+    bs = Cons(b, bs); resume(())
+  }
+  (as, bs)
+}
+
+def outer { act: () => Unit / { emit[Int], emit[String] } }: Unit = {
+  // two `emit`s on each side, and which is which is only known below
+  val r = gather {act}
+
+  // only at this point `A` and `B` become known, and `emit[Bool]` is not one of `act`'s effects
+  val p: (List[Bool], List[String]) = r
+  println(p.first.size)
+}
+
+def main() = outer { do emit(1); do emit("two") }
