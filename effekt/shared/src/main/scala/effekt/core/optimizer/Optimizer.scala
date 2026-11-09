@@ -49,7 +49,8 @@ object Optimizer extends Phase[CoreTransformed, CoreTransformed] {
       val live = Deadcode.remove(mainSymbol, normalized)
       val tailRemoved = StaticResumptions(live)
       val contified = DirectStyle.rewrite(tailRemoved)
-      contified
+      val parameterized = ReferencesToParameters.transform(contified)
+      parameterized
     }
 
     // (3) normalize a few times (since tail resumptions might only surface after normalization and leave dead Resets)
@@ -60,6 +61,10 @@ object Optimizer extends Phase[CoreTransformed, CoreTransformed] {
     // `StaticResumptions` runs after `Deadcode` and frees stuff, so let's run `Deadcode` one more time
     tree = Context.timed("deadcode-elimination-final", source.name) {
       Deadcode.remove(mainSymbol, tree)
+    }
+
+    tree = Context.timed("references-to-parameters-final", source.name) {
+      ReferencesToParameters.transform(tree)
     }
 
     tree
