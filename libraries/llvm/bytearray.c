@@ -33,6 +33,10 @@
 
 void c_bytearray_erase(void *object) { free(object); }
 
+// The eraser of string literals, which are global objects that are never freed.
+// Therefore, unlike `c_bytearray_erase`, they must not free their object.
+void c_bytearray_erase_noop(void *object) { (void)object; }
+
 struct Pos c_bytearray_new(const Int size) {
   void *objPtr = malloc(sizeof(struct Header) + size);
   struct Header *headerPtr = objPtr;
