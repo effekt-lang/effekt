@@ -1,0 +1,17 @@
+import bytearray
+
+def main() = {
+  // the string is converted into before the array changes, so it must not see the change
+  val arr = bytearray(3, 0x41) // A
+  val s = arr.toString
+  arr.set(0, 0x42) // B
+  println(s)
+  println(arr.toString)
+
+  // ... and the other way around: the bytes are taken from a string, then changed
+  val str = "xyz" ++ "w"
+  val bytes = str.fromString
+  bytes.set(0, 0x41)
+  println(str)
+  println(bytes.toString)
+}
