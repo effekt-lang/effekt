@@ -91,13 +91,10 @@ abstract class Context
   override def in[T](block: => T): T = {
     val focusBefore = focus
     val moduleBefore = module
-    val result = super.in(block)
-
-    // we purposefully do not include the reset into `finally` to preserve the
-    // state at the error position
-    focus = focusBefore
-    module = moduleBefore
-    result
+    try super.in(block) finally {
+      focus = focusBefore
+      module = moduleBefore
+    }
   }
 
   // temporarily switches the message buffer to collect messages
