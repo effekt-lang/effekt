@@ -182,6 +182,16 @@ struct Pos c_bytearray_concatenate(const struct Pos left, const struct Pos right
         erasePositive(right);
         return (struct Pos) { .tag = left_size + right_size, .obj = objPtr };
     }
+    // early exit for rhs or lhs being empty strings
+    if (right_size == 0) {
+        erasePositive(right);
+        return left;
+    }
+    if (left_size == 0) {
+        erasePositive(left);
+        return right;
+    }
+
     const struct Pos concatenated = c_bytearray_new(left_size + right_size);
     // two memcpys rather than a byte loop with a branch per byte
     memcpy(c_bytearray_data(concatenated), c_bytearray_data(left), left_size);
