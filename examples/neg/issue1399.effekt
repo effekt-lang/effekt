@@ -1,0 +1,18 @@
+interface Co {
+  def yield() : Unit
+}
+
+interface Queue [A] {
+  def enqueue(x : A) : Unit
+}
+
+def scheduler() {p : () => Unit / Co } : Unit / { Queue[Unit => Unit at {}] } = {
+  try {
+    p()
+  } with Co {
+    def yield() =
+      do enqueue (box { () => resume(()) })
+  }
+}
+
+def main() = ()
