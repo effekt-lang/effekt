@@ -11,5 +11,5 @@ after
 after
 after
 [warning] examples/pos/capture/regions.effekt:10:3: Handling effect Dummy, which seems not to be used by the program. [typer]
-  try { prog() } with Dummy { resume(()) }
-  ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+10    try { prog() } with Dummy { resume(()) }
+      ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^

@@ -2,5 +2,5 @@
 There are multiple overloads, which all would type check:
 - typeTag: () => TypeTag[F]
 - typeTag: () => TypeTag[S]
-def typeTag[F,S]{ ?typeTag: => TypeTag[F] }{ ?typeTag: => TypeTag[S] }: TypeTag[(F,S)] = Pair(typeTag(), typeTag())
-                                                                                              ^^^^^^^
+15  def typeTag[F,S]{ ?typeTag: => TypeTag[F] }{ ?typeTag: => TypeTag[S] }: TypeTag[(F,S)] = Pair(typeTag(), typeTag())
+                                                                                                  ^^^^^^^

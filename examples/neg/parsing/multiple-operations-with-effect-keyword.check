@@ -1,12 +1,12 @@
 [error] examples/neg/parsing/multiple-operations-with-effect-keyword.effekt:3:1: Unexpected 'effect', did you mean to declare an interface of multiple operations using the 'interface' keyword? [parser]
-effect Lexer {
-^
+3  effect Lexer {
+   ^
 [error] examples/neg/parsing/multiple-operations-with-effect-keyword.effekt:8:1: Unexpected 'effect', did you mean to declare an interface of multiple operations using the 'interface' keyword? [parser]
-effect Emit {
-^
+8  effect Emit {
+   ^
 [error] examples/neg/parsing/multiple-operations-with-effect-keyword.effekt:13:1: Unexpected 'effect', did you mean to declare an interface of multiple operations using the 'interface' keyword? [parser]
-effect Foo {
-^
+13  effect Foo {
+    ^
 [error] examples/neg/parsing/multiple-operations-with-effect-keyword.effekt:19:1: Expected return type annotation but got keyword effect [parser]
-effect Next(): String
-^^^^^^
+19  effect Next(): String
+    ^^^^^^

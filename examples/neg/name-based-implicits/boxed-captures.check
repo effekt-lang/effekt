@@ -4,5 +4,5 @@ Cannot instantiate 1st value argument foo of type () => String at {}.
     that an implicit block argument of the same name would be instantiated to.
   Not allowed {io}
 
-  requirePureFoo()
-  ^^^^^^^^^^^^^^^^
+10    requirePureFoo()
+      ^^^^^^^^^^^^^^^^

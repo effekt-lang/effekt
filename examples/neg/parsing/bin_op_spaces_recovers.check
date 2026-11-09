@@ -15,8 +15,8 @@ Possible overload: effekt::infixPlus of type (Double, Double) => Double
   Expected Double but got Int.
   Expected Double but got Int.
 
-  val _: JustCauseATypeErrorPlease = 1 +2
-                                     ^^^^
+4    val _: JustCauseATypeErrorPlease = 1 +2
+                                        ^^^^
 [warning] examples/neg/parsing/bin_op_spaces_recovers.effekt:4:40: Missing whitespace around binary operator [parser]
-  val _: JustCauseATypeErrorPlease = 1 +2
-                                       ^
+4    val _: JustCauseATypeErrorPlease = 1 +2
+                                          ^

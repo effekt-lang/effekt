@@ -8,5 +8,5 @@ Possible overload: expected_value_got_block_overload::apply of type (Int => Int 
 Possible overload: expected_value_got_block_overload::apply of type {String => Int} => Int
   Type Int does not match the declared type String.
 
-  val _ = apply { (x: Int) => x + 1 }
-          ^^^^^^^^^^^^^^^^^^^^^^^^^^^
+5    val _ = apply { (x: Int) => x + 1 }
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^

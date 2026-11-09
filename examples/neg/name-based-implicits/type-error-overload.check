@@ -25,5 +25,5 @@ Possible overload: type-error-overload::baz of type {() => List[Bool]} => String
     Possible overload: type-error-overload::foo of type () => Double
       Expected List[Bool] but got Double.
 
-  val y: String = baz()
-                  ^^^^^
+8    val y: String = baz()
+                     ^^^^^

@@ -11,5 +11,5 @@ Possible overload: no-implicit::foo of type {() => Unit} => Unit
   Cannot instantiate 1st block argument foobaz of type () => Unit.
     Wrong number of arguments to foobaz: expected 1 value argument, but got 0 value arguments
 
-  foo()
-  ^^^^^
+8    foo()
+     ^^^^^

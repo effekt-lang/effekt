@@ -1,18 +1,18 @@
 [warning] examples/pos/twice-explicit.effekt:11:3: There are multiple handlers for effect Exc; this might not be intended. [typer]
-  try { do Exc() }
-  ^
+11    try { do Exc() }
+      ^
 [info] examples/pos/twice-explicit.effekt:11:3: Maybe bind capabilities explicitly (e.g. `try { ... } with c: MyEffect { ... }`)?
-  try { do Exc() }
-  ^
+11    try { do Exc() }
+      ^
 [warning] examples/pos/twice-explicit.effekt:17:3: There are multiple handlers for effect Exc; this might not be intended. [typer]
-  try { do Exc() }
-  ^
+17    try { do Exc() }
+      ^
 [info] examples/pos/twice-explicit.effekt:17:3: Maybe bind capabilities explicitly (e.g. `try { ... } with c: MyEffect { ... }`)?
-  try { do Exc() }
-  ^
+17    try { do Exc() }
+      ^
 [warning] examples/pos/twice-explicit.effekt:23:3: There are multiple handlers for effect Exc; this might not be intended. [typer]
-  try { do Exc() }
-  ^
+23    try { do Exc() }
+      ^
 [info] examples/pos/twice-explicit.effekt:23:3: Maybe bind capabilities explicitly (e.g. `try { ... } with c: MyEffect { ... }`)?
-  try { do Exc() }
-  ^
+23    try { do Exc() }
+      ^

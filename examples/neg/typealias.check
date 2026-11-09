@@ -9,5 +9,5 @@ Possible overload: effekt::infixPlus of type (Double, Double) => Double
   Expected Double but got Int.
   Expected Double but got Int.
 
-def add(x: Foo, y: Foo): Bar = x + y
-                               ^^^^^
+33  def add(x: Foo, y: Foo): Bar = x + y
+                                   ^^^^^

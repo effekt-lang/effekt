@@ -1,3 +1,3 @@
 [error] examples/neg/lambdas/continuations.effekt:17:14: Not allowed {Raise} [typer]
-      cont = box { resume(()) };
-             ^^^^^^^^^^^^^^^^^^
+17        cont = box { resume(()) };
+                 ^^^^^^^^^^^^^^^^^^

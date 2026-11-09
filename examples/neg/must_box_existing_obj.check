@@ -1,6 +1,6 @@
 [error] examples/neg/must_box_existing_obj.effekt:14:10: Expected a value, but ctr is a computation. [unbox]
-  return ctr
-         ^^^
+14    return ctr
+             ^^^
 [info] examples/neg/must_box_existing_obj.effekt:14:10: Use `box ctr` to pass it as a value.
-  return ctr
-         ^^^
+14    return ctr
+             ^^^

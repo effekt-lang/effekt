@@ -1,6 +1,6 @@
 [error] examples/neg/typer/expected_block_got_value.effekt:4:11: Wrong number of arguments to twice: expected 0 value arguments and 1 block argument, but got 1 value argument and 0 block arguments [typer]
-  val _ = twice(box { (x: Int) => x + 1 })
-          ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+4    val _ = twice(box { (x: Int) => x + 1 })
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 [info] examples/neg/typer/expected_block_got_value.effekt:4:11: Did you mean to pass 1 value argument as a block (computation)?
-  val _ = twice(box { (x: Int) => x + 1 })
-          ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+4    val _ = twice(box { (x: Int) => x + 1 })
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^

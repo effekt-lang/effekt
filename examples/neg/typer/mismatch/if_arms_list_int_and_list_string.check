@@ -1,18 +1,18 @@
 [error] examples/neg/typer/mismatch/if_arms_list_int_and_list_string.effekt:1:23: The branches of this `if` have incompatible types. [typer]
-def choose(b: Bool) = if (b) [1] else ["hello"]
-                      ^^^^^^^^^^^^^^^^^^^^^^^^^
+1  def choose(b: Bool) = if (b) [1] else ["hello"]
+                         ^^^^^^^^^^^^^^^^^^^^^^^^^
 [info] examples/neg/typer/mismatch/if_arms_list_int_and_list_string.effekt:1:30: This branch has type List[Int].
-def choose(b: Bool) = if (b) [1] else ["hello"]
-                             ^^^
+1  def choose(b: Bool) = if (b) [1] else ["hello"]
+                                ^^^
 [info] examples/neg/typer/mismatch/if_arms_list_int_and_list_string.effekt:1:39: This branch has type List[String].
-def choose(b: Bool) = if (b) [1] else ["hello"]
-                                      ^^^^^^^^^
+1  def choose(b: Bool) = if (b) [1] else ["hello"]
+                                         ^^^^^^^^^
 [info] examples/neg/typer/mismatch/if_arms_list_int_and_list_string.effekt:1:23: Int and String differ.
-def choose(b: Bool) = if (b) [1] else ["hello"]
-                      ^^^^^^^^^^^^^^^^^^^^^^^^^
+1  def choose(b: Bool) = if (b) [1] else ["hello"]
+                         ^^^^^^^^^^^^^^^^^^^^^^^^^
 [error] examples/neg/typer/mismatch/if_arms_list_int_and_list_string.effekt:1:23: Expected List[A] but got List[A]. [typer]
-def choose(b: Bool) = if (b) [1] else ["hello"]
-                      ^^^^^^^^^^^^^^^^^^^^^^^^^
+1  def choose(b: Bool) = if (b) [1] else ["hello"]
+                         ^^^^^^^^^^^^^^^^^^^^^^^^^
 [info] examples/neg/typer/mismatch/if_arms_list_int_and_list_string.effekt:1:23: Expected Int but got String.
-def choose(b: Bool) = if (b) [1] else ["hello"]
-                      ^^^^^^^^^^^^^^^^^^^^^^^^^
+1  def choose(b: Bool) = if (b) [1] else ["hello"]
+                         ^^^^^^^^^^^^^^^^^^^^^^^^^

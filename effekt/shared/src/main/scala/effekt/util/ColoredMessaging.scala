@@ -29,11 +29,25 @@ trait ColoredMessaging extends EffektMessaging with Style {
       case Severity.Hint    => "hint"
     }
 
-  override def formatMessage(message: Diagnostic): String =
-    (formatOne(message, contentWithPhase(message)) :: message.subdiagnostics.map { s =>
+  override def formatMessage(message: Diagnostic): String = {
+    val formatted = formatOne(message, contentWithPhase(message)) :: message.subdiagnostics.map { s =>
       val info = asInfo(message, s)
       formatOne(info, formatContent(info))
-    }).mkString("")
+    }
+    // one gutter for the whole diagnostic, as wide as its largest line number
+    val width = formatted.flatMap(_.excerpt).map { e => e.line.toString.length }.maxOption.getOrElse(0)
+    formatted.map { f => f.render(width) }.mkString("")
+  }
+
+  case class Excerpt(line: Int, code: String, marker: String)
+
+  case class Formatted(header: String, excerpt: Option[Excerpt]) {
+    def render(width: Int): String = excerpt match {
+      case Some(Excerpt(line, code, marker)) =>
+        s"${header}\n${dim(" " * (width - line.toString.length) + line)}  ${code}\n${" " * width}  ${marker}\n"
+      case None => s"${header}\n"
+    }
+  }
 
   private def asInfo(d: Diagnostic, s: Subdiagnostic): Diagnostic = {
     val at = s match {
@@ -43,11 +57,12 @@ trait ColoredMessaging extends EffektMessaging with Style {
     Diagnostic(Severity.Info, at, Nil, Message(s.text), d.phase)
   }
 
-  def contentWithPhase(d: Diagnostic): String = d.phase match {
-    case Some(phase) =>
-      val (first, rest) = formatContent(d).span { c => c != '\n' }
-      s"${first} ${dim(s"[${phase}]")}${rest}"
-    case None => formatContent(d)
+  def contentWithPhase(d: Diagnostic): String = {
+    val phase = d.phase.map { p => s" ${dim(s"[${p}]")}" }.getOrElse("")
+    d.reason.show(using this) match {
+      case first :: rest => (first + phase :: rest).mkString("\n")
+      case Nil => phase
+    }
   }
 
   def lspSource(d: Diagnostic): String = d.phase match {
@@ -55,24 +70,24 @@ trait ColoredMessaging extends EffektMessaging with Style {
     case None => "effekt"
   }
 
-  private def formatOne(message: Diagnostic, text: String): String =
+  private def formatOne(message: Diagnostic, text: String): Formatted =
     message.range match {
       case Some(range) if range.from.line == range.to.line => formatMessage(message, text, range.from, range.to)
       case Some(range) => formatMessage(message, text, range.from)
       case None =>
         val severity = severityToWord(message.severity)
-        s"[$severity] ${text}\n"
+        Formatted(s"[$severity] ${text}", None)
     }
 
-  def formatMessage(message: Diagnostic, text: String, from: Position): String =
+  def formatMessage(message: Diagnostic, text: String, from: Position): Formatted =
     formatMessage(message, text, from, from.copy(column = from.column + 1))
 
-  def formatMessage(message: Diagnostic, text: String, from: Position, to: Position): String = {
+  def formatMessage(message: Diagnostic, text: String, from: Position, to: Position): Formatted = {
     val severity = severityToWord(message.severity)
-    val context = from.source.optLineContents(from.line).map { src =>
-      util.AnsiHighlight(src) + "\n" + (" " * (from.column - 1)) + ("^" * (to.column - from.column))
-    }.getOrElse("")
-    s"[$severity] ${homogenizePath(from.format)} ${text}\n$context\n"
+    val excerpt = from.source.optLineContents(from.line).map { src =>
+      Excerpt(from.line, util.AnsiHighlight(src), (" " * (from.column - 1)) + ("^" * (to.column - from.column)))
+    }
+    Formatted(s"[$severity] ${homogenizePath(from.format)} ${text}", excerpt)
   }
 
   override def formatContent(err: Diagnostic): String = content(err)
@@ -88,12 +103,12 @@ class PlainMessaging extends ColoredMessaging {
   def dim(s: String): String = s
 
   // Don't show context in plain messaging.
-  override def formatMessage(message: Diagnostic, text: String, from: Position): String = {
+  override def formatMessage(message: Diagnostic, text: String, from: Position): Formatted = {
     val severity = severityToWord(message.severity)
-    s"[$severity] ${homogenizePath(from.format)} ${text}\n"
+    Formatted(s"[$severity] ${homogenizePath(from.format)} ${text}", None)
   }
 
-  override def formatMessage(message: Diagnostic, text: String, from: Position, to: Position): String =
+  override def formatMessage(message: Diagnostic, text: String, from: Position, to: Position): Formatted =
     formatMessage(message, text, from)
 }
 
