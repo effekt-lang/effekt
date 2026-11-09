@@ -106,7 +106,7 @@ object messages {
     }
   }
 
-  private def fullname(n: Name): String = n match {
+  private[effekt] def fullname(n: Name): String = n match {
     case n: QualifiedName => n.qualifiedName
     case n: Name          => n.name
   }
