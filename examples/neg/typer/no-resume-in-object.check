@@ -1,6 +1,5 @@
 [error] examples/neg/typer/no-resume-in-object.effekt:5:22: Cannot find `resume`. [typer]
 5      def print(msg) = resume(())
                         ^^^^^^^^^^
-[info] examples/neg/typer/no-resume-in-object.effekt:5:22: Maybe you are trying to resume inside of an object literal and not as part of `try { ... } with ...`?
-5      def print(msg) = resume(())
-                        ^^^^^^^^^^
+
+   * help: Maybe you are trying to resume inside of an object literal and not as part of `try { ... } with ...`?

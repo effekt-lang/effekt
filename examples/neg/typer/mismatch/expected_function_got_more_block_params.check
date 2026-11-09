@@ -4,6 +4,5 @@ but got type
   {() => Unit} => Unit
 6    val _ = apply(box twice)
                        ^^^^^
-[info] examples/neg/typer/mismatch/expected_function_got_more_block_params.effekt:6:21: Expected 0 block parameters but got 1.
-6    val _ = apply(box twice)
-                       ^^^^^
+
+   * note: Expected 0 block parameters but got 1.

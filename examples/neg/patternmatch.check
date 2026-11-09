@@ -4,18 +4,18 @@
 [error] examples/neg/patternmatch.effekt:13:20: The clauses of this `match` have incompatible types. [typer]
 13  def join(f: Foo) = f match {
                        ^
-[info] examples/neg/patternmatch.effekt:14:17: This clause has type Box[Int].
-14    case Bar() => MakeBox(42)
-                    ^^^^^^^^^^^
-[info] examples/neg/patternmatch.effekt:15:17: This clause has type Box[Bool].
-15    case Baz() => MakeBox(true)
-                    ^^^^^^^^^^^^^
-[info] examples/neg/patternmatch.effekt:13:20: Int and Bool differ.
-13  def join(f: Foo) = f match {
-                       ^
+
+    * note: This clause has type Box[Int].
+14  |    case Bar() => MakeBox(42)
+    |                  ^^^^^^^^^^^
+
+    * note: This clause has type Box[Bool].
+15  |    case Baz() => MakeBox(true)
+    |                  ^^^^^^^^^^^^^
+
+    * note: Int and Bool differ.
 [error] examples/neg/patternmatch.effekt:13:20: Expected Box[A] but got Box[A]. [typer]
 13  def join(f: Foo) = f match {
                        ^
-[info] examples/neg/patternmatch.effekt:13:20: Expected Int but got Bool.
-13  def join(f: Foo) = f match {
-                       ^
+
+    * note: Expected Int but got Bool.

@@ -1,6 +1,5 @@
 [error] examples/neg/must_box_capability.effekt:5:3: Expected a value, but e is a computation. [unbox]
 5    e
      ^
-[info] examples/neg/must_box_capability.effekt:5:3: Use `box e` to pass it as a value.
-5    e
-     ^
+
+   * help: Use `box e` to pass it as a value.

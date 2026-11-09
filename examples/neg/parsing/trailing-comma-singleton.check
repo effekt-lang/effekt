@@ -1,18 +1,12 @@
 [error] examples/neg/parsing/trailing-comma-singleton.effekt:2:13: There are no one-element tuples. [parser]
 2    val a = (1,) // would mean `1` if not for the soft fail
                ^
-[info] examples/neg/parsing/trailing-comma-singleton.effekt:2:13: Remove the trailing `,` to group.
-2    val a = (1,) // would mean `1` if not for the soft fail
-               ^
-[info] examples/neg/parsing/trailing-comma-singleton.effekt:2:13: Add another element.
-2    val a = (1,) // would mean `1` if not for the soft fail
-               ^
+
+   * help: Remove the trailing `,` to group.
+   * help: Add another element.
 [error] examples/neg/parsing/trailing-comma-singleton.effekt:4:14: There are no one-element tuples. [parser]
 4    val c: (Int,) = 4  // would mean `Int` if not for the soft fail
                 ^
-[info] examples/neg/parsing/trailing-comma-singleton.effekt:4:14: Remove the trailing `,` to group.
-4    val c: (Int,) = 4  // would mean `Int` if not for the soft fail
-                ^
-[info] examples/neg/parsing/trailing-comma-singleton.effekt:4:14: Add another element.
-4    val c: (Int,) = 4  // would mean `Int` if not for the soft fail
-                ^
+
+   * help: Remove the trailing `,` to group.
+   * help: Add another element.

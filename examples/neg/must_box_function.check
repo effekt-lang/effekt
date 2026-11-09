@@ -1,9 +1,6 @@
 [error] examples/neg/must_box_function.effekt:5:11: Expected a value, but toString is a computation. [unbox]
 5    println(toString)
              ^^^^^^^^
-[info] examples/neg/must_box_function.effekt:5:11: Use `box toString` to pass it as a value.
-5    println(toString)
-             ^^^^^^^^
-[info] examples/neg/must_box_function.effekt:5:11: Did you mean to call the function using `toString()`?
-5    println(toString)
-             ^^^^^^^^
+
+   * help: Use `box toString` to pass it as a value.
+   * help: Did you mean to call the function using `toString()`?

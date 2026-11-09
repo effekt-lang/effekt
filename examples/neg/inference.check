@@ -1,12 +1,14 @@
 [error] examples/neg/inference.effekt:18:33: The clauses of this `match` have incompatible types. [typer]
 18  def test2(l1: List[Int]): Int = l1 match {
                                     ^
-[info] examples/neg/inference.effekt:19:25: This clause has type Int.
-19    case Cons(a, rest) => a
-                            ^
-[info] examples/neg/inference.effekt:20:17: This clause has type String.
-20    case Nil() => ""
-                    ^^
+
+    * note: This clause has type Int.
+19  |    case Cons(a, rest) => a
+    |                          ^
+
+    * note: This clause has type String.
+20  |    case Nil() => ""
+    |                  ^^
 [error] examples/neg/inference.effekt:18:33: Expected Int but got String. [typer]
 18  def test2(l1: List[Int]): Int = l1 match {
                                     ^
@@ -16,6 +18,5 @@
 [error] examples/neg/inference.effekt:51:25: Expected List[String] but got List[Int]. [typer]
 51    case Cons(a, rest) => Nil[Int]() // failing to check the call here aborts type checking, so this example goes last
                             ^^^^^^^^^^
-[info] examples/neg/inference.effekt:51:25: Expected String but got Int.
-51    case Cons(a, rest) => Nil[Int]() // failing to check the call here aborts type checking, so this example goes last
-                            ^^^^^^^^^^
+
+    * note: Expected String but got Int.

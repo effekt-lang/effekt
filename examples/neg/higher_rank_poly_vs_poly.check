@@ -4,6 +4,5 @@ but got type
   [A](List[A]) => Int
 9  def main() = len([1, 2, 3]){ count }
                                 ^^^^^
-[info] examples/neg/higher_rank_poly_vs_poly.effekt:9:30: Expected 0 type parameters but got 1.
-9  def main() = len([1, 2, 3]){ count }
-                                ^^^^^
+
+   * note: Expected 0 type parameters but got 1.

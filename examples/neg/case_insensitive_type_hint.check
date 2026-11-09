@@ -1,6 +1,5 @@
 [error] examples/neg/case_insensitive_type_hint.effekt:5:12: Could not resolve type Mytype [namer]
 5  def fun(): Mytype = MyType()
               ^^^^^^
-[info] examples/neg/case_insensitive_type_hint.effekt:5:12: Did you mean MyType?
-5  def fun(): Mytype = MyType()
-              ^^^^^^
+
+   * help: Did you mean MyType?

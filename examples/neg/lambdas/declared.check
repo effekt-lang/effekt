@@ -1,6 +1,5 @@
 [error] examples/neg/lambdas/declared.effekt:15:12: Type Yield at {time, console} does not match the declared type Yield at {console}. [typer]
 15    myFun { (x: Yield at {time, console}) => () }; // ERROR
                ^^^^^^^^^^^^^^^^^^^^^^^^^^^
-[info] examples/neg/lambdas/declared.effekt:15:12: Used captures {time} are not in the allowed set {console}.
-15    myFun { (x: Yield at {time, console}) => () }; // ERROR
-               ^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+    * note: Used captures {time} are not in the allowed set {console}.
