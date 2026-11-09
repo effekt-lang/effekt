@@ -1,0 +1,11 @@
+def build(n: Int) { done: List[Int] => List[Int] }: List[Int] =
+  if (n == 0) done(Nil())
+  else {
+    def next(rest: List[Int]) = done(Cons(n, rest))
+    build(n - 1) { next }
+  }
+
+def main() = {
+  def finish(xs: List[Int]) = xs
+  println(build(3) { finish })
+}
