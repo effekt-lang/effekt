@@ -396,7 +396,7 @@ object Transformer {
         // Singleton object for the whole string literal, every instantiation shares it (never freed, never reused in place).
         val header = ConstantStruct(headerType, List(ConstantInt(0), ConstantGlobal("c_bytearray_erase_noop")))
         val bytes = ConstantArray(IntegerType8(), utf8.map { b => ConstantInteger8(b) }.toList)
-        val literalType = StructureType(List(headerType, ArrayType(utf8.size, IntegerType8())))
+        val literalType = StructureType(List(headerType, ArrayType(utf8.size, IntegerType8())), packed = true)
         emit(GlobalVariable(s"${bind}.lit", ConstantStruct(literalType, List(header, bytes)), 8)) // needs alignment because it's packed
 
         val temporaryName = freshName(bind + "_tmp")
