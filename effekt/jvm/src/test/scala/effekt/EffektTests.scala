@@ -52,7 +52,7 @@ trait EffektTests extends munit.FunSuite {
     }
 
   override def afterAll(): Unit =
-    if (updateCheckFiles) CheckFiles.report(getClass.getSimpleName, negatives ++ positives ++ withoutOptimizations)
+    if (updateCheckFiles) CheckFiles.write(getClass.getSimpleName, negatives ++ positives ++ withoutOptimizations)
 
   def runTestFor(input: File, expected: String): Unit =
     test(input.getPath + s" (${backendName})") {
@@ -208,7 +208,7 @@ def hasInlineExpectations(f: File): Boolean =
 object CheckFiles {
   enum Kind { case Added, Updated }
 
-  private case class Change(suite: String, kind: Kind, checkfile: File)
+  private case class Change(suite: String, kind: Kind, checkfile: File, content: String)
 
   private val written = java.util.concurrent.ConcurrentHashMap[File, (String, String)]()
   private val changes = java.util.concurrent.ConcurrentLinkedQueue[Change]()
@@ -216,7 +216,7 @@ object CheckFiles {
   private def same(obtained: String, expected: String): Boolean = 
     munit.diff.Diff(obtained, expected).isEmpty
 
-  /** Writes the check file for `input` unless it already says `obtained`. Returns a conflict, if it occurred. */
+  /** Records the check file for `input` unless it already says `obtained`, `write` writes it. Returns a conflict, if it occurred. */
   def update(input: File, suite: String, mode: String, obtained: String, expected: Option[String]): Option[String] = {
     val writer = s"${suite} (${mode})"
     val checkfile = checkFileFor(input).getCanonicalFile
@@ -228,21 +228,24 @@ object CheckFiles {
       if (!expected.exists { e => same(content, e) }) {
         // keep the file's own ending, so that the diff shows only what the test compares
         val toWrite = expected.fold(content) { e => if (e.endsWith("\n")) content else content.replaceAll("\n+\\z", "") }
-        IO.write(checkfile, toWrite)
-        changes.add(Change(suite, if (expected.isEmpty) Kind.Added else Kind.Updated, checkFileFor(input)))
+        changes.add(Change(suite, if (expected.isEmpty) Kind.Added else Kind.Updated, checkFileFor(input), toWrite))
       }
       None
     }
   }
 
-  def report(suite: String, dirs: Set[File]): Unit = {
-    changedBy(suite).foreach { (kind, checkfile) => println(s"${kind.toString.toLowerCase}: ${checkfile.getPath}") }
+  /** Note: we write the checkfiles only for a suite that ran to its end (and was not interrupted). */
+  def write(suite: String, dirs: Set[File]): Unit = {
+    changedBy(suite).foreach { (kind, checkfile, content) =>
+      IO.write(checkfile, content)
+      println(s"${kind.toString.toLowerCase}: ${checkfile.getPath}")
+    }
     orphansIn(dirs).foreach { checkfile => println(s"orphaned: ${checkfile.getPath}") }
   }
 
-  private def changedBy(suite: String): List[(Kind, File)] = {
+  private def changedBy(suite: String): List[(Kind, File, String)] = {
     import scala.jdk.CollectionConverters.*
-    changes.asScala.toList.collect { case Change(`suite`, kind, checkfile) => (kind, checkfile) }.distinct.sortBy { (_, f) => f.getPath }
+    changes.asScala.toList.collect { case Change(`suite`, kind, checkfile, content) => (kind, checkfile, content) }.distinct.sortBy { (_, f, _) => f.getPath }
   }
 
   private def orphansIn(dirs: Set[File]): List[File] = {
