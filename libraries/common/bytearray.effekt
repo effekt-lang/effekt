@@ -200,15 +200,25 @@ def foreachIndex(arr: ByteArray){ action: (Int, Byte) {Label} => Unit }: Unit =
 extern def fromString(str: String) at {}: ByteArray =
   js "(new TextEncoder().encode(${str}))"
   llvm """
-    ret %Pos ${str}
+    %arr = call %Pos @uniqueByteArray(%Pos ${str})
+    ret %Pos %arr
   """
   chez "(string->utf8 ${str})"
+
+/// The _read-only_ UTF-8 bytes of `str`.
+/// On LLVM they are `str` itself, so they must be read-only!
+extern def unsafeFromString(str: String) at {}: ByteArray =
+  llvm """
+    ret %Pos ${str}
+  """
+  default { fromString(str) }
 
 extern def toString(arr: ByteArray) at {}: String =
   js "(new TextDecoder('utf-8').decode(${arr}))"
   // assuming the buffer is already in UTF-8
   llvm """
-    ret %Pos ${arr}
+    %str = call %Pos @uniqueByteArray(%Pos ${arr})
+    ret %Pos %str
   """
   chez "(utf8->string ${arr})"
 

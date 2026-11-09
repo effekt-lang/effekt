@@ -26,16 +26,11 @@ define ${show(callingConvention)} ${show(returnType)} ${globalName(name)}(${comm
 """
     case Verbatim(content) => content
 
-    case GlobalConstant(name, ConstantArray(IntegerType8(), members)) =>
-      val bytes = members.map { ini => ini match {
-        case ConstantInteger8(b) => b
-        case _ => ???
-      }}
-      val escaped = bytes.map(b => "\\" + f"$b%02x").mkString;
-      s"@$name = private constant [${bytes.length} x i8] c\"$escaped\""
-
     case GlobalConstant(name, initializer) =>
       s"@$name = private constant ${show(initializer)}"
+
+    case GlobalVariable(name, initializer, alignment) =>
+      s"@$name = private global ${show(initializer)}, align $alignment"
   }
 
   def show(linkage: Linkage): LLVMString = linkage match {
@@ -140,7 +135,16 @@ ${indentedLines(instructions.map(show).mkString("\n"))}
     case ConstantDouble(n)                  => (DoubleType(), s"$n")
     case ConstantAggregateZero(tpe)         => (tpe, "zeroinitializer")
     case ConstantNull(tpe)                  => (tpe, "null")
+    case ConstantArray(IntegerType8(), members) =>
+      val bytes = members.map { ini => ini match {
+        case ConstantInteger8(b) => b
+        case _ => ???
+      }}
+      val escaped = bytes.map(b => "\\" + f"$b%02x").mkString;
+      (ArrayType(bytes.length, IntegerType8()), s"c\"$escaped\"")
     case ConstantArray(memberType, members) => (ArrayType(members.length, memberType), s"[${commaSeparated(members.map(show))}]")
+    case ConstantStruct(tpe: StructureType, members) => (tpe, s"<{${commaSeparated(members.map(show))}}>")
+    case ConstantStruct(tpe, members)       => (tpe, s"{${commaSeparated(members.map(show))}}")
     case ConstantInteger8(b)                => (IntegerType8(), s"$b")
     case ConstantOffset(target, origin)     => (IntegerType64(), s"sub (i64 ptrtoint (ptr ${globalName(target)} to i64), i64 ptrtoint (ptr ${globalName(origin)} to i64))")
   }

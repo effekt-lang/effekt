@@ -86,6 +86,14 @@ struct Pos c_bytearray_construct(const uint64_t n, const uint8_t *data) {
     return arr;
 }
 
+// The slow path of `uniqueByteArray` (in rts.ll): make a copy of `arr`, because we're sharing ours with someone else.
+// Strings are immutable and but bytearrays are not, so when converting, we must not share.
+struct Pos c_bytearray_copy_shared(const struct Pos arr) {
+    struct Pos copy = c_bytearray_construct(arr.tag, c_bytearray_data(arr));
+    erasePositive(arr);
+    return copy;
+}
+
 // Complex Operations
 
 struct Pos c_bytearray_from_nullterminated_string(const char *data) {

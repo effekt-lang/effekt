@@ -1,0 +1,27 @@
+// Strings are immutable, but ByteArrays are not.
+
+def main() = {
+  // the string is still used afterwards
+  val s = "abc" ++ "def"
+  fromString(s).set(0, 120.toByte)
+  println(s)
+
+  // the bytearray is still used afterwards
+  // (assigned to a `var` so that `toString` is evaluated before the write)
+  val bytes = fromString("ghi" ++ "jkl")
+  var t = ""
+  t = bytes.toString
+  bytes.set(0, 120.toByte)
+  println(t)
+
+  // evaluating the same literal again after the bytes of its previous eval were overwritten
+  def go(i: Int): Unit =
+    if (i < 2) {
+      val literal = "mno"
+      println(literal)
+      fromString(literal).set(0, 120.toByte)
+      go(i + 1)
+    }
+
+  go(0)
+}

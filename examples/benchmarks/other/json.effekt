@@ -1,0 +1,115 @@
+/// This benchmark contains JSON round trips with the stdlib's `json` module,
+/// in a similar way to pyperformance's `json_dumps` and`json_loads`.
+/// This is done over many smaller documents (much like the messages a server handles):
+/// encode a document, decode the text again, and encode the result once more, making sure the text is the same.
+module examples/benchmarks/json
+
+import examples/benchmarks/runner
+import json
+import random
+import stringbuffer
+
+def firstName(k: Int): String = k match {
+  case 0 => "Ada"
+  case 1 => "Grace"
+  case 2 => "Edsger"
+  case 3 => "Barbara"
+  case 4 => "Robin"
+  case 5 => "Frances"
+  case 6 => "Niklaus"
+  case 7 => "Hedy"
+  case 8 => "Alan"
+  case _ => "Katherine"
+}
+
+def lastName(k: Int): String = k match {
+  case 0 => "Lovelace"
+  case 1 => "Hopper"
+  case 2 => "Dijkstra"
+  case 3 => "Liskov"
+  case 4 => "Milner"
+  case 5 => "Allen"
+  case 6 => "Wirth"
+  case 7 => "Lamarr"
+  case 8 => "Turing"
+  case _ => "Johnson"
+}
+
+def tag(k: Int): String = k match {
+  case 0 => "admin"
+  case 1 => "guest"
+  case 2 => "say hi"
+  case 3 => "path/to"
+  case _ => "user"
+}
+
+// note: using only ints since they print the same on every backend
+def person(i: Int): JsonValue / random = {
+  val tags = list::build(randomInt(0, 3)) { _ => String(tag(randomInt(0, 4))) }
+  Dict([
+    ("id", Number(i.toDouble)),
+    ("name", String(firstName(randomInt(0, 9)) ++ " " ++ lastName(randomInt(0, 9)))),
+    ("active", Bool(randomInt(0, 1) == 0)),
+    ("score", Number(randomInt(-100000, 100000).toDouble)),
+    ("tags", List(tags)),
+    ("parent", if (i == 0) Null() else Number((i / 2).toDouble))
+  ])
+}
+
+def document(seed: Int, size: Int): JsonValue = {
+  val people: List[JsonValue] = list::collect {
+    with minstd(seed)
+    each(0, size) { i => do emit(person(i)) }
+  }
+  Dict([("version", Number(1.0)), ("people", List(people))])
+}
+
+def encode(value: JsonValue): String =
+  with stringBuffer
+  for { encodeJson { unbuild(value) } } { (s: String) => do write(s) }
+
+def decode(text: String): JsonValue = {
+  var decoded = Null()
+  feed(text) {
+    with peeking[Char]
+    decoded = panicOn[WrongFormat, JsonValue] { build { decodeJson() }.second }
+  }
+  decoded
+}
+
+// note: sensitive to order, and kept below 2^31 so that every backend computes the same
+def combine(acc: Int, x: Int): Int = (acc * 31 + x).mod(1000000007)
+
+def checksum(v: JsonValue): Int = v match {
+  case Null() => 1
+  case Bool(b) => if (b) 3 else 2
+  case Number(n) => n.toInt.mod(1000000007)
+  case String(s) => s.length
+  case List(elements) =>
+    var res = 5
+    for { elements.each } { e => res = res.combine(checksum(e)) }
+    res
+  case Dict(fields) =>
+    var res = 7
+    for[(String, JsonValue)] { fields.each } { case (k, v) =>
+      res = res.combine(k.length).combine(checksum(v))
+    }
+    res
+}
+
+def roundTrip(seed: Int): Int = {
+  val text = encode(document(seed, 50))
+  val decoded = decode(text)
+  if (encode(decoded) != text) panic("round trip changed the document")
+  text.length.combine(checksum(decoded))
+}
+
+def run(N: Int): Int = {
+  var total = 0
+  each(1, N + 1) { seed =>
+    total = combine(total, roundTrip(seed))
+  }
+  total
+}
+
+def main() = benchmark(20){run}
