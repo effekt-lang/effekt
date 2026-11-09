@@ -368,7 +368,7 @@ String c_tcp_address(Int resolution, Int index) {
         address = address->ai_next;
     }
 
-    // An IPv6 address keeps its zone, such as `fe80::1%lo0`, much like on Node
+    // An IPv6 address keeps its zone, such as `fe80::1%lo0` (or `fe80::1%12` on Windows), much like on Node
     char text[INET6_ADDRSTRLEN + 1 + UV_IF_NAMESIZE] = "";
     if (address != NULL) {
         uv_ip_name(address->ai_addr, text, sizeof(text));
@@ -377,7 +377,7 @@ String c_tcp_address(Int resolution, Int index) {
         size_t zone_size = UV_IF_NAMESIZE;
         char zone[UV_IF_NAMESIZE];
         if (address->ai_family == AF_INET6 && v6->sin6_scope_id != 0
-            && uv_if_indextoname(v6->sin6_scope_id, zone, &zone_size) == 0) {
+            && uv_if_indextoiid(v6->sin6_scope_id, zone, &zone_size) == 0) {
             strcat(text, "%");
             strcat(text, zone);
         }
