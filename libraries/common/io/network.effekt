@@ -71,7 +71,7 @@ def connect(address: Address, port: Int): Connection / Exception[IOError] =
 /// Establishes a TCP connection to the given `host` and port,
 /// trying the addresses of the host in turn until one accepts (o/w raising the error of the last one).
 def connect(host: String, port: Int): Connection / Exception[IOError] =
-  internal::firstOf(resolve(host)) { address => connect(address, port) }
+  internal::eachAddress(resolve(host)) { address => connect(address, port) }
 
 /// Closes a TCP connection and releases associated resources.
 def close(handle: Connection): Unit =
@@ -91,7 +91,7 @@ def bind(address: Address, port: Int): Listener / Exception[IOError] =
 /// Creates a TCP listener bound to the given `host` and port,
 /// trying the addresses of the host in turn until one can be bound (o/w raising the error of the last one).
 def bind(host: String, port: Int): Listener / Exception[IOError] =
-  internal::firstOf(resolve(host)) { address => bind(address, port) }
+  internal::eachAddress(resolve(host)) { address => bind(address, port) }
 
 /// The port which the given `listener` is bound to.
 /// Raises `EBADF` if the listener was shut down.
@@ -134,15 +134,11 @@ namespace internal {
     do emit(addressAt(resolution, i))
   }
 
-  /// Runs `attempt` on each of the given `addresses` in turn until one succeeds,
-  /// and otherwise raises the error of the last attempt (`EAI_NODATA` if there are no addresses).
-  def firstOf[R](addresses: List[Address]) { attempt: Address => R / Exception[IOError] }: R / Exception[IOError] = {
-    var outcome: Result[R, IOError] = Error(EAI_NODATA(), message(EAI_NODATA()))
-    addresses.foreach { (address) {label} => // TODO: move this into stdlib
-      outcome = on[IOError].result { attempt(address) }
-      if (outcome.isSuccess) label.break()
-    }
-    outcome.value
+  /// Runs `attempt` on each of the `addresses` of a host in turn until one succeeds,
+  /// and otherwise raises the error of the last attempt.
+  def eachAddress[R](addresses: List[Address]) { attempt: Address => R / Exception[IOError] }: R / Exception[IOError] = {
+    val Cons(first, rest) = addresses else panic("io/network: `resolve` returned no addresses")
+    firstSuccess(first, rest) {attempt}
   }
 
   extern jsNode """
