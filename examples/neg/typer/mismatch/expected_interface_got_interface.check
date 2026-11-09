@@ -1,6 +1,4 @@
 [error] examples/neg/typer/mismatch/expected_interface_got_interface.effekt:5:23: Expected Wave at {} but got Greet at ?C. [typer]
-
-Type mismatch between Wave and Greet.
   val _: Wave at {} = box new Greet { def greet() = () }
                       ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 [error] examples/neg/typer/mismatch/expected_interface_got_interface.effekt:5:27: Expected Wave but got Greet. [typer]

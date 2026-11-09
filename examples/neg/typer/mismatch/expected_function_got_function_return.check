@@ -2,9 +2,9 @@
   Int => Bool at {}
 but got type
   Int => Unit at ?C
-
-Type mismatch between Bool and Unit.
-  when comparing the return type of the function.
+  val _ = apply(box { (x: Int) => () })
+                ^^^^^^^^^^^^^^^^^^^^^^
+[info] examples/neg/typer/mismatch/expected_function_got_function_return.effekt:4:17: Expected Bool but got Unit.
   val _ = apply(box { (x: Int) => () })
                 ^^^^^^^^^^^^^^^^^^^^^^
 [error] examples/neg/typer/mismatch/expected_function_got_function_return.effekt:4:35: Expected Bool but got Unit. [typer]
