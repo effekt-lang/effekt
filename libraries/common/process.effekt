@@ -76,9 +76,9 @@ type ExitStatus {
 /// Returns an `ExitStatus` once it has exited and its piped output has ended, so that every callback for that output has run.
 /// Raises `IOError` if it cannot be started, such as `ENOENT` for a missing command.
 def spawn(cmd: String, args: Array[String], options: SpawnOptions): ExitStatus / Exception[IOError] = {
-  val stdin: WritableStream => Unit at {io, global} = options.stdin.getOrElse  { box { (_: WritableStream) => () } }
-  val stdout: String => Unit at {io, global}        = options.stdout.getOrElse { box { (_: String) => () } }
-  val stderr: String => Unit at {io, global}        = options.stderr.getOrElse { box { (_: String) => () } }
+  val stdin: WritableStream => Unit at {io, global} = options.stdin.getOrElse  { box { _ => () } }
+  val stdout: String => Unit at {io, global}        = options.stdout.getOrElse { box { _ => () } }
+  val stderr: String => Unit at {io, global}        = options.stderr.getOrElse { box { _ => () } }
 
   internal::exitStatus(
     internal::checkResult(
