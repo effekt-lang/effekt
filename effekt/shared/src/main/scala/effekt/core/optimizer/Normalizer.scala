@@ -269,7 +269,9 @@ object Normalizer { normal =>
         }.unzip
         Binding(definitions.flatten, Stmt.Def(id, Block.New(Implementation(interface, implementation)), rest))
       case normalized =>
-        val dealiased = normalized.dealiased
+        val renamer = Renamer()
+        val dealiased = renamer.rewrite(normalized.dealiased)
+        renamer.renamed.foreach { case (fresh, original) => C.usage.get(original).foreach { usage => C.usage.update(fresh, usage) } }
         Stmt.Def(id, dealiased, normalize(body)(using C.bind(id, dealiased)))
     }
 
