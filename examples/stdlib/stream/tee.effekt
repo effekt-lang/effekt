@@ -23,9 +23,9 @@ def main() = {
   println("b{ ... }")
   b{stream}
   println("tee{a}{b}{ ... }")
-  tee[Int]{a}{b}{ stream() }
+  tee{a}{b}{ stream() }
   println("tee{b}{a}{ ... }")
-  tee[Int]{b}{a}{ stream() }
+  tee{b}{a}{ stream() }
   println("a{ teeing{b}{ ... } }")
   a{
     with teeing[Int]{b}

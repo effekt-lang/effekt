@@ -93,16 +93,16 @@ def finalize[E, T] { finalizer: => Unit } { prog: => T / Exception[E] }: T / Exc
 record on[E]()
 
 def ignore[E](proxy: on[E]) { prog: => Unit / Exception[E] }: Unit =
-  ignore[E] {prog}
+  ignore {prog}
 
 def default[E, T](proxy: on[E]) { d: => T } { prog: => T / Exception[E] }: T =
   default[E, T] {d} {prog}
 
 def panic[E, T](proxy: on[E]) { prog: => T / Exception[E] }: T =
-  panicOn[E, T] {prog}
+  panicOn {prog}
 
 def report[E](proxy: on[E]) { prog: => Unit / Exception[E] }: Unit =
-  report[E] {prog}
+  report {prog}
 
 def finalize[E, T](proxy: on[E]) { finalizer: => Unit } { prog: => T / Exception[E] }: T / Exception[E] =
   finalize[E, T] {finalizer} {prog}

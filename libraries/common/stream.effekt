@@ -194,10 +194,10 @@ def countIf[A] { shouldCount: A => Bool } { stream: () => Unit / emit[A] }: Int 
 
 /// Count the number of emitted values.
 def count[A] { stream: () => Unit / emit[A] }: Int =
-  countIf[A] { _ => true } {stream}
+  countIf { _ => true } {stream}
 
 def source[A] { stream: () => Unit / emit[A] } { driver: () => Unit / next[A] }: Unit =
-  returning::source[A, Unit]{stream}{driver}
+  returning::source{stream}{driver}
 
 /// Combines two streams together calling action on pairs in lockstep.
 /// Terminates when either of them terminates.
