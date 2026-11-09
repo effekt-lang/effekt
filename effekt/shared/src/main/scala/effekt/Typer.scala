@@ -175,7 +175,7 @@ object Typer extends Phase[NameResolved, Typechecked] {
 
       case l @ source.Box(annotatedCapture, block, _) =>
 
-        val expectedTpe = expected.collect { case BoxedType(tpe, cap) => tpe }
+        val expectedTpe = expected.map(Context.unification.apply).collect { case BoxedType(tpe, cap) => tpe }
         val inferredCap: Captures = annotatedCapture.map { _.resolve }.getOrElse {
           Context.freshCaptVar(CaptUnificationVar.InferredBox(l))
         }
