@@ -43,7 +43,9 @@ object messages {
 
   /** The exact (open) kind of an issue of a diagnostic. */
   trait Reason {
-    def render(using Style): String
+    def claim: StructuredMessage
+
+    def show(using S: Style): List[String] = List(S.message(claim)) // claim only by default
   }
 
   /** Semantic style for parts of error messages, leaving the styling to each output. */
@@ -54,9 +56,23 @@ object messages {
 
     def indent(s: String): String = s.linesIterator.map(l => "  " + l).mkString("\n")
 
-    def content(d: Diagnostic): String = d.reason.render(using this)
+    def content(d: Diagnostic): String = d.reason.show(using this).mkString("\n")
 
-    def subdiagnostic(s: Subdiagnostic): String = Message(s.text).render(using this)
+    def subdiagnostic(s: Subdiagnostic): String = message(s.text)
+
+    def message(text: StructuredMessage): String = text.stringContext.s(text.args.map {
+      case id: source.IdDef          => code(TypePrinter.show(id))
+      case id: source.IdRef          => code(TypePrinter.show(id))
+      case name: Name                => code(name.name)
+      case t: symbols.Type           => code(TypePrinter.show(t))
+      case t: Capture                => code(TypePrinter.show(t))
+      case t: Captures               => code(TypePrinter.show(t))
+      case t: Effects                => code(TypePrinter.show(t))
+      case n: Int                    => code(n.toString)
+      case nested: Diagnostic        => contentWithSubdiagnostics(nested)
+      case nested: StructuredMessage => message(nested)
+      case other                     => other.toString
+    }*)
 
     def contentWithSubdiagnostics(d: Diagnostic): String =
       (content(d) :: d.subdiagnostics.map(subdiagnostic)).mkString("\n")
@@ -69,19 +85,7 @@ object messages {
   }
 
   case class Message(text: StructuredMessage) extends Reason {
-    def render(using S: Style): String = text.stringContext.s(text.args.map {
-      case id: source.IdDef          => S.code(TypePrinter.show(id))
-      case id: source.IdRef          => S.code(TypePrinter.show(id))
-      case name: Name                => S.code(name.name)
-      case t: symbols.Type           => S.code(TypePrinter.show(t))
-      case t: Capture                => S.code(TypePrinter.show(t))
-      case t: Captures               => S.code(TypePrinter.show(t))
-      case t: Effects                => S.code(TypePrinter.show(t))
-      case n: Int                    => S.code(n.toString)
-      case nested: Diagnostic        => S.contentWithSubdiagnostics(nested)
-      case nested: StructuredMessage => Message(nested).render
-      case other                     => other.toString
-    }*)
+    def claim = text
   }
   object Message {
     def apply(text: String): Message = Message(pretty"${text}")
@@ -91,14 +95,14 @@ object messages {
     if (n == 1) s"$n $singular" else s"$n ${singular}s"
 
   case class TypeMismatch(expected: symbols.Type, got: symbols.Type) extends Reason {
-    def render(using S: Style): String = {
+    def claim = pretty"Expected ${expected} but got ${got}."
+
+    // long types are shown aligned, one above the other
+    override def show(using S: Style): List[String] = {
       val expectedShown = TypePrinter.show(expected)
       val gotShown = TypePrinter.show(got)
-      if ((expectedShown.size + gotShown.size) < 25) { // TODO: think of a better way to do this...
-        s"Expected ${S.code(expectedShown)} but got ${S.code(gotShown)}."
-      } else {
-        s"Expected type\n  ${S.code(expectedShown)}\nbut got type\n  ${S.code(gotShown)}"
-      }
+      if ((expectedShown.size + gotShown.size) < 25) List(S.message(claim)) // TODO: think of a better way to do this...
+      else List("Expected type", s"  ${S.code(expectedShown)}", "but got type", s"  ${S.code(gotShown)}")
     }
   }
 
@@ -107,55 +111,49 @@ object messages {
     case n: Name          => n.name
   }
 
-  case class AmbiguousOverload(matches: List[(symbols.BlockSymbol, symbols.FunctionType)]) extends Reason {
-    def render(using S: Style): String = {
-      val title = S.title("Ambiguous overload.\n")
-      val mainMessage = s"${title}There are multiple overloads, which all would type check:"
+  /** Overload resolution that did not resolve: either no candidate fits, or several do. */
+  case class OverloadResolution(candidates: List[Candidate]) extends Reason {
+    def ambiguous: Boolean = candidates.count { c => c.errors.isEmpty } > 1
 
-      val longestNameLength = matches.map { case (sym, tpe) => fullname(sym.name).size }.max
+    def claim = if ambiguous then pretty"Ambiguous overload." else pretty"Cannot typecheck call."
 
-      val explanations = matches map {
-        case (sym, tpe) =>
-          val name = fullname(sym.name)
+    override def show(using S: Style): List[String] =
+      if ambiguous then {
+        val longestNameLength = candidates.map { c => fullname(c.symbol.name).size }.max
+        val explanations = candidates.map { c =>
+          val name = fullname(c.symbol.name)
           val padding = " " * (longestNameLength - name.size)
-          pp"- ${S.code(name)}: ${padding}${tpe}"
-      }
-
-      mainMessage + "\n" + explanations.mkString("\n")
-    }
-  }
-
-  case class FailedOverload(failedAttempts: List[(symbols.BlockSymbol, symbols.FunctionType, EffektMessages)]) extends Reason {
-    def render(using S: Style): String = {
-      val title = S.title("Cannot typecheck call.\n")
-      val mainMessage = s"${title}There are multiple overloads, which all fail to check:"
-
-      val explanations = failedAttempts map {
-        case (sym, tpe, msgs) =>
-          val nestedErrors = msgs.map(S.contentWithSubdiagnostics).mkString("\n")
-
-          val header = S.candidate(pp"Possible overload: ${S.code(fullname(sym.name))}") + S.candidate(pp" of type ${tpe}")
+          pp"- ${S.code(name)}: ${padding}${c.tpe}"
+        }
+        S.title(S.message(claim)) :: "There are multiple overloads, which all would type check:" :: explanations
+      } else {
+        val explanations = candidates.map { c =>
+          val nestedErrors = c.errors.map(S.contentWithSubdiagnostics).mkString("\n")
+          val header = S.candidate(pp"Possible overload: ${S.code(fullname(c.symbol.name))}") + S.candidate(pp" of type ${c.tpe}")
           s"$header\n${S.indent(nestedErrors)}"
+        }
+        S.title(S.message(claim)) :: "There are multiple overloads, which all fail to check:" ::
+          "" :: explanations.flatMap { e => List(e, "") }
       }
-
-      mainMessage + "\n\n" + explanations.mkString("\n\n") + "\n"
-    }
   }
+
+  case class Candidate(symbol: symbols.BlockSymbol, tpe: symbols.FunctionType, errors: EffektMessages)
 
   // Iterative deepening of the implicit search matches on this class.
   case class ImplicitMaxRecursion(text: String) extends Reason {
-    def render(using Style): String = text
+    def claim = pretty"${text}"
   }
 
   case class ImplicitInstantiation(stencil: source.GenerateImplicitArgs.Error, tpe: symbols.Type) extends Reason {
-    def render(using S: Style): String = {
+    def claim = pretty"Cannot instantiate implicit argument."
+
+    override def show(using S: Style): List[String] = {
       def formatIndex(i: Int): String = i match {
         case 0 => "1st"
         case 1 => "2nd"
         case 2 => "3rd"
         case n => s"${n + 1}th"
       }
-      val title = S.title("Cannot instantiate implicit argument.\n")
       val prettyIndex = formatIndex(stencil.index)
       val prettyTpe = TypePrinter.show(tpe)
       val mainMessage = S.candidate(s"Cannot instantiate ${prettyIndex} ${stencil.kind} ${stencil.name} of type ${prettyTpe}.")
@@ -165,7 +163,7 @@ object messages {
       }
       val nestedErrors = S.indent(stencil.msgs.map(S.contentWithSubdiagnostics).mkString("\n"))
 
-      title + mainMessage + "\n" + info + nestedErrors + "\n"
+      List(S.title(S.message(claim)), mainMessage + "\n" + info + nestedErrors + "\n")
     }
   }
 

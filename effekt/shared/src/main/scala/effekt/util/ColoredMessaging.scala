@@ -43,11 +43,12 @@ trait ColoredMessaging extends EffektMessaging with Style {
     Diagnostic(Severity.Info, at, Nil, Message(s.text), d.phase)
   }
 
-  def contentWithPhase(d: Diagnostic): String = d.phase match {
-    case Some(phase) =>
-      val (first, rest) = formatContent(d).span { c => c != '\n' }
-      s"${first} ${dim(s"[${phase}]")}${rest}"
-    case None => formatContent(d)
+  def contentWithPhase(d: Diagnostic): String = {
+    val phase = d.phase.map { p => s" ${dim(s"[${p}]")}" }.getOrElse("")
+    d.reason.show(using this) match {
+      case first :: rest => (first + phase :: rest).mkString("\n")
+      case Nil => phase
+    }
   }
 
   def lspSource(d: Diagnostic): String = d.phase match {
