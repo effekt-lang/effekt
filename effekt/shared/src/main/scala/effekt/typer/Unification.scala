@@ -5,7 +5,7 @@ import effekt.context.Context
 import effekt.source.MatchPattern
 import effekt.symbols.*
 import effekt.symbols.builtins.TBottom
-import effekt.util.messages.ErrorReporter
+import effekt.util.messages.{ErrorMessageReifier, ErrorReporter, StructuredMessage}
 
 
 sealed trait Polarity { def flip: Polarity }
@@ -161,7 +161,7 @@ trait Unification extends TypeUnifier, TypeMerger, TypeInstantiator, ErrorReport
       case (CaptureSet(lows), CaptureSet(ups)) =>
         val notAllowed = lows -- (ups ++ filter)
         if (notAllowed.nonEmpty)
-          error(pp"Used captures ${CaptureSet(notAllowed)} are not in the allowed set ${upper}", ctx)
+          error(pretty"Used captures ${CaptureSet(notAllowed)} are not in the allowed set ${upper}", ctx)
       case (x: CaptUnificationVar, y: CaptUnificationVar) =>
         constraints.connect(x, y, filter)
       case (x: CaptUnificationVar, CaptureSet(cs)) =>
@@ -224,9 +224,22 @@ trait Unification extends TypeUnifier, TypeMerger, TypeInstantiator, ErrorReport
   // Implementation Details
   // ----------------------
 
-  def abort(msg: String, ctx: ErrorContext) = this.abort(ErrorContext.explainInContext(msg, ctx))
-  def error(msg: String, ctx: ErrorContext) = this.error(ErrorContext.explainInContext(msg, ctx))
-  def error(left: symbols.Type, right: symbols.Type, ctx: ErrorContext) = this.error(ErrorContext.explainMismatch(left, right, ctx))
+  def abort(issue: StructuredMessage, ctx: ErrorContext) =
+    this.abort(ErrorContext.claim(ctx, issue)) { ErrorContext.explain(Some(issue), ctx) }
+  def error(issue: StructuredMessage, ctx: ErrorContext) =
+    this.error(ErrorContext.claim(ctx, issue)) { ErrorContext.explain(Some(issue), ctx) }
+  def abort(left: symbols.Type, right: symbols.Type, ctx: ErrorContext) = {
+    val issue = ErrorContext.mismatch(left, right, ctx)
+    this.abort(ErrorContext.claim(ctx, issue)) {
+      ErrorContext.explain(Option.unless(ErrorContext.isClaimed(left, right, ctx)) { issue }, ctx)
+    }
+  }
+  def error(left: symbols.Type, right: symbols.Type, ctx: ErrorContext) = {
+    val issue = ErrorContext.mismatch(left, right, ctx)
+    this.error(ErrorContext.claim(ctx, issue)) {
+      ErrorContext.explain(Option.unless(ErrorContext.isClaimed(left, right, ctx)) { issue }, ctx)
+    }
+  }
 
   def requireEqual(x: UnificationVar, tpe: ValueType, ctx: ErrorContext): Unit =
     requireLowerBound(x, tpe, ctx)
@@ -241,7 +254,7 @@ trait Unification extends TypeUnifier, TypeMerger, TypeInstantiator, ErrorReport
   def mergeCaptures(oldBound: Captures, newBound: Captures, ctx: ErrorContext): Captures = (oldBound, newBound, ctx.polarity) match {
     case (CaptureSet(xs), CaptureSet(ys), Covariant) => CaptureSet(xs intersect ys)
     case (CaptureSet(xs), CaptureSet(ys), Contravariant) => CaptureSet(xs union ys)
-    case (CaptureSet(xs), CaptureSet(ys), Invariant) => if (xs == ys) oldBound else abort(pp"Capture set ${CaptureSet(xs)} is not equal to ${CaptureSet(ys)}", ctx)
+    case (CaptureSet(xs), CaptureSet(ys), Invariant) => if (xs == ys) oldBound else abort(pretty"Capture set ${CaptureSet(xs)} is not equal to ${CaptureSet(ys)}", ctx)
     case (x: CaptUnificationVar, CaptureSet(ys), p) if ys.isEmpty => x
     case (CaptureSet(xs), y: CaptUnificationVar, p) if xs.isEmpty => y
     case (x: CaptUnificationVar, CaptureSet(ys), p) => mergeCaptures(ys.toList, List(x), ctx)

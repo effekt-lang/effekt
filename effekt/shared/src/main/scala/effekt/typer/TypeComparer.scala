@@ -4,6 +4,7 @@ package typer
 import effekt.symbols.*
 import effekt.symbols.builtins.{ TBottom, TTop }
 import effekt.typer.ErrorContext.FunctionEffects
+import effekt.util.messages.{ErrorMessageReifier, StructuredMessage, pluralized}
 
 /**
  * A side effecting type comparer
@@ -18,8 +19,9 @@ trait TypeUnifier {
 
   def requireSubregion(lower: Captures, upper: Captures, ctx: ErrorContext): Unit
 
-  def abort(msg: String, ctx: ErrorContext): Nothing
-  def error(msg: String, ctx: ErrorContext): Unit
+  def abort(issue: StructuredMessage, ctx: ErrorContext): Nothing
+  def error(issue: StructuredMessage, ctx: ErrorContext): Unit
+  def abort(left: Type, right: Type, ctx: ErrorContext): Nothing
   def error(left: Type, right: Type, ctx: ErrorContext): Unit
 
   def unifyCaptures(c1: Captures, c2: Captures, ctx: ErrorContext): Unit = ctx.polarity match {
@@ -50,7 +52,7 @@ trait TypeUnifier {
 
       if (t1 != t2) { error(tpe1, tpe2, ErrorContext.TypeConstructor(ctx)) }
       else if (args1.size != args2.size) {
-        abort(pp"Argument count does not match $t1 vs. $t2", ctx) // TODO add to context
+        abort(pretty"Argument count does not match $t1 vs. $t2", ctx) // TODO add to context
       }
 
       // TODO here we assume that the type constructor is covariant
@@ -85,7 +87,7 @@ trait TypeUnifier {
 
     // If we're sure that the effect sets are different, throw an error, otherwise defer it for later.
     if (effs1 != effs2 && !hasUnknowns) {
-      error(pp"${eff2} is not equal to ${eff1}", ctx)
+      error(pretty"Expected the effects ${eff2} but got ${eff1}", ctx)
     }
 
   def unifyFunctionTypes(tpe1: FunctionType, tpe2: FunctionType, ctx: ErrorContext): Unit = (tpe1, tpe2) match {
@@ -94,16 +96,17 @@ trait TypeUnifier {
       f2 @ FunctionType(tparams2, cparams2, vparams2, bparams2, ret2, eff2)) =>
 
       if (tparams1.size != tparams2.size)
-        abort(pp"Type parameter count does not match $f1 vs. $f2", ctx)
+        abort(pretty"Expected ${pluralized(tparams2.size, "type parameter")} but got ${tparams1.size}", ctx)
 
       if (vparams1.size != vparams2.size)
-        abort(pp"Value parameter count does not match $f1 vs. $f2", ctx)
+        abort(pretty"Expected ${pluralized(vparams2.size, "value parameter")} but got ${vparams1.size}", ctx)
 
       if (bparams1.size != bparams2.size)
-        abort(pp"Block parameter count does not match $f1 vs. $f2", ctx)
+        abort(pretty"Expected ${pluralized(bparams2.size, "block parameter")} but got ${bparams1.size}", ctx)
 
+      // with as many block parameters, the capture parameters differ in number only through the effects
       if (cparams1.size != cparams2.size)
-        abort(pp"Capture parameter count does not match $f1 vs. $f2", ctx)
+        abort(pretty"Expected the effects ${eff2} but got ${eff1}", ErrorContext.FunctionEffects(ctx))
 
       val targs1 = tparams1.map(ValueTypeRef.apply)
 
@@ -158,8 +161,8 @@ trait TypeMerger extends TypeUnifier {
         unifyValueTypes(tpe, x, ctx); x
 
       case (ValueTypeApp(cons1, args1), ValueTypeApp(cons2, args2)) =>
-        if (cons1 != cons2) abort(pp"Cannot merge different constructors: $cons1 vs. $cons2", ErrorContext.TypeConstructor(ctx))
-        if (args1.size != args2.size) abort(pp"Different count of argument to type constructor: $oldBound vs $newBound", ctx)
+        if (cons1 != cons2) abort(oldBound, newBound, ErrorContext.TypeConstructor(ctx))
+        if (args1.size != args2.size) abort(pretty"Different count of argument to type constructor: $oldBound vs $newBound", ctx)
 
         (args1 zip args2).foreach {
           case (t1, t2) => unifyValueTypes(t1, t2, ErrorContext.TypeConstructorArgument(ctx))
@@ -172,6 +175,6 @@ trait TypeMerger extends TypeUnifier {
         s
 
       case _ =>
-        abort(pp"Cannot merge ${oldBound} with ${newBound}", ctx)
+        abort(oldBound, newBound, ctx)
     }
 }
