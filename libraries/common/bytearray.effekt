@@ -197,7 +197,7 @@ def foreachIndex(arr: ByteArray){ action: (Int, Byte) {Label} => Unit }: Unit =
     action(i, arr.get(i)) {label}
   }
 
-extern def fromString(str: String) at {}: ByteArray =
+extern def fromString(str: String) at global: ByteArray =
   js "(new TextEncoder().encode(${str}))"
   llvm """
     %arr = call %Pos @uniqueByteArray(%Pos ${str})
@@ -207,13 +207,14 @@ extern def fromString(str: String) at {}: ByteArray =
 
 /// The _read-only_ UTF-8 bytes of `str`.
 /// On LLVM they are `str` itself, so they must be read-only!
-extern def unsafeFromString(str: String) at {}: ByteArray =
+extern def unsafeFromString(str: String) at {}: ByteArray = // just a copy of 'fromString' on JS and Chez, but without the global capture
+  js "(new TextEncoder().encode(${str}))"
   llvm """
     ret %Pos ${str}
   """
-  default { fromString(str) }
+  chez "(string->utf8 ${str})"
 
-extern def toString(arr: ByteArray) at {}: String =
+extern def toString(arr: ByteArray) at global: String =
   js "(new TextDecoder('utf-8').decode(${arr}))"
   // assuming the buffer is already in UTF-8
   llvm """
@@ -283,7 +284,7 @@ extern chez """
           [else (loop (+ i 1))]))))
 """
 
-extern def compareByteArrayImpl(b1: ByteArray, b2: ByteArray) at {}: Int =
+extern def compareByteArrayImpl(b1: ByteArray, b2: ByteArray) at global: Int =
   js "bytearray$compare(${b1}, ${b2})"
   llvm """
     %x = call %Int @c_bytearray_compare(%Pos ${b1}, %Pos ${b2})

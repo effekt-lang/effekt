@@ -358,6 +358,9 @@ lazy val bytearrays: Builtins = Map(
   builtin("bytearray::fromString(String)") {
     case As.String(str) :: Nil => Value.ByteArray(str.getBytes("UTF-8").map(UByte.unsafeFromByte))
   },
+  builtin("bytearray::unsafeFromString(String)") {
+    case As.String(str) :: Nil => Value.ByteArray(str.getBytes("UTF-8").map(UByte.unsafeFromByte))
+  },
   builtin("bytearray::toString(ByteArray)") {
     case As.ByteArray(arr) :: Nil => Value.String(new String(arr.map(_.toByte), "UTF-8"))
   },
