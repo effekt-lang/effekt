@@ -107,116 +107,202 @@ def components[A](nodes: Iterable[A], successors: A => Iterable[A]): List[List[A
   found.toList
 }
 
+/** A callee and, for each of its blocks, the local definition passed, if it is one. */
+type Key = (Id, List[Option[Id]])
+
 /**
- * The blocks of definitions that get passed, within their recursive group, a block defined there, by definition
- * and position:
+ * What a copy's callee or one of its blocks can be made anew with every round of a recursion: the [[Made]] copy is
+ * new when its callee or one of its blocks is.
+ */
+enum Node {
+  case Callee(copy: Key)
+  case Argument(copy: Key, position: Int)
+  case Made(copy: Key)
+}
+
+/** A definition that is not specialized, or not to the block at a position, because the copies would grow. */
+enum Growing {
+  case Callee(definition: Id)
+  case Argument(definition: Id, position: Int)
+}
+
+/** The key that is left of [[k]] after leaving the [[growing]] positions unknown, if any is left known. */
+def withoutGrowing(k: Key, growing: Set[Growing]): Option[Key] = k match {
+  case (f, arguments) =>
+    val kept = arguments.zipWithIndex.map { case (argument, position) =>
+      argument.filter { _ => !growing.contains(Growing.Argument(f, position)) }
+    }
+    Option.when(!growing.contains(Growing.Callee(f)) && kept.exists(_.isDefined))((f, kept))
+}
+
+/**
+ * The positions of the copies, by the definitions they are copied from, that would be made anew without end:
  *
  *   def loop(b){k} = … loop(c){ x => k(x) } …
  *
- * Specializing `loop` to a block would ask for a copy for the next block, which captures the one before, without end,
- * so we leave these blocks unknown from the start. Only calls passing blocks make copies, so these are the calls that
- * form the recursive groups. Blocks also travel through block parameters, so a call of a block parameter calls every
- * definition that can be passed for it:
+ * The copy of `loop` for a block `f` defines a new block `x => f(x)` and asks for a copy for it, which defines yet
+ * another one. We follow the copies by origin: a callee and the definitions passed to it. A position of a copy is new
+ * when the definition there is made fresh in the copy calling it and that copy is new itself, or when it is passed on
+ * from such a position. Copies are made without end exactly when this dependency is cyclic through a fresh definition.
+ * Blocks also travel into definitions and are called there:
  *
  *   def scope{action} = { def handler = new …; action(){handler} }
  *   def eval(e) = … scope{ {h} => eval(…){h} } …
+ *
+ * The definition at the target of such a fresh definition is then not specialized at that position anywhere, since a
+ * copy for any other block would only unroll the recursion once, and we follow the copies again until nothing grows.
  */
-def growing(m: ModuleDecl, toplevel: Set[Id]): Set[(Id, Int)] = {
-  val nodes = mutable.LinkedHashMap.empty[Id, Block]
+def growing(m: ModuleDecl, functions: Set[Id]): Set[Growing] = {
+  val toplevel: Map[Id, BlockLit] = m.definitions.collect { case Toplevel.Def(id, block: BlockLit) => id -> block }.toMap
+  val local: Map[Id, Block] = m.definitions.flatMap {
+    case Toplevel.Def(_, block) => definitionsIn(block, functions)
+    case Toplevel.Val(_, binding) => definitions(binding, functions)
+  }.toMap
+
   val aliases = mutable.Map.empty[Id, Id]
-  val calls = mutable.ListBuffer.empty[(Id, List[Block])]
-  object collecting extends Tree.Query[Unit, Unit] {
+  object aliasing extends Tree.Query[Unit, Unit] {
     def empty = ()
     def combine = (_, _) => ()
     override def stmt(using Unit) = {
-      case Stmt.Def(id, block @ (_: BlockLit | _: Block.New), body) =>
-        nodes(id) = block
-        query(block); query(body)
-      case Stmt.Def(id, Block.BlockVar(x, _, _), body) =>
+      case Stmt.Def(id, Block.BlockVar(x, _, _), body) if !functions.contains(x) =>
         aliases(id) = x
         query(body)
-      case Stmt.App(Block.BlockVar(f, _, _), targs, vargs, bargs) =>
-        calls += (f -> bargs)
-        vargs.foreach(query); bargs.foreach(query)
     }
   }
-  m.definitions.foreach {
-    case Toplevel.Def(id, block: BlockLit) =>
-      nodes(id) = block
-      collecting.query(block)(using ())
-    case other => collecting.query(other)(using ())
-  }
+  m.definitions.foreach { definition => aliasing.query(definition)(using ()) }
   def resolve(id: Id): Id = aliases.get(id).map(resolve).getOrElse(id)
 
-  val flows = mutable.Map.empty[Id, Set[Id]].withDefaultValue(Set.empty)
-  def values(x: Id): Set[Id] = if nodes.contains(resolve(x)) then Set(resolve(x)) else flows(resolve(x))
-  var changed = true
-  while changed do {
-    changed = false
-    calls.foreach { case (f, bargs) =>
-      values(f).foreach { target =>
-        nodes(target) match {
-          case BlockLit(_, _, _, bparams, _) => (bparams zip bargs).foreach {
-            case (param, Block.BlockVar(x, _, _)) =>
-              val more = flows(param.id) ++ values(x)
-              if more != flows(param.id) then { flows(param.id) = more; changed = true }
-            case _ => ()
-          }
-          case _ => ()
-        }
-      }
-    }
+  def callable(f: Id, arity: Int): Option[BlockLit] = toplevel.get(f).orElse(local.get(f)).collect {
+    case block: BlockLit if block.bparams.nonEmpty && block.bparams.size == arity => block
   }
 
-  def passing(block: Block): Set[Id] = {
-    object passes extends Tree.Query[Unit, Set[Id]] {
-      def empty = Set.empty
+  val calls = mutable.Map.empty[Id, List[(Id, List[Option[Id]])]]
+  def callsIn(origin: Id, block: BlockLit): List[(Id, List[Option[Id]])] = calls.getOrElseUpdate(origin, {
+    object calling extends Tree.Query[Unit, List[(Id, List[Option[Id]])]] {
+      def empty = Nil
       def combine = _ ++ _
       override def stmt(using Unit) = {
         case Stmt.App(Block.BlockVar(f, _, _), targs, vargs, bargs) if bargs.nonEmpty =>
-          combine(values(f), combine(all(vargs, query), all(bargs, query)))
+          val arguments = bargs.map {
+            case Block.BlockVar(x, _, _) => Some(resolve(x))
+            case _ => None
+          }
+          (resolve(f) -> arguments) :: combine(all(vargs, query), all(bargs, query))
       }
     }
-    passes.query(block)(using ())
+    calling.query(block.body)(using ())
+  })
+
+  val inside = mutable.Map.empty[Id, Set[Id]]
+  def insideOf(origin: Id, block: BlockLit): Set[Id] = inside.getOrElseUpdate(origin, definitions(block.body, functions).keySet)
+
+  enum Source {
+    case Fresh
+    case Parameter(position: Int)
+    case Around
   }
-  val successors = nodes.map { case (f, block) => f -> passing(block) }
 
-  val group = components(nodes.keys, successors).zipWithIndex.flatMap {
-    case (members, number) => members.map(_ -> number)
-  }.toMap
+  val closures = mutable.Map.empty[Id, Map[Id, Set[Id]]].withDefaultValue(Map.empty)
+  var growing = Set.empty[Growing]
+  var changed = true
+  while changed do {
+    changed = false
+    val made = mutable.LinkedHashSet.empty[Key]
+    val successors = mutable.Map.empty[Node, Set[Node]].withDefaultValue(Set.empty)
+    val fresh = mutable.ListBuffer.empty[(Node, Node)]
+    val pending = mutable.Queue.empty[(Option[Key], Id, BlockLit, Map[Id, Set[Id]])]
 
-  nodes.toList.flatMap { case (f, block) =>
-    val defined = block match {
-      case BlockLit(_, _, _, _, body) => definitions(body, toplevel).keySet
-      case Block.New(impl) => impl.operations.flatMap { operation => definitions(operation.body, toplevel).keySet }.toSet
-      case _ => Set.empty
-    }
-    object passing extends Tree.Query[Unit, Set[(Id, Int)]] {
-      def empty = Set.empty
-      def combine = _ ++ _
-      override def stmt(using Unit) = {
-        case Stmt.App(Block.BlockVar(g, _, _), targs, vargs, bargs) =>
-          val passed = for {
-            target <- values(g) if group.get(target) == group.get(f)
-            (argument, position) <- bargs.zipWithIndex
-            if (argument match {
-              case Block.BlockVar(x, _, _) => defined.contains(x)
-              case _: BlockLit | _: Block.New => true
-              case _ => false
-            })
-          } yield (target, position)
-          combine(passed, combine(all(vargs, query), all(bargs, query)))
+    def environment(k: Key, block: BlockLit): Map[Id, Set[Id]] =
+      closures(k._1) ++ (block.bparams zip k._2).collect { case (param, Some(g)) => param.id -> Set(g) }
+
+    def visit(calling: Option[Key], origin: Id, block: BlockLit, values: Map[Id, Set[Id]]): Unit = {
+      insideOf(origin, block).foreach { d =>
+        val merged = (closures(d).keySet ++ values.keySet).map { x =>
+          x -> (closures(d).getOrElse(x, Set.empty) ++ values.getOrElse(x, Set.empty))
+        }.toMap
+        if merged != closures(d) then { closures(d) = merged; changed = true }
+      }
+      def source(x: Id): Source = calling match {
+        case Some((_, arguments)) =>
+          block.bparams.zip(arguments).indexWhere { case (param, argument) => param.id == x && argument.isDefined } match {
+            case -1 => if insideOf(origin, block).contains(x) then Source.Fresh else Source.Around
+            case position => Source.Parameter(position)
+          }
+        case None => Source.Around
+      }
+      def support(target: Node, x: Id): Unit = calling.foreach { k =>
+        source(x) match {
+          case Source.Fresh => fresh += (Node.Made(k) -> target); successors(Node.Made(k)) += target
+          case Source.Parameter(position) => successors(Node.Argument(k, position)) += target
+          case Source.Around => successors(Node.Callee(k)) += target
+        }
+      }
+      callsIn(origin, block).foreach { case (f, arguments) =>
+        val callees = values.getOrElse(f, if toplevel.contains(f) || local.contains(f) then Set(f) else Set.empty)
+        val known = arguments.map {
+          case Some(x) => values.getOrElse(x, if local.contains(x) then Set(x) else Set.empty).toList.map(Some(_)) match {
+            case Nil => List(None)
+            case origins => origins
+          }
+          case None => List(None)
+        }
+        val combinations = known.foldRight(List(List.empty[Option[Id]])) { (choices, rest) =>
+          for { choice <- choices; others <- rest } yield choice :: others
+        }
+        for {
+          callee <- callees.toList
+          target <- callable(callee, arguments.size).toList
+          combination <- combinations
+          k <- withoutGrowing((callee, combination), growing)
+        } {
+          support(Node.Callee(k), f)
+          (arguments zip k._2).zipWithIndex.foreach {
+            case ((Some(x), Some(_)), position) => support(Node.Argument(k, position), x)
+            case _ => ()
+          }
+          if made.add(k) then pending.enqueue((Some(k), callee, target, environment(k, target)))
+        }
       }
     }
-    passing.query(block)(using ())
-  }.toSet
+
+    toplevel.foreach { case (id, block) => pending.enqueue((None, id, block, Map.empty)) }
+    m.definitions.foreach {
+      case Toplevel.Val(id, binding) => pending.enqueue((None, id, BlockLit(Nil, Nil, Nil, Nil, binding), Map.empty))
+      case _ => ()
+    }
+    while pending.nonEmpty do {
+      val (calling, origin, block, values) = pending.dequeue()
+      visit(calling, origin, block, values)
+    }
+
+    made.foreach { k =>
+      successors(Node.Callee(k)) += Node.Made(k)
+      k._2.zipWithIndex.foreach { case (argument, position) =>
+        if argument.isDefined then successors(Node.Argument(k, position)) += Node.Made(k)
+      }
+    }
+    val nodes = successors.keySet ++ successors.values.flatten
+    val component = components(nodes, successors).zipWithIndex.flatMap {
+      case (members, number) => members.map(_ -> number)
+    }.toMap
+    val cyclic = fresh.collect {
+      case (made, target @ Node.Callee((f, _))) if component(made) == component(target) => Growing.Callee(f)
+      case (made, target @ Node.Argument((f, _), position)) if component(made) == component(target) => Growing.Argument(f, position)
+    }.toSet
+    if !cyclic.subsetOf(growing) then { growing = growing ++ cyclic; changed = true }
+  }
+  growing
+}
+
+/** The local definitions inside [[block]]. */
+def definitionsIn(block: Block, functions: Set[Id]): Map[Id, Block] = block match {
+  case BlockLit(_, _, _, _, body) => definitions(body, functions)
+  case Block.New(impl) => impl.operations.flatMap { operation => definitions(operation.body, functions) }.toMap
+  case _ => Map.empty
 }
 
 // Specialize
 // ----------
-
-/** A callee and, for each of its blocks, the local definition passed, if it is one. */
-type Key = (Id, List[Option[Id]])
 
 /**
  * What is in scope: the local definitions of literals, objects, and toplevel functions, the aliases `def x = y`,
@@ -241,7 +327,7 @@ case class Scope(
  * same definition are made before it, unless they are still being made themselves, which closes a cycle of mutual
  * recursion; then the copies made since go around, at the beginning of the copy the cycle returns to.
  */
-def specialize(m: ModuleDecl, functions: Set[Id], growing: Set[(Id, Int)]): ModuleDecl = {
+def specialize(m: ModuleDecl, functions: Set[Id], growing: Set[Growing]): ModuleDecl = {
   val toplevel: Map[Id, BlockLit] = m.definitions.collect {
     case Toplevel.Def(id, block: BlockLit) => id -> block
   }.toMap
@@ -263,10 +349,11 @@ def specialize(m: ModuleDecl, functions: Set[Id], growing: Set[(Id, Int)]): Modu
 
   /** The key of a call, given what is defined: arguments that are not local definitions are unknown. */
   def key(f: Id, arguments: List[Option[Id]], defined: Map[Id, Block]): Option[Key] = {
-    val known = arguments.zipWithIndex.map { case (argument, position) =>
-      argument.filter { g => defined.contains(g) && !growing.contains((originOf(f), position)) }
+    val known = arguments.map(_.filter(defined.contains))
+    if !callee(f, defined).exists(_.bparams.size == arguments.size) then None
+    else withoutGrowing((originOf(f), known.map(_.map(originOf))), growing).map { case (_, kept) =>
+      (f, (known zip kept).map { case (argument, origin) => argument.filter(_ => origin.isDefined) })
     }
-    Option.when(known.exists(_.isDefined) && callee(f, defined).exists(_.bparams.size == arguments.size))((f, known))
   }
 
   /** The local definitions the copy for [[k]] needs to see. */
