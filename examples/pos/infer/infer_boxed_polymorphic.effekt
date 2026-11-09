@@ -1,0 +1,14 @@
+import option
+
+// based on a case in #1560
+def g[A] { that: => A }: A = that()
+def id[A](a: A): A = a
+
+def main() = {
+  val o: Option[String => Unit at {io}] = None()
+  val f: String => Unit at {io} = o.getOrElse { box { s => println("getOrElse: " ++ s) } }
+  val g1: String => Unit at {io} = g { box { s => println("return type: " ++ s) } }
+  val g2 = g[String => Unit at {io}] { box { s => println("type argument: " ++ s) } }
+  val i = id[String => Unit at {io}](box { s => println("value argument: " ++ s) })
+  f("a"); g1("b"); g2("c"); i("d")
+}
