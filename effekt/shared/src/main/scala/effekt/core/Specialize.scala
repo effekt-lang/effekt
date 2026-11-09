@@ -18,8 +18,9 @@ import scala.collection.mutable
  * the copies, and [[optimizer.cleanup]] removes what is left unused and inlines what is called once.
  */
 def specialization(m: ModuleDecl): ModuleDecl = {
-  val named = names(m)
-  optimizer.cleanup(specialize(named, growing(named)))
+  val functions = m.definitions.collect { case Toplevel.Def(id, _: BlockLit) => id }.toSet
+  val named = names(m, functions)
+  optimizer.cleanup(specialize(named, functions, growing(named, functions)))
 }
 
 object Specialize extends Phase[CoreTransformed, CoreTransformed] {
@@ -36,9 +37,10 @@ object Specialize extends Phase[CoreTransformed, CoreTransformed] {
 // -----
 
 /**
- * [[ f(…){ b } ]] = def g = [[ b ]]; f(…){ g }   for every block argument `b` that is a literal or an object
+ * [[ f(…){ b } ]] = def g = [[ b ]]; f(…){ g }   for every block argument `b` that is a literal, an object, or one
+ * of the toplevel [[functions]]
  */
-def names(m: ModuleDecl): ModuleDecl = {
+def names(m: ModuleDecl, functions: Set[Id]): ModuleDecl = {
   object naming extends Tree.Rewrite {
     override def rewrite(s: Stmt): Stmt = s match {
       case Stmt.App(callee, targs, vargs, bargs) =>
@@ -46,6 +48,9 @@ def names(m: ModuleDecl): ModuleDecl = {
           case block @ (_: BlockLit | _: Block.New) =>
             val id = Id("f")
             (Some(id -> rewrite(block)), Block.BlockVar(id, block.tpe, block.capt))
+          case block @ Block.BlockVar(f, tpe, capt) if functions.contains(f) =>
+            val id = Id(f.name.name)
+            (Some(id -> block), Block.BlockVar(id, tpe, capt))
           case block => (None, rewrite(block))
         }
         named.flatMap(_._1).foldRight(Stmt.App(rewrite(callee), targs, vargs.map(rewrite), named.map(_._2)): Stmt) {
@@ -61,13 +66,14 @@ def names(m: ModuleDecl): ModuleDecl = {
 // Recursive closures
 // ------------------
 
-/** The local definitions of literals and objects in [[s]]. */
-def definitions(s: Stmt): Map[Id, Block] = {
+/** The local definitions of literals, objects, and toplevel [[functions]] in [[s]]. */
+def definitions(s: Stmt, functions: Set[Id]): Map[Id, Block] = {
   object collecting extends Tree.Query[Unit, Map[Id, Block]] {
     def empty = Map.empty
     def combine = _ ++ _
     override def stmt(using Unit) = {
       case Stmt.Def(id, block @ (_: BlockLit | _: Block.New), body) => Map(id -> block) ++ query(block) ++ query(body)
+      case Stmt.Def(id, block @ Block.BlockVar(f, _, _), body) if functions.contains(f) => Map(id -> block) ++ query(body)
     }
   }
   collecting.query(s)(using ())
@@ -110,7 +116,7 @@ def components[A](nodes: Iterable[A], successors: A => Iterable[A]): List[List[A
  * Specializing `loop` to a block would ask for a copy for the next block, which captures the one before, without end,
  * so we leave these blocks unknown from the start.
  */
-def growing(m: ModuleDecl): Set[(Id, Int)] = {
+def growing(m: ModuleDecl, toplevel: Set[Id]): Set[(Id, Int)] = {
   val functions = mutable.LinkedHashMap.empty[Id, BlockLit]
   object collecting extends Tree.Query[Unit, Unit] {
     def empty = ()
@@ -145,7 +151,7 @@ def growing(m: ModuleDecl): Set[(Id, Int)] = {
   }.toMap
 
   functions.toList.flatMap { case (f, block) =>
-    val defined = definitions(block.body)
+    val defined = definitions(block.body, toplevel)
     object passing extends Tree.Query[Unit, Set[(Id, Int)]] {
       def empty = Set.empty
       def combine = _ ++ _
@@ -197,7 +203,7 @@ case class Scope(
  *
  * A copy of `f` within a copy of `f` would be built up recursively, so we do not make it.
  */
-def specialize(m: ModuleDecl, growing: Set[(Id, Int)]): ModuleDecl = {
+def specialize(m: ModuleDecl, functions: Set[Id], growing: Set[(Id, Int)]): ModuleDecl = {
   val toplevel: Map[Id, BlockLit] = m.definitions.collect {
     case Toplevel.Def(id, block: BlockLit) => id -> block
   }.toMap
@@ -224,7 +230,7 @@ def specialize(m: ModuleDecl, growing: Set[(Id, Int)]): ModuleDecl = {
       def combine = _ ++ _
       def resolve(id: Id)(using aliases: Map[Id, Id]): Id = aliases.get(id).map(resolve).getOrElse(scope.resolve(id))
       override def stmt(using aliases: Map[Id, Id]) = {
-        case Stmt.Def(id, Block.BlockVar(x, _, _), body) => query(body)(using aliases + (id -> x))
+        case Stmt.Def(id, Block.BlockVar(x, _, _), body) if !functions.contains(x) => query(body)(using aliases + (id -> x))
         case Stmt.App(Block.BlockVar(f, _, _), targs, vargs, bargs) if bargs.nonEmpty =>
           val arguments = bargs.map {
             case Block.BlockVar(x, _, _) => Some(resolve(x))
@@ -267,12 +273,12 @@ def specialize(m: ModuleDecl, growing: Set[(Id, Int)]): ModuleDecl = {
       if !successors.contains(k) then {
         successors(k) = Nil
         val body = substituted(k, defined)
-        val inner = defined ++ definitions(body)
+        val inner = defined ++ definitions(body, functions)
         val next = asked.getOrElseUpdate(k, requests(body, inner, scope)).filter { k => fresh(k) && known(k, inner) }
         successors(k) = next
         next.foreach(explore(_, inner))
       }
-    val defined = scope.definitions ++ definitions(s)
+    val defined = scope.definitions ++ definitions(s, functions)
     val roots = requests(s, defined, scope).filter(fresh)
     roots.foreach(explore(_, defined))
     def visible(k: Key): Boolean = known(k, scope.definitions)
@@ -334,10 +340,10 @@ def specialize(m: ModuleDecl, growing: Set[(Id, Int)]): ModuleDecl = {
 
   object specializing extends Tree.RewriteWithContext[Scope] {
     override def rewrite(s: Stmt)(using scope: Scope): Stmt = s match {
-      case Stmt.Def(id, alias @ Block.BlockVar(x, _, _), body) =>
+      case Stmt.Def(id, alias @ Block.BlockVar(x, _, _), body) if !functions.contains(x) =>
         Stmt.Def(id, alias, rewrite(body)(using scope.copy(aliases = scope.aliases + (id -> x))))
 
-      case Stmt.Def(id, block @ (_: BlockLit | _: Block.New), body) =>
+      case Stmt.Def(id, block @ (_: BlockLit | _: Block.New | _: Block.BlockVar), body) =>
         val defined = scope.copy(definitions = scope.definitions + (id -> block))
         val (named, withCopies) = provide(body, defined) { case (f, arguments) => f == id || arguments.contains(Some(id)) }
         Stmt.Def(id, rewrite(block)(using defined), bind(named, withCopies, rewrite(body)(using withCopies)))
