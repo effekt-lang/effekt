@@ -38,6 +38,9 @@ class JavaScriptTests extends EffektTests {
     
     // local function def needs to be rewritten (issue 1229)
     examplesDir / "benchmarks" / "folklore_to_fact" / "motzkin.effekt",
+
+    // a local definition in a loop capturing a block parameter of the loop
+    examplesDir / "pos" / "loop_block_parameter.effekt",
   )
 
   override def ignored: Set[File] = super.ignored ++ Set(

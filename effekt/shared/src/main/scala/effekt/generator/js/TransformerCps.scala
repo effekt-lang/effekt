@@ -520,13 +520,13 @@ object TransformerCps extends Transformer {
       stmts.append(js.Const(nameDef(tmp), nameRef(param)))
       tmp
     }
-    val (values, conts) = D.scope.foldLeft((Set.empty[Id], Set.empty[Id])) {
-      case ((values, conts), (_, Block.BlockLit(vparams, bparams, _, k, _))) => (values ++ vparams ++ bparams, conts + k)
+    val (values, blocks, conts) = D.scope.foldLeft((Set.empty[Id], Set.empty[Id], Set.empty[Id])) {
+      case ((values, blocks, conts), (_, Block.BlockLit(vparams, bparams, _, k, _))) => (values ++ vparams, blocks ++ bparams, conts + k)
       case (acc, _) => acc
     }
     Substitution(
       values = (free intersect values).map { p => p -> Expr.ValueVar(backup(p)) }.toMap,
-      blocks = Map.empty,
+      blocks = (free intersect blocks).map { p => p -> Block.BlockVar(backup(p)) }.toMap,
       conts = (free intersect conts).map { k => k -> Cont.ContVar(backup(k)) }.toMap,
       metaconts = Map.empty)
   }
