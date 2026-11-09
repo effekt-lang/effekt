@@ -12,7 +12,7 @@ extern jsNode """
 
 /// Ends the program with the given `errorCode`, once its standard output and error are written.
 extern def exit(errorCode: Int) at io: Nothing =
-  js "process$exit(${errorCode})"
+  jsNode "process$exit(${errorCode})"
   llvm """
     %exitCode = trunc i64 ${errorCode} to i32
     call void @exit(i32 %exitCode)
