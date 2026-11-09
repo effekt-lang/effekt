@@ -1,0 +1,65 @@
+[error] examples/neg/issue373/wrong_type_argument_arity.effekt:6:9: Cannot typecheck call. [typer]
+There are multiple overloads, which all fail to check:
+
+Possible overload: array::println of type Array[Int] => Unit
+  Wrong number of type arguments, given 2 but expected 1
+
+Possible overload: array::println of type Array[Double] => Unit
+  Wrong number of type arguments, given 2 but expected 1
+
+Possible overload: array::println of type Array[Bool] => Unit
+  Wrong number of type arguments, given 2 but expected 1
+
+Possible overload: array::println of type Array[String] => Unit
+  Wrong number of type arguments, given 2 but expected 1
+
+Possible overload: effekt::println of type String => Unit
+  Wrong number of type arguments, given 2 but expected 1
+
+Possible overload: effekt::println of type Int => Unit
+  Wrong number of type arguments, given 2 but expected 1
+
+Possible overload: effekt::println of type Unit => Unit
+  Wrong number of type arguments, given 2 but expected 1
+
+Possible overload: effekt::println of type Double => Unit
+  Wrong number of type arguments, given 2 but expected 1
+
+Possible overload: effekt::println of type Bool => Unit
+  Wrong number of type arguments, given 2 but expected 1
+
+Possible overload: effekt::println of type Byte => Unit
+  Wrong number of type arguments, given 2 but expected 1
+
+Possible overload: effekt::println of type Char => Unit
+  Wrong number of type arguments, given 2 but expected 1
+
+Possible overload: effekt::println of type Ordering => Unit
+  Wrong number of type arguments, given 2 but expected 1
+
+Possible overload: list::println of type List[Int] => Unit
+  Wrong number of type arguments, given 2 but expected 1
+
+Possible overload: list::println of type List[Double] => Unit
+  Wrong number of type arguments, given 2 but expected 1
+
+Possible overload: list::println of type List[Char] => Unit
+  Wrong number of type arguments, given 2 but expected 1
+
+Possible overload: list::println of type List[Bool] => Unit
+  Wrong number of type arguments, given 2 but expected 1
+
+Possible overload: list::println of type List[String] => Unit
+  Wrong number of type arguments, given 2 but expected 1
+
+Possible overload: option::println of type Option[Int] => Unit
+  Wrong number of type arguments, given 2 but expected 1
+
+Possible overload: option::println of type Option[Double] => Unit
+  Wrong number of type arguments, given 2 but expected 1
+
+Possible overload: option::println of type Option[Bool] => Unit
+  Wrong number of type arguments, given 2 but expected 1
+
+6    try { println(eff.op[Bool, Int]("hello")) } // ERROR Wrong number of type arguments, given 2 but expected 1
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^

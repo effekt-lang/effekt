@@ -4,9 +4,9 @@
 [info] ./examples/neg/cyclic_a.effekt:3:1: Import cycle: cyclic_a -> cyclic_b -> cyclic_a
 3  import examples/neg/cyclic_b
    ^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-[error] ./examples/neg/cyclic_a.effekt:3:1: Cannot compile dependency: ./examples/neg/cyclic_a [namer]
-3  import examples/neg/cyclic_b
+[error] ./examples/neg/cyclic_b.effekt:3:1: Cannot compile dependency: ./examples/neg/cyclic_a [namer]
+3  import examples/neg/cyclic_a
    ^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-[error] ./examples/neg/cyclic_a.effekt:3:1: Cannot compile dependency: ./examples/neg/cyclic_b [namer]
+[error] examples/neg/cyclic_a.effekt:3:1: Cannot compile dependency: ./examples/neg/cyclic_b [namer]
 3  import examples/neg/cyclic_b
    ^^^^^^^^^^^^^^^^^^^^^^^^^^^^

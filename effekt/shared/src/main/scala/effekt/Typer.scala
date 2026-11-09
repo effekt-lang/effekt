@@ -1172,7 +1172,7 @@ object Typer extends Phase[NameResolved, Typechecked] {
 
     val (methods, scope) = sym match {
       // an overloaded call target
-      case CallTarget(syms, scope) => (syms.flatten.collect { case op: Operation => op }, scope)
+      case CallTarget(syms, scope) => (inReportedOrder(syms.flatten.collect { case op: Operation => op }), scope)
       // already resolved by a previous attempt to typecheck
       case sym: Operation => (List(sym), None)
       case s => Context.panic(s"Not a valid method: ${s} : ${s.getClass.getSimpleName}")
@@ -1219,6 +1219,10 @@ object Typer extends Phase[NameResolved, Typechecked] {
     resolveOverload(id, List(successes), errors)
   }
 
+  // sorted by the name we report them by, then by where they are declared, so that their order does not depend on hashing
+  private def inReportedOrder[S <: BlockSymbol](candidates: Iterable[S]): List[S] =
+    candidates.toList.sortBy { s => (fullname(s.name), s.decl.span.from) }
+
   /**
    * Attempts to check a potentially overladed call, not reporting any errors but returning them instead.
    *
@@ -1261,7 +1265,7 @@ object Typer extends Phase[NameResolved, Typechecked] {
     // - If there are multiple possible candidates -> Ambiguity Error
     // - If there is none: proceed to outer scope
     // - If there is exactly one match, fully typecheck the call with this.
-    val results = scopes map { scope => tryEach(scope.toList) { receiver =>
+    val results = scopes map { scope => tryEach(inReportedOrder(scope)) { receiver =>
       val (funTpe, capture) = findFunctionTypeFor(receiver)
       val (vps, bps) = receiver match {
         case c: Callable  => (c.vparams, c.bparams)

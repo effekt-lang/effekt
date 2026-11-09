@@ -106,7 +106,7 @@ object messages {
     }
   }
 
-  private def fullname(n: Name): String = n match {
+  private[effekt] def fullname(n: Name): String = n match {
     case n: QualifiedName => n.qualifiedName
     case n: Name          => n.name
   }
@@ -322,10 +322,8 @@ object messages {
 
     def at[T](t: Tree)(block: => T): T = {
       val before = focus
-      focus = t;
-      val res = block;
-      focus = before;
-      res
+      focus = t
+      try block finally focus = before
     }
 
     def withFocus[T <: Tree, R](block: T => R): T => R = { t =>

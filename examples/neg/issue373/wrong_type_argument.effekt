@@ -2,6 +2,11 @@ interface Eff[A] {
   def op(x: A): A
 }
 
+// for the purposes of testing so that we don't have to update this when adding a println overload
+def myPrintLine(n: Int): Unit = println(n)
+def myPrintLine(b: Bool): Unit = println(b)
+def myPrintLine(s: String): Unit = println(s)
+
 def main() =
-  try { println(eff.op[Bool]("hello")) } // ERROR Expected Bool but got Int
+  try { myPrintLine(eff.op[Bool]("hello")) } // ERROR Expected Bool but got Int
   with eff: Eff[Int] { def op(x) = resume(x / 1) }

@@ -1014,9 +1014,7 @@ trait NamerOps extends ContextOps { Context: Context =>
    */
   override def in[T](block: => T): T = {
     val before = scope
-    val result = super.in(block)
-    scope = before
-    result
+    try super.in(block) finally scope = before
   }
 
   private[namer] def nameFor(id: IdDef): Name = {
