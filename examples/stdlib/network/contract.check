@@ -9,3 +9,6 @@ two pending reads: one returned 1, the other raised EALREADY
 binding a bound address raised: address already in use
 connected before listen, then received: early
 connect to a closed port raised: connection refused
+127.0.0.1 resolves to 127.0.0.1
+connected to localhost, then received: by name
+connect to localhost on a closed port raised: connection refused

@@ -171,4 +171,29 @@ def main() = {
   } with Exception[IOError] { 
     def raise(e, msg) = println("connect to a closed port raised: " ++ msg)
   }
+
+  // an address resolves to itself
+  resolve("127.0.0.1") match {
+    case Cons(address, Nil()) => println("127.0.0.1 resolves to " ++ address.toString)
+    case _ => println("127.0.0.1 does not resolve to one address")
+  }
+
+  // a host can be a name, whose addresses are tried in turn until one accepts
+  val named = serveOnce(box { connection =>
+    with on[IOError].panic
+    val _ = send(connection, "by name")
+  })
+  val c10 = connect("localhost", named)
+  val byName = bytearray::allocate(16)
+  val n10 = read(c10, byName, 0, 16)
+  println("connected to localhost, then received: " ++ byName.resize(n10).toString)
+  close(c10)
+
+  // if no address accepts, the error of the last one is raised
+  try {
+    val _ = connect("localhost", closedPort);
+    println("connect to localhost on a closed port succeeded")
+  } with Exception[IOError] {
+    def raise(e, msg) = println("connect to localhost on a closed port raised: " ++ msg)
+  }
 }
