@@ -1,0 +1,34 @@
+import io/error
+import io/filesystem
+import bytearray
+
+// Since #1550, a file is a resource: closing it through one name closes it for every name,
+// and reading, writing or closing a closed file raises `EBADF`, even after the system reused its descriptor.
+def main() = {
+  with on[IOError].panic
+  val file = openForWriting("/tmp/effekt_file_closed_1.txt")
+  val same = file
+  val bytes = "abc".fromString
+  println("wrote " ++ write(file, bytes, 0, 3, -1).show ++ " bytes")
+  close(same)
+
+  // the next file opened usually gets the descriptor `file` had
+  val other = openForWriting("/tmp/effekt_file_closed_2.txt")
+
+  def afterClose(what: String) { operation: => Unit / Exception[IOError] }: Unit = try {
+    operation()
+    println(what ++ " after close succeeded")
+  } with Exception[IOError] {
+    def raise(e, msg) = println(what ++ " after close raised: " ++ msg)
+  }
+
+  afterClose("write") { val _ = write(file, bytes, 0, 3, -1); () }
+  afterClose("read") { val _ = read(file, bytearray::allocate(4), 0, 4, -1); () }
+  afterClose("close") { close(file) }
+  close(other)
+
+  val check = openForReading("/tmp/effekt_file_closed_2.txt")
+  val n = read(check, bytearray::allocate(8), 0, 8, -1)
+  close(check)
+  println("the other file holds " ++ n.show ++ " bytes")
+}

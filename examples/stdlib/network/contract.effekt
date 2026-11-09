@@ -85,6 +85,21 @@ def main() = {
   println("streamed " ++ total.show ++ " bytes, then end of stream")
   close(c4)
 
+  // a closed connection raises EBADF, and closing it again does nothing
+  val port6 = serveOnce(box { connection =>
+    with on[IOError].panic
+    val _ = send(connection, "x")
+  })
+  val c6 = connect("127.0.0.1", port6)
+  close(c6)
+  close(c6)
+  try {
+    val _ = read(c6, bytearray::allocate(4), 0, 4);
+    println("read after close succeeded")
+  } with Exception[IOError] {
+    def raise(e, msg) = println("read after close raised: " ++ msg)
+  }
+
   // a read which is still pending when the connection is closed returns 0, like if it were at end of file
   val port7 = serveOnce(box { connection =>
     with on[IOError].panic
@@ -155,5 +170,30 @@ def main() = {
     println("connect to a closed port succeeded")
   } with Exception[IOError] { 
     def raise(e, msg) = println("connect to a closed port raised: " ++ msg)
+  }
+
+  // an address resolves to itself
+  resolve("127.0.0.1") match {
+    case Cons(address, Nil()) => println("127.0.0.1 resolves to " ++ address.toString)
+    case _ => println("127.0.0.1 does not resolve to one address")
+  }
+
+  // a host can be a name, whose addresses are tried in turn until one accepts
+  val named = serveOnce(box { connection =>
+    with on[IOError].panic
+    val _ = send(connection, "by name")
+  })
+  val c10 = connect("localhost", named)
+  val byName = bytearray::allocate(16)
+  val n10 = read(c10, byName, 0, 16)
+  println("connected to localhost, then received: " ++ byName.resize(n10).toString)
+  close(c10)
+
+  // if no address accepts, the error of the last one is raised
+  try {
+    val _ = connect("localhost", closedPort);
+    println("connect to localhost on a closed port succeeded")
+  } with Exception[IOError] {
+    def raise(e, msg) = println("connect to localhost on a closed port raised: " ++ msg)
   }
 }

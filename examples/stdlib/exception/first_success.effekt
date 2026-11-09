@@ -1,0 +1,31 @@
+import exception
+import result
+
+def check(x: Int): Int / Exception[RuntimeError] =
+  if (x < 3) do raise(RuntimeError(), "too small: " ++ x.show) else x
+
+def run(first: Int, rest: List[Int]): Unit = {
+  var attempts = 0
+  try {
+    val v = firstSuccess[Int, Int, RuntimeError](first, rest) { x => attempts = attempts + 1; check(x) }
+    println("succeeded with " ++ v.show ++ " after " ++ attempts.show ++ " attempts")
+  } with Exception[RuntimeError] {
+    def raise(error, msg) = println("raised (" ++ msg ++ ") after " ++ attempts.show ++ " attempts")
+  }
+}
+
+def main() = {
+  // the first success is returned, later elements are not attempted
+  run(3, [4, 1, 5])
+  run(1, [2, 4, 5, 6])
+
+  // the last element is attempted if no earlier one succeeds
+  run(1, [2, 7])
+
+  // if every attempt raises, the exception of the last one is raised
+  run(1, [0, 2])
+
+  // with no other elements, we return the first one
+  run(9, [])
+  run(1, [])
+}

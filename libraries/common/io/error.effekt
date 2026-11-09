@@ -365,6 +365,11 @@ namespace internal {
 extern jsNode """
     const error$getSystemErrorName = require('node:util').getSystemErrorName;
 
+    // Error results of the I/O modules are negative libuv codes, as Node reports them in `err.errno`.
+    // Their numbers differ between platforms, so the modules look them up here by name.
+    const error$code = {};
+    for (const [code, [name]] of require('node:util').getSystemErrorMap()) error$code[name] = code;
+
     /**
      * Maps the error code to a Effekt-stable (platform independent) numeric value.
      *

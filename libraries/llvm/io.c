@@ -82,6 +82,74 @@ void c_resume_int_fs(uv_fs_t* request) {
     resume_Int(stack, result);
 }
 
+// Files, connections and listeners are generational handles into one table of open I/O resources.
+// A handle is a slot of the table and the generation which the slot had when the resource was opened,
+// so it is a plain integer, as cheap to copy as an `Int`.
+// Closing a resource starts the next generation of its slot,
+// so its handles no longer match, and using them raises `EBADF`, even once the slot is reused.
+typedef struct {
+    intptr_t value;        // the resource: a file descriptor, a `uv_tcp_t*`, or a `struct addrinfo*` of `c_tcp_resolve`
+    uint32_t generation;   // 31 bits, so that a handle is never negative (negative results are errors)
+    uint32_t next_free;    // the next free slot, while this one is free
+} io_slot_t;
+
+#define IO_NO_SLOT UINT32_MAX
+
+static io_slot_t* io_slots = NULL;
+static uint32_t io_slots_used = 0;
+static uint32_t io_slots_capacity = 0;
+static uint32_t io_slots_free = IO_NO_SLOT;
+
+Int io_handle_new(intptr_t value) {
+    uint32_t slot;
+    if (io_slots_free != IO_NO_SLOT) {
+        slot = io_slots_free;
+        io_slots_free = io_slots[slot].next_free;
+    } else {
+        if (io_slots_used == io_slots_capacity) {
+            io_slots_capacity = io_slots_capacity == 0 ? 16 : 2 * io_slots_capacity;
+            io_slots = (io_slot_t*)realloc(io_slots, io_slots_capacity * sizeof(io_slot_t));
+        }
+        slot = io_slots_used++;
+        io_slots[slot].generation = 0;
+    }
+
+    io_slots[slot].value = value;
+    io_slots[slot].next_free = IO_NO_SLOT;
+    return ((Int)io_slots[slot].generation << 32) | slot;
+}
+
+// The slot of a handle which is still open, or `NULL`.
+io_slot_t* io_handle_slot(Int handle) {
+    if (handle < 0) return NULL;
+
+    uint32_t slot = (uint32_t)handle;
+    uint32_t generation = (uint32_t)(handle >> 32);
+    if (slot >= io_slots_used || io_slots[slot].next_free != IO_NO_SLOT || io_slots[slot].generation != generation) return NULL;
+    return &io_slots[slot];
+}
+
+// Closes a handle which is still open, and returns its resource in `value`, or returns 0 if it was not open.
+int io_handle_close(Int handle, intptr_t* value) {
+    io_slot_t* open = io_handle_slot(handle);
+    if (open == NULL) return 0;
+
+    *value = open->value;
+    open->generation = (open->generation + 1) & 0x7fffffff;
+    open->next_free = io_slots_free;
+    io_slots_free = (uint32_t)(open - io_slots);
+    return 1;
+}
+
+// Resumes with the handle of the opened file, or with the (negative) error.
+void c_fs_open_cb(uv_fs_t* request) {
+    Stack stack = (Stack)request->data;
+    int64_t result = (int64_t)request->result;
+    uv_fs_req_cleanup(request);
+    free(request);
+    resume_Int(stack, result < 0 ? result : io_handle_new(result));
+}
+
 void c_fs_open(String path, int flags, Stack stack) {
 
     // Convert the Effekt String to a 0-terminated string
@@ -91,7 +159,7 @@ void c_fs_open(String path, int flags, Stack stack) {
     uv_fs_t* request = malloc(sizeof(uv_fs_t));
     request->data = stack;
 
-    int result = uv_fs_open(uv_default_loop(), request, path_str, flags, 0777, c_resume_int_fs);
+    int result = uv_fs_open(uv_default_loop(), request, path_str, flags, 0777, c_fs_open_cb);
 
     if (result < 0) {
         // TODO free path_str?
@@ -131,6 +199,13 @@ void c_fs_cb(uv_fs_t* request) {
 }
 
 void c_fs_read(Int file, struct Pos buffer, Int offset, Int size, Int position, Stack stack) {
+    io_slot_t* open = io_handle_slot(file);
+    if (open == NULL) {
+        erasePositive(buffer);
+        resume_Int(stack, UV_EBADF);
+        return;
+    }
+
 
     uv_buf_t buf = uv_buf_init((char*)(c_bytearray_data(buffer) + offset), size);
 
@@ -141,7 +216,7 @@ void c_fs_read(Int file, struct Pos buffer, Int offset, Int size, Int position, 
     uv_fs_t* request = malloc(sizeof(uv_fs_t));
     request->data = read_closure;
 
-    int result = uv_fs_read(uv_default_loop(), request, file, &buf, 1, position, c_fs_cb);
+    int result = uv_fs_read(uv_default_loop(), request, open->value, &buf, 1, position, c_fs_cb);
 
     if (result < 0) {
         uv_fs_req_cleanup(request);
@@ -152,6 +227,13 @@ void c_fs_read(Int file, struct Pos buffer, Int offset, Int size, Int position, 
 }
 
 void c_fs_write(Int file, struct Pos buffer, Int offset, Int size, Int position, Stack stack) {
+    io_slot_t* open = io_handle_slot(file);
+    if (open == NULL) {
+        erasePositive(buffer);
+        resume_Int(stack, UV_EBADF);
+        return;
+    }
+
     (void)size;
 
     uv_buf_t buf = uv_buf_init((char*)(c_bytearray_data(buffer) + offset), size);
@@ -163,7 +245,7 @@ void c_fs_write(Int file, struct Pos buffer, Int offset, Int size, Int position,
     uv_fs_t* request = malloc(sizeof(uv_fs_t));
     request->data = write_closure;
 
-    int result = uv_fs_write(uv_default_loop(), request, file, &buf, 1, position, c_fs_cb);
+    int result = uv_fs_write(uv_default_loop(), request, open->value, &buf, 1, position, c_fs_cb);
 
     if (result < 0) {
         uv_fs_req_cleanup(request);
@@ -174,11 +256,17 @@ void c_fs_write(Int file, struct Pos buffer, Int offset, Int size, Int position,
 }
 
 void c_fs_close(Int file, Stack stack) {
+    intptr_t fd;
+    if (!io_handle_close(file, &fd)) {
+        resume_Int(stack, UV_EBADF);
+        return;
+    }
+
 
     uv_fs_t* request = malloc(sizeof(uv_fs_t));
     request->data = stack;
 
-    int result = uv_fs_close(uv_default_loop(), request, file, c_resume_int_fs);
+    int result = uv_fs_close(uv_default_loop(), request, fd, c_resume_int_fs);
 
     if (result < 0) {
         uv_fs_req_cleanup(request);
@@ -222,22 +310,116 @@ void c_tcp_connect_cb(uv_connect_t* request, int status) {
         free(request);
         resume_Int(stack, status);
     } else {
-        int64_t handle = (int64_t)request->handle;
+        uv_tcp_t* handle = (uv_tcp_t*)request->handle;
         free(request);
-        resume_Int(stack, handle);
+        resume_Int(stack, io_handle_new((intptr_t)handle));
     }
 }
 
-void c_tcp_connect(String host, Int port, Stack stack) {
+// Hosts are resolved in Effekt (see `io/network`), which then connects to or binds one address at a time,
+// so the resolution only collects the addresses, as a handle to the list which `uv_getaddrinfo` returns.
+
+void c_tcp_resolve_cb(uv_getaddrinfo_t* request, int status, struct addrinfo* addresses) {
+    Stack stack = (Stack)request->data;
+    free(request);
+    resume_Int(stack, status < 0 ? status : io_handle_new((intptr_t)addresses));
+}
+
+void c_tcp_resolve(String host, Stack stack) {
     char* host_str = c_bytearray_into_nullterminated_string(host);
     erasePositive(host);
 
+    struct addrinfo hints;
+    memset(&hints, 0, sizeof(hints));
+    hints.ai_family = AF_UNSPEC;
+    hints.ai_socktype = SOCK_STREAM;
+    hints.ai_protocol = IPPROTO_TCP;
+
+    uv_getaddrinfo_t* request = malloc(sizeof(uv_getaddrinfo_t));
+    request->data = stack;
+    int result = uv_getaddrinfo(uv_default_loop(), request, c_tcp_resolve_cb, host_str, NULL, &hints);
+
+    // Free the string since libuv copies it into the request
+    free(host_str);
+
+    if (result < 0) {
+        free(request);
+        resume_Int(stack, result);
+    }
+}
+
+// The addresses of a resolution which is still open, or `NULL` otherwise.
+static struct addrinfo* c_tcp_resolution(Int resolution) {
+    io_slot_t* open = io_handle_slot(resolution);
+    return open == NULL ? NULL : (struct addrinfo*)open->value;
+}
+
+Int c_tcp_address_count(Int resolution) {
+    Int count = 0;
+    for (struct addrinfo* address = c_tcp_resolution(resolution); address != NULL; address = address->ai_next) {
+        count++;
+    }
+    return count;
+}
+
+String c_tcp_address(Int resolution, Int index) {
+    struct addrinfo* address = c_tcp_resolution(resolution);
+    for (Int i = 0; address != NULL && i < index; i++) {
+        address = address->ai_next;
+    }
+
+    // An IPv6 address keeps its zone, such as `fe80::1%lo0` (or `fe80::1%12` on Windows), much like on Node
+    char text[INET6_ADDRSTRLEN + 1 + UV_IF_NAMESIZE] = "";
+    if (address != NULL) {
+        uv_ip_name(address->ai_addr, text, sizeof(text));
+
+        struct sockaddr_in6* v6 = (struct sockaddr_in6*)address->ai_addr;
+        size_t zone_size = UV_IF_NAMESIZE;
+        char zone[UV_IF_NAMESIZE];
+        if (address->ai_family == AF_INET6 && v6->sin6_scope_id != 0
+            && uv_if_indextoiid(v6->sin6_scope_id, zone, &zone_size) == 0) {
+            strcat(text, "%");
+            strcat(text, zone);
+        }
+    }
+    return c_bytearray_from_nullterminated_string(text);
+}
+
+void c_tcp_resolution_release(Int resolution) {
+    intptr_t addresses;
+    if (io_handle_close(resolution, &addresses)) {
+        uv_freeaddrinfo((struct addrinfo*)addresses);
+    }
+}
+
+// Parses an `address` as `c_tcp_address` writes it, IPv4 or IPv6, together with the given `port`.
+static int c_tcp_parse(String address, Int port, struct sockaddr_storage* addr) {
+    char* text = c_bytearray_into_nullterminated_string(address);
+    erasePositive(address);
+
+    int result = uv_ip4_addr(text, port, (struct sockaddr_in*)addr);
+    if (result < 0) {
+        result = uv_ip6_addr(text, port, (struct sockaddr_in6*)addr);
+    }
+
+    free(text);
+    return result;
+}
+
+void c_tcp_connect(String address, Int port, Stack stack) {
+    struct sockaddr_storage addr;
+    int result = c_tcp_parse(address, port, &addr);
+
+    if (result < 0) {
+        resume_Int(stack, result);
+        return;
+    }
+
     uv_tcp_t* tcp_handle = malloc(sizeof(uv_tcp_t));
-    int result = uv_tcp_init(uv_default_loop(), tcp_handle);
+    result = uv_tcp_init(uv_default_loop(), tcp_handle);
 
     if (result < 0) {
         free(tcp_handle);
-        free(host_str);
         resume_Int(stack, result);
         return;
     }
@@ -245,17 +427,6 @@ void c_tcp_connect(String host, Int port, Stack stack) {
 
     uv_connect_t* connect_req = malloc(sizeof(uv_connect_t));
     connect_req->data = stack;
-
-    struct sockaddr_in addr;
-    result = uv_ip4_addr(host_str, port, &addr);
-    free(host_str);
-
-    if (result < 0) {
-        uv_close((uv_handle_t*)tcp_handle, (uv_close_cb)free);
-        free(connect_req);
-        resume_Int(stack, result);
-        return;
-    }
 
     result = uv_tcp_connect(connect_req, tcp_handle, (const struct sockaddr*)&addr, c_tcp_connect_cb);
 
@@ -300,7 +471,13 @@ void c_tcp_read_alloc_cb(uv_handle_t* handle, size_t suggested_size, uv_buf_t* b
 }
 
 void c_tcp_read(Int handle, struct Pos buffer, Int offset, Int size, Stack stack) {
-    uv_stream_t* stream = (uv_stream_t*)handle;
+    io_slot_t* open = io_handle_slot(handle);
+    if (open == NULL) {
+        erasePositive(buffer);
+        resume_Int(stack, UV_EBADF);
+        return;
+    }
+    uv_stream_t* stream = (uv_stream_t*)open->value;
 
     // At most one read is pending on a connection, its closure is in stream->data.
     if (stream->data != NULL) {
@@ -344,7 +521,13 @@ void c_tcp_write_cb(uv_write_t* request, int status) {
 }
 
 void c_tcp_write(Int handle, struct Pos buffer, Int offset, Int size, Stack stack) {
-    uv_stream_t* stream = (uv_stream_t*)handle;
+    io_slot_t* open = io_handle_slot(handle);
+    if (open == NULL) {
+        erasePositive(buffer);
+        resume_Int(stack, UV_EBADF);
+        return;
+    }
+    uv_stream_t* stream = (uv_stream_t*)open->value;
 
     uv_buf_t buf = uv_buf_init((char*)(c_bytearray_data(buffer) + offset), size);
 
@@ -373,7 +556,12 @@ void c_tcp_close_cb(uv_handle_t* handle) {
 }
 
 void c_tcp_close(Int handle, Stack stack) {
-    uv_handle_t* uv_handle = (uv_handle_t*)handle;
+    intptr_t value;
+    if (!io_handle_close(handle, &value)) {
+        resume_Pos(stack, Unit);
+        return;
+    }
+    uv_handle_t* uv_handle = (uv_handle_t*)value;
 
     // A read still pending ends as at end of file, much like on the JS backend.
     tcp_read_closure_t* pending = (tcp_read_closure_t*)uv_handle->data;
@@ -390,31 +578,25 @@ void c_tcp_close(Int handle, Stack stack) {
 
 void c_tcp_listen_cb(uv_stream_t* server, int status);
 
-void c_tcp_bind(String host, Int port, Stack stack) {
-    char* host_str = c_bytearray_into_nullterminated_string(host);
-    erasePositive(host);
+void c_tcp_bind(String address, Int port, Stack stack) {
+    struct sockaddr_storage addr;
+    int result = c_tcp_parse(address, port, &addr);
+
+    if (result < 0) {
+        resume_Int(stack, result);
+        return;
+    }
 
     uv_tcp_t* tcp_handle = malloc(sizeof(uv_tcp_t));
-    int result = uv_tcp_init(uv_default_loop(), tcp_handle);
+    result = uv_tcp_init(uv_default_loop(), tcp_handle);
 
     if (result < 0) {
         free(tcp_handle);
-        free(host_str);
         resume_Int(stack, result);
         return;
     }
 
     tcp_handle->data = NULL;  // no listen yet
-
-    struct sockaddr_in addr;
-    result = uv_ip4_addr(host_str, port, &addr);
-    free(host_str);
-
-    if (result < 0) {
-        uv_close((uv_handle_t*)tcp_handle, (uv_close_cb)free);
-        resume_Int(stack, result);
-        return;
-    }
 
     result = uv_tcp_bind(tcp_handle, (const struct sockaddr*)&addr, 0);
     if (result < 0) {
@@ -432,14 +614,20 @@ void c_tcp_bind(String host, Int port, Stack stack) {
         return;
     }
 
-    resume_Int(stack, (int64_t)tcp_handle);
+    resume_Int(stack, io_handle_new((intptr_t)tcp_handle));
 }
 
 Int c_tcp_port(Int listener) {
-    struct sockaddr_in addr;
+    io_slot_t* open = io_handle_slot(listener);
+    if (open == NULL) return UV_EBADF;
+
+    struct sockaddr_storage addr;
     int length = sizeof(addr);
-    int result = uv_tcp_getsockname((uv_tcp_t*)listener, (struct sockaddr*)&addr, &length);
-    return result < 0 ? result : ntohs(addr.sin_port);
+    int result = uv_tcp_getsockname((uv_tcp_t*)open->value, (struct sockaddr*)&addr, &length);
+    if (result < 0) return result;
+
+    if (addr.ss_family == AF_INET6) return ntohs(((struct sockaddr_in6*)&addr)->sin6_port);
+    return ntohs(((struct sockaddr_in*)&addr)->sin_port);
 }
 
 typedef struct {
@@ -464,7 +652,7 @@ void c_tcp_accept(uv_stream_t* server) {
 
     struct Neg handler = listen_closure->handler;
     shareNegative(handler);
-    run_Int(handler, (int64_t)client);
+    run_Int(handler, io_handle_new((intptr_t)client));
 }
 
 void c_tcp_listen_cb(uv_stream_t* server, int status) {
@@ -479,7 +667,13 @@ void c_tcp_listen_cb(uv_stream_t* server, int status) {
 }
 
 void c_tcp_listen(Int listener, struct Neg handler, Stack stack) {
-    uv_stream_t* server = (uv_stream_t*)listener;
+    io_slot_t* open = io_handle_slot(listener);
+    if (open == NULL) {
+        eraseNegative(handler);
+        resume_Int(stack, UV_EBADF);
+        return;
+    }
+    uv_stream_t* server = (uv_stream_t*)open->value;
 
     tcp_listen_closure_t* listen_closure = malloc(sizeof(tcp_listen_closure_t));
     listen_closure->stack = stack;
@@ -490,7 +684,12 @@ void c_tcp_listen(Int listener, struct Neg handler, Stack stack) {
 }
 
 void c_tcp_shutdown(Int handle, Stack stack) {
-    uv_handle_t* uv_handle = (uv_handle_t*)handle;
+    intptr_t value;
+    if (!io_handle_close(handle, &value)) {
+        resume_Pos(stack, Unit);
+        return;
+    }
+    uv_handle_t* uv_handle = (uv_handle_t*)value;
     tcp_listen_closure_t* listen_closure = (tcp_listen_closure_t*)uv_handle->data;
 
     uv_handle->data = stack;

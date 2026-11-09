@@ -4,11 +4,47 @@ module io
 // Event Loop
 // ----------
 
-// Shared by `io/filesystem` and `io/network`: Node's I/O expects a `Buffer`, and a byte array is a typed array,
-// so this views the same bytes without copying, and Node then writes into the array itself.
 extern jsNode """
   function io$toBuffer(bytes) {
     return Buffer.from(bytes.buffer, bytes.byteOffset, bytes.byteLength);
+  }
+"""
+
+// Files, connections and listeners are generational handles into a single table of open I/O resources,
+// as on the LLVM backend (see `io.c`): a slot of the table, and the generation which the slot had when it was opened.
+// Closing a resource starts the next generation of its slot, so its handles no longer match.
+// This is a sort-of cheap way to recover at least some safety :)
+extern jsNode """
+  const io$slots = [];
+  const io$free = [];
+
+  function io$open(value) {
+    const slot = io$free.length > 0 ? io$free.pop() : io$slots.push({ value: null, generation: 0, open: false }) - 1;
+    const entry = io$slots[slot];
+    entry.value = value;
+    entry.open = true;
+    return entry.generation * 0x100000000 + slot;
+  }
+
+  // The resource of a handle which is still open, or `undefined`.
+  function io$get(handle) {
+    if (handle < 0) return undefined;
+    const entry = io$slots[handle % 0x100000000];
+    return (entry && entry.open && entry.generation === Math.floor(handle / 0x100000000)) ? entry.value : undefined;
+  }
+
+  // Closes a handle which is still open and returns its resource, or returns `undefined`.
+  function io$close(handle) {
+    const value = io$get(handle);
+    if (value === undefined) return undefined;
+
+    const slot = handle % 0x100000000;
+    const entry = io$slots[slot];
+    entry.open = false;
+    entry.value = null;
+    entry.generation = (entry.generation + 1) % 0x200000;  // 21 bits, so that a handle stays an exact integer on JS
+    io$free.push(slot);
+    return value;
   }
 """
 

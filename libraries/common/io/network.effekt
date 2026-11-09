@@ -3,17 +3,23 @@ module io/network
 import stream
 import bytearray
 
+import io
 import io/error
 
 
-/// A TCP handle. Should not be inspected.
-type Connection = Int
+/// A TCP connection, either open or closed.
+/// Reading from or writing to a closed connection raises `EBADF`, but closing it again does nothing.
+/// Closing is explicit.
+extern type Connection =
+  jsNode "number"
+  llvm "i64"
 
 /// Reads up to `size` bytes from a TCP connection into `buffer`, starting at `offset`.
 ///
 /// Returns as soon as at least one byte is available, so the result may be smaller than `size`.
 /// Returns 0 once the peer has closed the connection (end of file), and every subsequent call returns 0 too.
 /// At most one read can be pending on a connection: another one raises `EALREADY`.
+/// Raises `EBADF` if the connection is closed.
 /// Panics unless:
 /// - `size` is positive (a read of nothing would look like end of file), and
 /// - `[offset, offset + size)` is a valid range inside `buffer` (like `bytearray::copy`).
@@ -29,6 +35,7 @@ def read(handle: Connection, buffer: ByteArray, offset: Int, size: Int): Int / E
 /// Writes `size` bytes from `buffer`, starting at `offset`, to a TCP connection.
 ///
 /// Returns once all bytes are written, and returns `size`.
+/// Raises `EBADF` if the connection is closed.
 /// Panics unless `[offset, offset + size)` is a valid range inside `buffer` (like `bytearray::copy`).
 def write(handle: Connection, buffer: ByteArray, offset: Int, size: Int): Int / Exception[IOError] = {
   if (buffer.inBounds(offset, size)) {
@@ -38,23 +45,56 @@ def write(handle: Connection, buffer: ByteArray, offset: Int, size: Int): Int / 
   }
 }
 
-/// Establishes a TCP connection to the specified host and port.
+/// An IP address (v4 or v6) resolved by the system from a previously given host.
+extern type Address =
+  jsNode "string"
+  llvm "%Pos"
+
+/// The text of the given `address`, such as `127.0.0.1` or `::1`.
+extern def toString(address: Address) at {}: String =
+  jsNode "${address}"
+  llvm "ret %Pos ${address}"
+
+/// Resolves the given `host`, a name or an IPv4 or IPv6 address, to its addresses, in the order which the system prefers.
+/// Raises the error of the resolver, such as `EAI_NONAME`, if it has none.
+def resolve(host: String): List[Address] / Exception[IOError] = {
+  val resolution = internal::checkResult(internal::resolve(host))
+  val addresses = list::collect[Address] { internal::addresses(resolution) }
+  internal::release(resolution)
+  addresses
+}
+
+/// Establishes a TCP connection to the given `address` and port.
+def connect(address: Address, port: Int): Connection / Exception[IOError] =
+  internal::connection(internal::checkResult(internal::connect(address, port)))
+
+/// Establishes a TCP connection to the given `host` and port,
+/// trying the addresses of the host in turn until one accepts (o/w raising the error of the last one).
 def connect(host: String, port: Int): Connection / Exception[IOError] =
-  internal::checkResult(internal::connect(host, port))
+  internal::eachAddress(resolve(host)) { address => connect(address, port) }
 
 /// Closes a TCP connection and releases associated resources.
 def close(handle: Connection): Unit =
   internal::close(handle)
 
-/// A TCP listener. Should not be inspected.
-type Listener = Int
+/// A TCP listener, either listening or shut down.
+/// Listening on a listener that was shut down raises `EBADF`, but shutting it down again does nothing.
+extern type Listener =
+  jsNode "number"
+  llvm "i64"
 
-/// Creates a TCP listener bound to the specified host and port, reserving the address (o/w raising `EADDRINUSE`).
+/// Creates a TCP listener bound to the given `address` and port, reserving it (o/w raising `EADDRINUSE`).
 /// Port 0 asks the system for a free port, which `port` then returns.
+def bind(address: Address, port: Int): Listener / Exception[IOError] =
+  internal::listener(internal::checkResult(internal::bind(address, port)))
+
+/// Creates a TCP listener bound to the given `host` and port,
+/// trying the addresses of the host in turn until one can be bound (o/w raising the error of the last one).
 def bind(host: String, port: Int): Listener / Exception[IOError] =
-  internal::checkResult(internal::bind(host, port))
+  internal::eachAddress(resolve(host)) { address => bind(address, port) }
 
 /// The port which the given `listener` is bound to.
+/// Raises `EBADF` if the listener was shut down.
 def port(listener: Listener): Int / Exception[IOError] =
   internal::checkResult(internal::port(listener))
 
@@ -88,19 +128,32 @@ def streaming[R](connection: Connection) { program: () => R / {next[ByteArray], 
 
 namespace internal {
 
+  /// The addresses of a `resolution`, in order.
+  def addresses(resolution: Int): Unit / emit[Address] = {
+    with val i = for[Int] { range(0, addressCount(resolution)) }
+    do emit(addressAt(resolution, i))
+  }
+
+  /// Runs `attempt` on each of the `addresses` of a host in turn until one succeeds,
+  /// and otherwise raises the error of the last attempt.
+  def eachAddress[R](addresses: List[Address]) { attempt: Address => R / Exception[IOError] }: R / Exception[IOError] = {
+    val Cons(first, rest) = addresses else panic("io/network: `resolve` returned no addresses")
+    firstSuccess(first, rest) {attempt}
+  }
+
   extern jsNode """
     const network$net = require('net');
+    const network$dns = require('node:dns');
 
-    // Error results are negative libuv codes, as Node reports them in `err.errno` (see `io/filesystem`).
-    // Their numbers differ between platforms, so the ones used here are looked up by name.
-    const network$code = {};
-    for (const [code, [name]] of require('node:util').getSystemErrorMap()) network$code[name] = code;
-    function network$errno(err) { return (typeof err.errno === 'number' && err.errno < 0) ? err.errno : network$code.UNKNOWN; }
+    // Resumes with a handle to the addresses of `host` (see `io`), in the order of the system, or with the (negative) error.
+    function network$resolve(host, callback) {
+      network$dns.lookup(host, { all: true, verbatim: true }, (err, addresses) => {
+        if (err) { callback(network$errno(err)); } else { callback(io$open(addresses.map(entry => entry.address))); }
+      });
+    }
 
-    const network$handles = new Map();
-    let   network$next    = 1;
-    function network$alloc(entry) { const h = network$next++; network$handles.set(h, entry); return h; }
-    function network$free(h)      { network$handles.delete(h); }
+    // Error results are negative libuv codes, as Node reports them in `err.errno` (see `io/error`).
+    function network$errno(err) { return (typeof err.errno === 'number' && err.errno < 0) ? err.errno : error$code.UNKNOWN; }
 
     // A connection records errors and end of file as they happen, and wakes the one which is pending a read.
     // Its listeners stay attached for its whole life, so an error with no read pending is kept
@@ -120,7 +173,7 @@ namespace internal {
       socket.pause();
       const onConnect = () => {
         socket.removeListener('error', onError);
-        callback(network$alloc(network$connection(socket)));
+        callback(io$open(network$connection(socket)));
       };
       const onError = err => {
         socket.removeListener('connect', onConnect);
@@ -132,9 +185,9 @@ namespace internal {
     }
 
     function network$read(handle, buffer, offset, size, callback) {
-      const conn = network$handles.get(handle);
-      if (!conn || !conn.socket) { callback(network$code.EBADF); return; }
-      if (conn.waiter) { callback(network$code.EALREADY); return; }
+      const conn = io$get(handle);
+      if (conn === undefined) { callback(error$code.EBADF); return; }
+      if (conn.waiter) { callback(error$code.EALREADY); return; }
 
       const attempt = () => {
         const chunk = conn.socket.read();
@@ -156,8 +209,8 @@ namespace internal {
     }
 
     function network$write(handle, buffer, offset, size, callback) {
-      const conn = network$handles.get(handle);
-      if (!conn || !conn.socket) { callback(network$code.EBADF); return; }
+      const conn = io$get(handle);
+      if (conn === undefined) { callback(error$code.EBADF); return; }
       if (conn.error) { callback(network$errno(conn.error)); return; }
 
       conn.socket.write(io$toBuffer(buffer).subarray(offset, offset + size), err => {
@@ -166,9 +219,8 @@ namespace internal {
     }
 
     function network$close(handle, callback) {
-      const conn = network$handles.get(handle);
-      if (!conn || !conn.socket) { callback($effekt.unit); return; }
-      network$free(handle);
+      const conn = io$close(handle);
+      if (conn === undefined) { callback($effekt.unit); return; }
       const { socket } = conn;
       if (socket.destroyed) { callback($effekt.unit); return; }
       socket.end(() => { socket.destroy(); callback($effekt.unit); });
@@ -188,34 +240,33 @@ namespace internal {
       server.listen(port, host, () => {
         server.removeListener('error', onError);
         server.on('error', _err => {});
-        callback(network$alloc(entry));
+        callback(io$open(entry));
       });
     }
 
     function network$port(listenerHandle) {
-      const entry = network$handles.get(listenerHandle);
-      if (!entry || !entry.server) return network$code.EBADF;
+      const entry = io$get(listenerHandle);
+      if (entry === undefined) return error$code.EBADF;
       return entry.server.address().port;
     }
 
     // Settles with `EBADF` if the listener was shut down, and with 0 once `shutdown` is called.
     // On the other hand, errors of listening, such as `EADDRINUSE`, are raised by `bind`.
     function network$listen(listenerHandle, handler, callback) {
-      const entry = network$handles.get(listenerHandle);
-      if (!entry || !entry.server) { callback(network$code.EBADF); return; }
+      const entry = io$get(listenerHandle);
+      if (entry === undefined) { callback(error$code.EBADF); return; }
 
       entry.finished = () => callback(0);
       entry.accept = socket => {
-        const connHandle = network$alloc(network$connection(socket));
+        const connHandle = io$open(network$connection(socket));
         $effekt.runToplevel((ks, k) => handler(connHandle, ks, k));
       };
       entry.pending.splice(0).forEach(entry.accept);
     }
 
     function network$shutdown(listenerHandle, callback) {
-      const entry = network$handles.get(listenerHandle);
-      if (!entry || !entry.server) { callback($effekt.unit); return; }
-      network$free(listenerHandle);
+      const entry = io$close(listenerHandle);
+      if (entry === undefined) { callback($effekt.unit); return; }
       // Stop accepting without waiting for open connections to end (to avoid a deadlock on Node)
       entry.server.close();
       if (entry.finished) entry.finished();
@@ -223,63 +274,106 @@ namespace internal {
     }
   """
 
-  extern def connect(host: String, port: Int) at async: Int =
-    jsNode "$effekt.capture(k => network$connect(${host}, ${port}, k))"
+  extern def resolve(host: String) at async: Int =
+    jsNode "$effekt.capture(k => network$resolve(${host}, k))"
     llvm """
-      notail call void @c_tcp_connect(%Pos ${host}, %Int ${port}, %Stack %stack)
+      notail call void @c_tcp_resolve(%Pos ${host}, %Stack %stack)
       ret void
     """
 
-  extern def read(handle: Int, buffer: ByteArray, offset: Int, size: Int) at async: Int =
+  /// The number of addresses in a `resolution`, and each of them by its index, as for `args`.
+  extern def addressCount(resolution: Int) at io: Int =
+    jsNode "io$get(${resolution}).length"
+    llvm """
+      %count = call %Int @c_tcp_address_count(%Int ${resolution})
+      ret %Int %count
+    """
+
+  extern def addressAt(resolution: Int, index: Int) at io: Address =
+    jsNode "io$get(${resolution})[${index}]"
+    llvm """
+      %address = call %Pos @c_tcp_address(%Int ${resolution}, %Int ${index})
+      ret %Pos %address
+    """
+
+  extern def release(resolution: Int) at io: Unit =
+    jsNode "(io$close(${resolution}), $effekt.unit)"
+    llvm """
+      call void @c_tcp_resolution_release(%Int ${resolution})
+      ret %Pos zeroinitializer
+    """
+
+  extern def connect(address: Address, port: Int) at async: Int =
+    jsNode "$effekt.capture(k => network$connect(${address}, ${port}, k))"
+    llvm """
+      notail call void @c_tcp_connect(%Pos ${address}, %Int ${port}, %Stack %stack)
+      ret void
+    """
+
+  extern def read(handle: Connection, buffer: ByteArray, offset: Int, size: Int) at async: Int =
     jsNode "$effekt.capture(k => network$read(${handle}, ${buffer}, ${offset}, ${size}, k))"
     llvm """
       notail call void @c_tcp_read(%Int ${handle}, %Pos ${buffer}, %Int ${offset}, %Int ${size}, %Stack %stack)
       ret void
     """
 
-  extern def write(handle: Int, buffer: ByteArray, offset: Int, size: Int) at async: Int =
+  extern def write(handle: Connection, buffer: ByteArray, offset: Int, size: Int) at async: Int =
     jsNode "$effekt.capture(k => network$write(${handle}, ${buffer}, ${offset}, ${size}, k))"
     llvm """
       notail call void @c_tcp_write(%Int ${handle}, %Pos ${buffer}, %Int ${offset}, %Int ${size}, %Stack %stack)
       ret void
     """
 
-  extern def close(handle: Int) at async: Unit =
+  extern def close(handle: Connection) at async: Unit =
     jsNode "$effekt.capture(k => network$close(${handle}, k))"
     llvm """
       notail call void @c_tcp_close(%Int ${handle}, %Stack %stack)
       ret void
     """
 
-  extern def bind(host: String, port: Int) at async: Int =
-    jsNode "$effekt.capture(k => network$bind(${host}, ${port}, k))"
+  extern def bind(address: Address, port: Int) at async: Int =
+    jsNode "$effekt.capture(k => network$bind(${address}, ${port}, k))"
     llvm """
-      notail call void @c_tcp_bind(%Pos ${host}, %Int ${port}, %Stack %stack)
+      notail call void @c_tcp_bind(%Pos ${address}, %Int ${port}, %Stack %stack)
       ret void
     """
 
-  extern def port(listener: Int) at io: Int =
+  extern def port(listener: Listener) at io: Int =
     jsNode "network$port(${listener})"
     llvm """
       %result = call %Int @c_tcp_port(%Int ${listener})
       ret %Int %result
     """
 
-  extern def listen(listener: Int, handler: Connection => Unit at {io, async, global}) at async: Int =
+  extern def listen(listener: Listener, handler: Connection => Unit at {io, async, global}) at async: Int =
     jsNode "$effekt.capture(k => network$listen(${listener}, ${handler}, k))"
     llvm """
       notail call void @c_tcp_listen(%Int ${listener}, %Neg ${handler}, %Stack %stack)
       ret void
     """
 
-  extern def shutdown(handle: Int) at async: Unit =
+  extern def shutdown(handle: Listener) at async: Unit =
     jsNode "$effekt.capture(k => network$shutdown(${handle}, k))"
     llvm """
       notail call void @c_tcp_shutdown(%Int ${handle}, %Stack %stack)
       ret void
     """
 
+  /// The connection whose handle `connect` returned, or which `listen` passed to its handler.
+  extern def connection(handle: Int) at {}: Connection =
+    jsNode "${handle}"
+    llvm "ret %Int ${handle}"
+
+  /// The listener whose handle `bind` returned.
+  extern def listener(handle: Int) at {}: Listener =
+    jsNode "${handle}"
+    llvm "ret %Int ${handle}"
+
   extern llvm """
+    declare void @c_tcp_resolve(%Pos, %Stack)
+    declare %Int @c_tcp_address_count(%Int)
+    declare %Pos @c_tcp_address(%Int, %Int)
+    declare void @c_tcp_resolution_release(%Int)
     declare void @c_tcp_connect(%Pos, %Int, %Stack)
     declare void @c_tcp_read(%Int, %Pos, %Int, %Int, %Stack)
     declare void @c_tcp_write(%Int, %Pos, %Int, %Int, %Stack)
