@@ -1,6 +1,18 @@
-[error] examples/neg/typer/mismatch/expected_function_got_other_effects.effekt:9:17: { other } is not equal to { fail } [typer]
+[error] examples/neg/typer/mismatch/expected_function_got_other_effects.effekt:9:17: Expected type [typer]
+  () => Unit / { other } at {}
+but got type
+  () => Unit / { fail } at ?C
   val _ = apply(box mayFail)
                 ^^^^^^^^^^^
-[error] examples/neg/typer/mismatch/expected_function_got_other_effects.effekt:9:21: { other } is not equal to { fail } [typer]
+[info] examples/neg/typer/mismatch/expected_function_got_other_effects.effekt:9:17: Expected the effects { other } but got { fail }.
+  val _ = apply(box mayFail)
+                ^^^^^^^^^^^
+[error] examples/neg/typer/mismatch/expected_function_got_other_effects.effekt:9:21: Expected type [typer]
+  () => Unit / { other }
+but got type
+  () => Unit / { fail }
+  val _ = apply(box mayFail)
+                    ^^^^^^^
+[info] examples/neg/typer/mismatch/expected_function_got_other_effects.effekt:9:21: Expected the effects { other } but got { fail }.
   val _ = apply(box mayFail)
                     ^^^^^^^

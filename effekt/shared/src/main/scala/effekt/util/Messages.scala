@@ -70,20 +70,36 @@ object messages {
 
   case class Message(text: StructuredMessage) extends Reason {
     def render(using S: Style): String = text.stringContext.s(text.args.map {
-      case id: source.IdDef    => S.code(TypePrinter.show(id))
-      case id: source.IdRef    => S.code(TypePrinter.show(id))
-      case name: Name          => S.code(name.name)
-      case t: symbols.Type     => S.code(TypePrinter.show(t))
-      case t: Capture          => S.code(TypePrinter.show(t))
-      case t: Captures         => S.code(TypePrinter.show(t))
-      case t: Effects          => S.code(TypePrinter.show(t))
-      case n: Int              => S.code(n.toString)
-      case nested: Diagnostic  => S.contentWithSubdiagnostics(nested)
-      case other               => other.toString
+      case id: source.IdDef          => S.code(TypePrinter.show(id))
+      case id: source.IdRef          => S.code(TypePrinter.show(id))
+      case name: Name                => S.code(name.name)
+      case t: symbols.Type           => S.code(TypePrinter.show(t))
+      case t: Capture                => S.code(TypePrinter.show(t))
+      case t: Captures               => S.code(TypePrinter.show(t))
+      case t: Effects                => S.code(TypePrinter.show(t))
+      case n: Int                    => S.code(n.toString)
+      case nested: Diagnostic        => S.contentWithSubdiagnostics(nested)
+      case nested: StructuredMessage => Message(nested).render
+      case other                     => other.toString
     }*)
   }
   object Message {
     def apply(text: String): Message = Message(pretty"${text}")
+  }
+
+  def pluralized(n: Int, singular: String): String =
+    if (n == 1) s"$n $singular" else s"$n ${singular}s"
+
+  case class TypeMismatch(expected: symbols.Type, got: symbols.Type) extends Reason {
+    def render(using S: Style): String = {
+      val expectedShown = TypePrinter.show(expected)
+      val gotShown = TypePrinter.show(got)
+      if ((expectedShown.size + gotShown.size) < 25) { // TODO: think of a better way to do this...
+        s"Expected ${S.code(expectedShown)} but got ${S.code(gotShown)}."
+      } else {
+        s"Expected type\n  ${S.code(expectedShown)}\nbut got type\n  ${S.code(gotShown)}"
+      }
+    }
   }
 
   private def fullname(n: Name): String = n match {
@@ -272,6 +288,8 @@ object messages {
     def error(msg: StructuredMessage): Unit = report(structuredMessage(msg, Severity.Error))
     def error(msg: StructuredMessage)(subdiagnostics: Subdiagnostics ?=> Unit): Unit =
       report(structuredMessage(msg, Severity.Error).copy(subdiagnostics = Subdiagnostics(subdiagnostics)))
+    def error(reason: Reason)(subdiagnostics: Subdiagnostics ?=> Unit): Unit =
+      report(diagnostic(reason, Severity.Error).copy(subdiagnostics = Subdiagnostics(subdiagnostics)))
 
     def panic(msg: Diagnostic): Nothing = throw CompilerPanic(msg)
     def panic(msg: String): Nothing = panic(plainMessage(msg, Severity.Error))
@@ -291,6 +309,8 @@ object messages {
     def abort(msg: StructuredMessage)(subdiagnostics: Subdiagnostics ?=> Unit): Nothing =
       abort(structuredMessage(msg, Severity.Error).copy(subdiagnostics = Subdiagnostics(subdiagnostics)))
     def abort(reason: Reason): Nothing = abort(diagnostic(reason, Severity.Error))
+    def abort(reason: Reason)(subdiagnostics: Subdiagnostics ?=> Unit): Nothing =
+      abort(diagnostic(reason, Severity.Error).copy(subdiagnostics = Subdiagnostics(subdiagnostics)))
 
     def reraise(msg: EffektMessages): Unit = messaging.append(msg)
 

@@ -139,7 +139,7 @@ object Typer extends Phase[NameResolved, Typechecked] {
         val Result(thnTpe, thnEffs) = checkStmt(thn, expected)
         val Result(elsTpe, elsEffs) = checkStmt(els, expected)
 
-        Result(join(expected, List(thnTpe -> Some(thn), elsTpe -> Some(els))), guardEffs ++ thnEffs ++ elsEffs)
+        Result(join(expected, List(thnTpe -> ErrorContext.Arm.IfBranch(thn), elsTpe -> ErrorContext.Arm.IfBranch(els))), guardEffs ++ thnEffs ++ elsEffs)
 
       case source.While(guards, body, default, _) =>
         val Result((), guardEffs) = checkGuards(guards)
@@ -149,7 +149,7 @@ object Typer extends Phase[NameResolved, Typechecked] {
           checkStmt(s, expectedType)
         }.getOrElse(Result(TUnit, ConcreteEffects.empty))
 
-        Result(join(expected, List(bodyTpe -> Some(body), defaultTpe -> None)), defaultEffs ++ bodyEffs ++ guardEffs)
+        Result(join(expected, List(bodyTpe -> ErrorContext.Arm.WhileBranch(Some(body)), defaultTpe -> ErrorContext.Arm.WhileBranch(default))), defaultEffs ++ bodyEffs ++ guardEffs)
 
       case source.Var(id, _) => id.symbol match {
         case x: RefBinder => Context.lookup(x) match {
@@ -351,7 +351,7 @@ object Typer extends Phase[NameResolved, Typechecked] {
             }
         }
 
-        val tpesAndTerms = clauses.map {
+        val arms = clauses.map {
           case source.MatchClause(p, guards, body, _) =>
             // (3) infer types for pattern(s)
             p match {
@@ -369,17 +369,17 @@ object Typer extends Phase[NameResolved, Typechecked] {
             val Result(clTpe, clEff) = Context in { checkStmt(body, expected) }
 
             resEff = resEff ++ clEff ++ guardEffs
-            clTpe -> Some(body)
+            clTpe -> ErrorContext.Arm.MatchClause(body)
         } ++ default.map { body =>
           val Result(defaultTpe, defaultEff) = Context in { checkStmt(body, expected) }
           resEff = resEff ++ defaultEff
-          defaultTpe -> Some(body)
+          defaultTpe -> ErrorContext.Arm.MatchClause(body)
         }
 
         // Clauses could in general be empty if there are no constructors
         // In that case the scrutinee couldn't have been constructed and
         // we can unify with everything.
-        Result(join(expected, tpesAndTerms), resEff)
+        Result(join(expected, arms), resEff)
 
       case source.Hole(id, Template(strings, args), span) =>
         val h = id.symbol.asHole
@@ -659,7 +659,7 @@ object Typer extends Phase[NameResolved, Typechecked] {
     case source.IgnorePattern(_)    => Map.empty
     case p @ source.AnyPattern(id, _) => Map(p.symbol -> sc)
     case p @ source.LiteralPattern(lit, _) =>
-      Context.requireSubtype(sc, lit.tpe, ErrorContext.PatternMatch(p))
+      Context.requireSubtype(sc, lit.tpe, ErrorContext.PatternMatch(sc, lit.tpe, p))
       Map.empty
     case p @ source.TagPattern(id, patterns, _) =>
 
@@ -1373,9 +1373,6 @@ object Typer extends Phase[NameResolved, Typechecked] {
     // Type args are OK iff nothing provided or perfectly aligned
     val typesOk = types.gotCount == 0 || types.isAligned
 
-    def pluralized(n: Int, singular: String): String =
-      if (n == 1) s"$n $singular" else s"$n ${singular}s"
-
     def hints(using Subdiagnostics): Unit = {
       // Hint: Tuple vs arg-list confusion (also covers lambda case)
       if (!values.isAligned) {
@@ -1697,7 +1694,7 @@ object Typer extends Phase[NameResolved, Typechecked] {
     }
 
   def matchPattern(scrutinee: ValueType, patternTpe: ValueType, pattern: source.MatchPattern)(using Context): Unit =
-    Context.requireSubtype(scrutinee, patternTpe, ErrorContext.PatternMatch(pattern))
+    Context.requireSubtype(scrutinee, patternTpe, ErrorContext.PatternMatch(scrutinee, patternTpe, pattern))
 
   def matchExpected(got: ValueType, expected: ValueType, coercible: Option[source.Tree])(using Context): Unit =
     Context.requireSubtype(got, expected,
@@ -1706,19 +1703,22 @@ object Typer extends Phase[NameResolved, Typechecked] {
   /**
    * Computes the join of all types, only called to merge the different arms of if and match
    */
-  def join(expected: Option[ValueType], tpesAndTerms: List[(ValueType, Option[source.Tree])])(using Context): ValueType =
-    val tpes = tpesAndTerms.map(_._1)
-    val result = tpes match {
+  def join(expected: Option[ValueType], arms: List[(ValueType, ErrorContext.Arm)])(using Context): ValueType =
+    val result = arms match {
       case Nil => expected.getOrElse(TBottom) // TODO actually this type is arbitrary, not bottom!
-      case first :: rest => rest.foldLeft[ValueType](first) { (t1, t2) =>
-        Context.mergeValueTypes(t1, t2, ErrorContext.MergeTypes(Context.unification(t1), Context.unification(t2)))
-      }
+      case first :: rest =>
+        // the arm named for the types merged so far is the first one that is not `Nothing`
+        val (merged, _) = rest.foldLeft[(ValueType, ErrorContext.Arm)](first) { case ((t1, arm1), (t2, arm2)) =>
+          val t = Context.mergeValueTypes(t1, t2, ErrorContext.MergeTypes(Context.unification(t1), Context.unification(t2), arm1, arm2))
+          (t, if (t1 == TBottom) arm2 else arm1)
+        }
+        merged
     }
     // check again to insert coercions
     // TODO this duplicates errors
-    tpesAndTerms.foreach { case (tpe, term) =>
-      Context.requireSubtype(tpe, result, ErrorContext.Expected(tpe, result, term.getOrElse(Context.focus),
-        term.map(t => c => Context.coerce(t, c))))
+    arms.foreach { case (tpe, arm) =>
+      Context.requireSubtype(tpe, result, ErrorContext.Expected(tpe, result, arm.tree.getOrElse(Context.focus),
+        arm.tree.map { t => c => Context.coerce(t, c) }))
     }
     result
 

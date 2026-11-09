@@ -1,3 +1,9 @@
-[error] examples/neg/typer/mismatch/expected_function_got_more_effects.effekt:8:21: Capture parameter count does not match () => Unit / { fail } vs. () => Unit [typer]
+[error] examples/neg/typer/mismatch/expected_function_got_more_effects.effekt:8:21: Expected type [typer]
+  () => Unit
+but got type
+  () => Unit / { fail }
+  val _ = apply(box mayFail)
+                    ^^^^^^^
+[info] examples/neg/typer/mismatch/expected_function_got_more_effects.effekt:8:21: Expected the effects {} but got { fail }.
   val _ = apply(box mayFail)
                     ^^^^^^^

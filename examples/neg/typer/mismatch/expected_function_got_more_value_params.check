@@ -1,3 +1,9 @@
-[error] examples/neg/typer/mismatch/expected_function_got_more_value_params.effekt:6:21: Value parameter count does not match (Int, Int) => Bool vs. Int => Bool [typer]
+[error] examples/neg/typer/mismatch/expected_function_got_more_value_params.effekt:6:21: Expected type [typer]
+  Int => Bool
+but got type
+  (Int, Int) => Bool
+  val _ = apply(box both)
+                    ^^^^
+[info] examples/neg/typer/mismatch/expected_function_got_more_value_params.effekt:6:21: Expected 1 value parameter but got 2.
   val _ = apply(box both)
                     ^^^^

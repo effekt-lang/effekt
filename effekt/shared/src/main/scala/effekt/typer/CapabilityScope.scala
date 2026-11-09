@@ -3,7 +3,7 @@ package typer
 
 import effekt.context.Context
 import effekt.{ source, symbols }
-import effekt.util.messages.ErrorMessageReifier
+import effekt.util.messages.{ErrorMessageReifier, StructuredMessage}
 
 /**
  * Invariant: Like the result effects of Typer, all types of bound capabilities need to be concrete!
@@ -31,7 +31,7 @@ object DummyUnifier extends TypeUnifier {
     unifyValueTypes(
       C.substitution.substitute(t1),
       C.substitution.substitute(t2),
-      ErrorContext.MergeTypes(t1, t2))
+      ErrorContext.Expected(t1, t2, C.focus, None))
     true
   } catch {
     case UnificationFailed => false
@@ -44,9 +44,10 @@ object DummyUnifier extends TypeUnifier {
 
 
   // NOTE(jiribenes, 2025-11-12): I think the 'abort' should never be triggered here.
-  override def abort(msg: String, ctx: ErrorContext): Nothing = sys error "Unexpected abort in DummyUnifier!"
+  override def abort(issue: StructuredMessage, ctx: ErrorContext): Nothing = sys error "Unexpected abort in DummyUnifier!"
+  override def abort(left: symbols.Type, right: symbols.Type, ctx: ErrorContext): Nothing = sys error "Unexpected abort in DummyUnifier!"
 
-  override def error(msg: String, ctx: ErrorContext): Unit = throw UnificationFailed
+  override def error(issue: StructuredMessage, ctx: ErrorContext): Unit = throw UnificationFailed
   override def error(left: symbols.Type, right: symbols.Type, ctx: ErrorContext): Unit = throw UnificationFailed
 }
 
@@ -73,7 +74,7 @@ class BindSome(binder: source.Tree, capabilities: Map[symbols.InterfaceType, sym
       case List((handlerTpe, cap)) =>
         (tpe.args zip handlerTpe.args).foreach { case (inferred, concrete) =>
           // Enforce subtype constraints for the type params of the chosen handler
-          C.requireSubtype(inferred, concrete, ErrorContext.MergeTypes(inferred, concrete))
+          C.requireSubtype(inferred, concrete, ErrorContext.Expected(inferred, concrete, C.focus, None))
         }
         Some(cap)
       case _ => None // no compatible match or multiple (ambiguous)
