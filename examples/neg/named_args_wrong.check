@@ -1,0 +1,244 @@
+[error] examples/neg/named_args_wrong.effekt:4:3: Cannot typecheck call. [typer]
+There are multiple overloads, which all fail to check:
+
+Possible overload: array::println of type Array[Int] => Unit
+  Cannot typecheck call.
+  There are multiple overloads, which all fail to check:
+  
+  Possible overload: named_args_wrong::length of type (Double, Double) => Double
+    Expected Array[Int] but got Double.
+    Unexpected name in named argument: got y, but expected x in this position. Named arguments must still be in the correct position.
+    Unexpected name in named argument: got x, but expected y in this position. Named arguments must still be in the correct position.
+  
+  Possible overload: effekt::length of type String => Int
+    Wrong number of arguments to length: expected 1 value argument, but got 2 value arguments
+
+Possible overload: array::println of type Array[Double] => Unit
+  Cannot typecheck call.
+  There are multiple overloads, which all fail to check:
+  
+  Possible overload: named_args_wrong::length of type (Double, Double) => Double
+    Expected Array[Double] but got Double.
+    Unexpected name in named argument: got y, but expected x in this position. Named arguments must still be in the correct position.
+    Unexpected name in named argument: got x, but expected y in this position. Named arguments must still be in the correct position.
+  
+  Possible overload: effekt::length of type String => Int
+    Wrong number of arguments to length: expected 1 value argument, but got 2 value arguments
+
+Possible overload: array::println of type Array[Bool] => Unit
+  Cannot typecheck call.
+  There are multiple overloads, which all fail to check:
+  
+  Possible overload: named_args_wrong::length of type (Double, Double) => Double
+    Expected Array[Bool] but got Double.
+    Unexpected name in named argument: got y, but expected x in this position. Named arguments must still be in the correct position.
+    Unexpected name in named argument: got x, but expected y in this position. Named arguments must still be in the correct position.
+  
+  Possible overload: effekt::length of type String => Int
+    Wrong number of arguments to length: expected 1 value argument, but got 2 value arguments
+
+Possible overload: array::println of type Array[String] => Unit
+  Cannot typecheck call.
+  There are multiple overloads, which all fail to check:
+  
+  Possible overload: named_args_wrong::length of type (Double, Double) => Double
+    Expected Array[String] but got Double.
+    Unexpected name in named argument: got y, but expected x in this position. Named arguments must still be in the correct position.
+    Unexpected name in named argument: got x, but expected y in this position. Named arguments must still be in the correct position.
+  
+  Possible overload: effekt::length of type String => Int
+    Wrong number of arguments to length: expected 1 value argument, but got 2 value arguments
+
+Possible overload: effekt::println of type String => Unit
+  Cannot typecheck call.
+  There are multiple overloads, which all fail to check:
+  
+  Possible overload: named_args_wrong::length of type (Double, Double) => Double
+    Expected String but got Double.
+    Unexpected name in named argument: got y, but expected x in this position. Named arguments must still be in the correct position.
+    Unexpected name in named argument: got x, but expected y in this position. Named arguments must still be in the correct position.
+  
+  Possible overload: effekt::length of type String => Int
+    Wrong number of arguments to length: expected 1 value argument, but got 2 value arguments
+
+Possible overload: effekt::println of type Int => Unit
+  Cannot typecheck call.
+  There are multiple overloads, which all fail to check:
+  
+  Possible overload: named_args_wrong::length of type (Double, Double) => Double
+    Expected Int but got Double.
+    Unexpected name in named argument: got y, but expected x in this position. Named arguments must still be in the correct position.
+    Unexpected name in named argument: got x, but expected y in this position. Named arguments must still be in the correct position.
+  
+  Possible overload: effekt::length of type String => Int
+    Wrong number of arguments to length: expected 1 value argument, but got 2 value arguments
+
+Possible overload: effekt::println of type Unit => Unit
+  Cannot typecheck call.
+  There are multiple overloads, which all fail to check:
+  
+  Possible overload: named_args_wrong::length of type (Double, Double) => Double
+    Expected Unit but got Double.
+    Unexpected name in named argument: got y, but expected x in this position. Named arguments must still be in the correct position.
+    Unexpected name in named argument: got x, but expected y in this position. Named arguments must still be in the correct position.
+  
+  Possible overload: effekt::length of type String => Int
+    Wrong number of arguments to length: expected 1 value argument, but got 2 value arguments
+
+Possible overload: effekt::println of type Double => Unit
+  Cannot typecheck call.
+  There are multiple overloads, which all fail to check:
+  
+  Possible overload: named_args_wrong::length of type (Double, Double) => Double
+    Unexpected name in named argument: got y, but expected x in this position. Named arguments must still be in the correct position.
+    Unexpected name in named argument: got x, but expected y in this position. Named arguments must still be in the correct position.
+  
+  Possible overload: effekt::length of type String => Int
+    Wrong number of arguments to length: expected 1 value argument, but got 2 value arguments
+
+Possible overload: effekt::println of type Bool => Unit
+  Cannot typecheck call.
+  There are multiple overloads, which all fail to check:
+  
+  Possible overload: named_args_wrong::length of type (Double, Double) => Double
+    Expected Bool but got Double.
+    Unexpected name in named argument: got y, but expected x in this position. Named arguments must still be in the correct position.
+    Unexpected name in named argument: got x, but expected y in this position. Named arguments must still be in the correct position.
+  
+  Possible overload: effekt::length of type String => Int
+    Wrong number of arguments to length: expected 1 value argument, but got 2 value arguments
+
+Possible overload: effekt::println of type Byte => Unit
+  Cannot typecheck call.
+  There are multiple overloads, which all fail to check:
+  
+  Possible overload: named_args_wrong::length of type (Double, Double) => Double
+    Expected Byte but got Double.
+    Unexpected name in named argument: got y, but expected x in this position. Named arguments must still be in the correct position.
+    Unexpected name in named argument: got x, but expected y in this position. Named arguments must still be in the correct position.
+  
+  Possible overload: effekt::length of type String => Int
+    Wrong number of arguments to length: expected 1 value argument, but got 2 value arguments
+
+Possible overload: effekt::println of type Char => Unit
+  Cannot typecheck call.
+  There are multiple overloads, which all fail to check:
+  
+  Possible overload: named_args_wrong::length of type (Double, Double) => Double
+    Expected Char but got Double.
+    Unexpected name in named argument: got y, but expected x in this position. Named arguments must still be in the correct position.
+    Unexpected name in named argument: got x, but expected y in this position. Named arguments must still be in the correct position.
+  
+  Possible overload: effekt::length of type String => Int
+    Wrong number of arguments to length: expected 1 value argument, but got 2 value arguments
+
+Possible overload: effekt::println of type Ordering => Unit
+  Cannot typecheck call.
+  There are multiple overloads, which all fail to check:
+  
+  Possible overload: named_args_wrong::length of type (Double, Double) => Double
+    Expected Ordering but got Double.
+    Unexpected name in named argument: got y, but expected x in this position. Named arguments must still be in the correct position.
+    Unexpected name in named argument: got x, but expected y in this position. Named arguments must still be in the correct position.
+  
+  Possible overload: effekt::length of type String => Int
+    Wrong number of arguments to length: expected 1 value argument, but got 2 value arguments
+
+Possible overload: list::println of type List[Int] => Unit
+  Cannot typecheck call.
+  There are multiple overloads, which all fail to check:
+  
+  Possible overload: named_args_wrong::length of type (Double, Double) => Double
+    Expected List[Int] but got Double.
+    Unexpected name in named argument: got y, but expected x in this position. Named arguments must still be in the correct position.
+    Unexpected name in named argument: got x, but expected y in this position. Named arguments must still be in the correct position.
+  
+  Possible overload: effekt::length of type String => Int
+    Wrong number of arguments to length: expected 1 value argument, but got 2 value arguments
+
+Possible overload: list::println of type List[Double] => Unit
+  Cannot typecheck call.
+  There are multiple overloads, which all fail to check:
+  
+  Possible overload: named_args_wrong::length of type (Double, Double) => Double
+    Expected List[Double] but got Double.
+    Unexpected name in named argument: got y, but expected x in this position. Named arguments must still be in the correct position.
+    Unexpected name in named argument: got x, but expected y in this position. Named arguments must still be in the correct position.
+  
+  Possible overload: effekt::length of type String => Int
+    Wrong number of arguments to length: expected 1 value argument, but got 2 value arguments
+
+Possible overload: list::println of type List[Char] => Unit
+  Cannot typecheck call.
+  There are multiple overloads, which all fail to check:
+  
+  Possible overload: named_args_wrong::length of type (Double, Double) => Double
+    Expected List[Char] but got Double.
+    Unexpected name in named argument: got y, but expected x in this position. Named arguments must still be in the correct position.
+    Unexpected name in named argument: got x, but expected y in this position. Named arguments must still be in the correct position.
+  
+  Possible overload: effekt::length of type String => Int
+    Wrong number of arguments to length: expected 1 value argument, but got 2 value arguments
+
+Possible overload: list::println of type List[Bool] => Unit
+  Cannot typecheck call.
+  There are multiple overloads, which all fail to check:
+  
+  Possible overload: named_args_wrong::length of type (Double, Double) => Double
+    Expected List[Bool] but got Double.
+    Unexpected name in named argument: got y, but expected x in this position. Named arguments must still be in the correct position.
+    Unexpected name in named argument: got x, but expected y in this position. Named arguments must still be in the correct position.
+  
+  Possible overload: effekt::length of type String => Int
+    Wrong number of arguments to length: expected 1 value argument, but got 2 value arguments
+
+Possible overload: list::println of type List[String] => Unit
+  Cannot typecheck call.
+  There are multiple overloads, which all fail to check:
+  
+  Possible overload: named_args_wrong::length of type (Double, Double) => Double
+    Expected List[String] but got Double.
+    Unexpected name in named argument: got y, but expected x in this position. Named arguments must still be in the correct position.
+    Unexpected name in named argument: got x, but expected y in this position. Named arguments must still be in the correct position.
+  
+  Possible overload: effekt::length of type String => Int
+    Wrong number of arguments to length: expected 1 value argument, but got 2 value arguments
+
+Possible overload: option::println of type Option[Int] => Unit
+  Cannot typecheck call.
+  There are multiple overloads, which all fail to check:
+  
+  Possible overload: named_args_wrong::length of type (Double, Double) => Double
+    Expected Option[Int] but got Double.
+    Unexpected name in named argument: got y, but expected x in this position. Named arguments must still be in the correct position.
+    Unexpected name in named argument: got x, but expected y in this position. Named arguments must still be in the correct position.
+  
+  Possible overload: effekt::length of type String => Int
+    Wrong number of arguments to length: expected 1 value argument, but got 2 value arguments
+
+Possible overload: option::println of type Option[Double] => Unit
+  Cannot typecheck call.
+  There are multiple overloads, which all fail to check:
+  
+  Possible overload: named_args_wrong::length of type (Double, Double) => Double
+    Expected Option[Double] but got Double.
+    Unexpected name in named argument: got y, but expected x in this position. Named arguments must still be in the correct position.
+    Unexpected name in named argument: got x, but expected y in this position. Named arguments must still be in the correct position.
+  
+  Possible overload: effekt::length of type String => Int
+    Wrong number of arguments to length: expected 1 value argument, but got 2 value arguments
+
+Possible overload: option::println of type Option[Bool] => Unit
+  Cannot typecheck call.
+  There are multiple overloads, which all fail to check:
+  
+  Possible overload: named_args_wrong::length of type (Double, Double) => Double
+    Expected Option[Bool] but got Double.
+    Unexpected name in named argument: got y, but expected x in this position. Named arguments must still be in the correct position.
+    Unexpected name in named argument: got x, but expected y in this position. Named arguments must still be in the correct position.
+  
+  Possible overload: effekt::length of type String => Int
+    Wrong number of arguments to length: expected 1 value argument, but got 2 value arguments
+
+4    println(length(y = 3.0, x = 4.0)) // ERROR named argument
+     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^

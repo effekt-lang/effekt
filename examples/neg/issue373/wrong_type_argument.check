@@ -1,0 +1,19 @@
+[error] examples/neg/issue373/wrong_type_argument.effekt:11:9: Cannot typecheck call. [typer]
+There are multiple overloads, which all fail to check:
+
+Possible overload: wrong_type_argument::myPrintLine of type Int => Unit
+  Expected Int but got Bool.
+  Expected Bool but got String.
+  Expected Bool but got Int.
+
+Possible overload: wrong_type_argument::myPrintLine of type Bool => Unit
+  Expected Bool but got String.
+  Expected Bool but got Int.
+
+Possible overload: wrong_type_argument::myPrintLine of type String => Unit
+  Expected String but got Bool.
+  Expected Bool but got String.
+  Expected Bool but got Int.
+
+11    try { myPrintLine(eff.op[Bool]("hello")) } // ERROR Expected Bool but got Int
+            ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
