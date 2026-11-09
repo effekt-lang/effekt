@@ -1,0 +1,9 @@
+[error] examples/neg/typer/effects_differ_beside_unknown.effekt:9:15: Expected type [typer]
+  Int => Int / { Exception[E], emit[String] }
+but got type
+  Int => Int / { Exception[RuntimeError], emit[Int] }
+9    try { g(1) {act} } with emit[String] { def emit(s) = resume(()) }
+                 ^^^
+[info] examples/neg/typer/effects_differ_beside_unknown.effekt:9:15: Expected the effects { Exception[E], emit[String] } but got { Exception[RuntimeError], emit[Int] }.
+9    try { g(1) {act} } with emit[String] { def emit(s) = resume(()) }
+                 ^^^

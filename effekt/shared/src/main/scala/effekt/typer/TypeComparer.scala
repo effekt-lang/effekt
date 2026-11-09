@@ -19,6 +19,9 @@ trait TypeUnifier {
 
   def requireSubregion(lower: Captures, upper: Captures, ctx: ErrorContext): Unit
 
+  def requireConcrete(eff: InterfaceType, ctx: ErrorContext): Unit
+  def unification(effs: Effects): Effects
+
   def abort(issue: StructuredMessage, ctx: ErrorContext): Nothing
   def error(issue: StructuredMessage, ctx: ErrorContext): Unit
   def abort(left: Type, right: Type, ctx: ErrorContext): Nothing
@@ -80,14 +83,33 @@ trait TypeUnifier {
   }
 
   def unifyEffects(eff1: Effects, eff2: Effects, ctx: ErrorContext): Unit =
-    val effs1 = eff1.toList.toSet
-    val effs2 = eff2.toList.toSet
+    val effs1 = unification(eff1).toList
+    val effs2 = unification(eff2).toList
 
-    val hasUnknowns = (effs1 ++ effs2).exists { eff => unknowns(eff).nonEmpty }
+    // The sets are equal, so each effect equals one on the other side that it _may_ equal.
+    def mayEqual(e1: InterfaceType, e2: InterfaceType) =
+      e1.typeConstructor == e2.typeConstructor && (e1 == e2 || unknowns(e1).nonEmpty || unknowns(e2).nonEmpty)
+    val candidates =
+      effs1.map { e1 => (e1, effs2.filter { e2 => mayEqual(e1, e2) }.map { e2 => (e1, e2) }) } ++
+      effs2.map { e2 => (e2, effs1.filter { e1 => mayEqual(e1, e2) }.map { e1 => (e1, e2) }) }
 
-    // If we're sure that the effect sets are different, throw an error, otherwise defer it for later.
-    if (effs1 != effs2 && !hasUnknowns) {
+    if (candidates.exists { case (_, pairs) => pairs.isEmpty }) {
       error(pretty"Expected the effects ${eff2} but got ${eff1}", ctx)
+    } else {
+      // if an effect on one side may equal exactly one on the other, it does
+      val forced = candidates.collect { case (_, List(pair)) => pair }.distinct
+      forced.foreach { case (e1, e2) => unifyInterfaceTypes(e1, e2, ctx) }
+
+      // if there's anything left, try progressing or defer to an existing error
+      val undecided = candidates.collect { case (eff, pairs) if pairs.size > 1 => eff }
+      if (undecided.nonEmpty) {
+        val progress = unification(eff1).toList != effs1 || unification(eff2).toList != effs2
+        if (progress) { 
+          unifyEffects(eff1, eff2, ctx)
+        } else { 
+          undecided.foreach { eff => requireConcrete(eff, ctx) }
+        }
+      }
     }
 
   def unifyFunctionTypes(tpe1: FunctionType, tpe2: FunctionType, ctx: ErrorContext): Unit = (tpe1, tpe2) match {

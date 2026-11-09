@@ -1870,6 +1870,9 @@ trait TyperOps extends ContextOps { self: Context =>
     annotations.update(Annotations.Captures, cap, CaptureSet(cap.capture))
     cap
 
+  def requireConcrete(eff: InterfaceType, ctx: ErrorContext): Unit =
+    assertConcreteEffect(unification(eff))
+
   private [typer] def freshCapabilityFor(tpe: InterfaceType): symbols.BlockParam =
     freshCapabilityFor(tpe, CaptureParam(tpe.name))
 
