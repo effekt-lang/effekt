@@ -1,0 +1,32 @@
+[error] examples/neg/issue433b.effekt:5:3: Cannot typecheck call. [typer]
+There are multiple overloads, which all fail to check:
+
+Possible overload: issue433b::run of type (Int){() => Unit} => Unit
+  Cannot typecheck call.
+  There are multiple overloads, which all fail to check:
+  
+  Possible overload: effekt::infixPlusPlus of type (String, String) => String
+    Expected Unit but got String.
+    Expected String but got Int.
+  
+  Possible overload: list::infixPlusPlus of type [A](List[A], List[A]) => List[A]
+    Expected Unit but got List[A].
+    Expected List[A] but got String.
+    Expected List[A] but got Int.
+
+Possible overload: issue433b::run of type (String){() => Unit} => Unit
+  Expected String but got Int.
+  Cannot typecheck call.
+  There are multiple overloads, which all fail to check:
+  
+  Possible overload: effekt::infixPlusPlus of type (String, String) => String
+    Expected Unit but got String.
+    Expected String but got Int.
+  
+  Possible overload: list::infixPlusPlus of type [A](List[A], List[A]) => List[A]
+    Expected Unit but got List[A].
+    Expected List[A] but got String.
+    Expected List[A] but got Int.
+
+5    run(42) {
+     ^
