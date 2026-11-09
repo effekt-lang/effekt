@@ -1,5 +1,5 @@
-// The copies of ping and pong for the lambda would call each other; pong's copy comes first, so its call of ping
-// closes the cycle and stays a call of the original ping.
+// The copies of ping and pong for the lambda call each other. The copy of ping enters the group, so it gets the copy
+// of pong at its beginning, where pong's copy calls it back; ping's copy is called once and goes away again.
 
 def ping(b: Bool){f: (Int) => Int} = {
   if (b: Bool) {
@@ -35,11 +35,18 @@ def main(b: Bool, n: Int) = {
   def f(x: Int) = {
     return n: Int
   }
+  def pong_f(d: Bool) = {
+    let e = d: Bool
+    if (e: Bool) {
+      f: (Int) => Int @ {}(1)
+    } else {
+      pong_f: (Bool) => Int @ {}(e: Bool)
+    }
+  }
   let c = b: Bool
   if (c: Bool) {
     f: (Int) => Int @ {}(1)
   } else {
-    let d = c: Bool
-    ping: (Bool){f: (Int) => Int} => Int @ {}(d: Bool){f: (Int) => Int @ {}}
+    pong_f: (Bool) => Int @ {}(c: Bool)
   }
 }

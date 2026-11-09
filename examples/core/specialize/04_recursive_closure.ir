@@ -1,4 +1,5 @@
-// A copy of loop within a copy of loop would be built up recursively, so the call stays a call to the original loop.
+// loop passes itself a block it defines, which captures the one before, so a copy for one block would ask for a copy
+// for the next, without end. loop is not specialized to its block at all.
 
 def loop(b: Bool){k: (Int) => Int} = {
   if (b: Bool) {
@@ -25,28 +26,12 @@ def loop(b: Bool){k @ k: (Int) => Int} = {
     def g(x: Int) = {
       k: (Int) => Int @ {k}(x: Int)
     }
-    let c = b: Bool
-    if (c: Bool) {
-      g: (Int) => Int @ {k}(0)
-    } else {
-      def h(x: Int) = {
-        g: (Int) => Int @ {k}(x: Int)
-      }
-      loop: (Bool){k: (Int) => Int} => Int @ {}(c: Bool){h: (Int) => Int @ {k}}
-    }
+    loop: (Bool){k: (Int) => Int} => Int @ {}(b: Bool){g: (Int) => Int @ {k}}
   }
 }
 def main(b: Bool) = {
   def f(x: Int) = {
     return x: Int
   }
-  let c = b: Bool
-  if (c: Bool) {
-    f: (Int) => Int @ {}(0)
-  } else {
-    def g(x: Int) = {
-      f: (Int) => Int @ {}(x: Int)
-    }
-    loop: (Bool){k: (Int) => Int} => Int @ {}(c: Bool){g: (Int) => Int @ {}}
-  }
+  loop: (Bool){k: (Int) => Int} => Int @ {}(b: Bool){f: (Int) => Int @ {}}
 }
