@@ -271,7 +271,18 @@ class EffektConfig(args: Seq[String]) extends REPLConfig(args.takeWhile(_ != "--
 
   lazy val libPath: File = findStdLib.canonicalPath.toFile
 
-  def includes(): List[File] = libPath :: backend().runner.includes(libPath).map(_.toFile) ++ includePath()
+  /** For a module: the directory it is found in and how it's named by the diagnostics. */
+  case class IncludeRoot(dir: File, shown: String)
+
+  def includes(): List[IncludeRoot] = {
+    // the standard library's directories are named as `/libraries/`
+    val libraries = libPath.toPath.getParent
+    def library(dir: File) =
+      IncludeRoot(dir, "/libraries/" + libraries.relativize(dir.toPath.normalize).toString.replace('\\', '/'))
+
+    (libPath :: backend().runner.includes(libPath).map(_.toFile)).map(library) ++
+      includePath().map { dir => IncludeRoot(dir, dir.toString) }
+  }
 
   def prelude(): List[String] = preludePath.getOrElse(backend().runner.prelude)
 
