@@ -114,60 +114,103 @@ def components[A](nodes: Iterable[A], successors: A => Iterable[A]): List[List[A
  *   def loop(b){k} = … loop(c){ x => k(x) } …
  *
  * Specializing `loop` to a block would ask for a copy for the next block, which captures the one before, without end,
- * so we leave these blocks unknown from the start.
+ * so we leave these blocks unknown from the start. Only calls passing blocks make copies, so these are the calls that
+ * form the recursive groups. Blocks also travel through block parameters, so a call of a block parameter calls every
+ * definition that can be passed for it:
+ *
+ *   def scope{action} = { def handler = new …; action(){handler} }
+ *   def eval(e) = … scope{ {h} => eval(…){h} } …
  */
 def growing(m: ModuleDecl, toplevel: Set[Id]): Set[(Id, Int)] = {
-  val functions = mutable.LinkedHashMap.empty[Id, BlockLit]
+  val nodes = mutable.LinkedHashMap.empty[Id, Block]
+  val aliases = mutable.Map.empty[Id, Id]
+  val calls = mutable.ListBuffer.empty[(Id, List[Block])]
   object collecting extends Tree.Query[Unit, Unit] {
     def empty = ()
     def combine = (_, _) => ()
     override def stmt(using Unit) = {
-      case Stmt.Def(id, block: BlockLit, body) =>
-        functions(id) = block
+      case Stmt.Def(id, block @ (_: BlockLit | _: Block.New), body) =>
+        nodes(id) = block
         query(block); query(body)
+      case Stmt.Def(id, Block.BlockVar(x, _, _), body) =>
+        aliases(id) = x
+        query(body)
+      case Stmt.App(Block.BlockVar(f, _, _), targs, vargs, bargs) =>
+        calls += (f -> bargs)
+        vargs.foreach(query); bargs.foreach(query)
     }
   }
   m.definitions.foreach {
     case Toplevel.Def(id, block: BlockLit) =>
-      functions(id) = block
+      nodes(id) = block
       collecting.query(block)(using ())
     case other => collecting.query(other)(using ())
   }
+  def resolve(id: Id): Id = aliases.get(id).map(resolve).getOrElse(id)
 
-  def mentioned(s: Stmt): Set[Id] = {
-    object mentions extends Tree.Query[Unit, Set[Id]] {
-      def empty = Set.empty
-      def combine = _ ++ _
-      override def block(using Unit) = {
-        case Block.BlockVar(id, _, _) if functions.contains(id) => Set(id)
+  val flows = mutable.Map.empty[Id, Set[Id]].withDefaultValue(Set.empty)
+  def values(x: Id): Set[Id] = if nodes.contains(resolve(x)) then Set(resolve(x)) else flows(resolve(x))
+  var changed = true
+  while changed do {
+    changed = false
+    calls.foreach { case (f, bargs) =>
+      values(f).foreach { target =>
+        nodes(target) match {
+          case BlockLit(_, _, _, bparams, _) => (bparams zip bargs).foreach {
+            case (param, Block.BlockVar(x, _, _)) =>
+              val more = flows(param.id) ++ values(x)
+              if more != flows(param.id) then { flows(param.id) = more; changed = true }
+            case _ => ()
+          }
+          case _ => ()
+        }
       }
     }
-    mentions.query(s)(using ())
   }
-  val successors = functions.map { case (f, block) => f -> mentioned(block.body) }
 
-  val group = components(functions.keys, successors).zipWithIndex.flatMap {
+  def passing(block: Block): Set[Id] = {
+    object passes extends Tree.Query[Unit, Set[Id]] {
+      def empty = Set.empty
+      def combine = _ ++ _
+      override def stmt(using Unit) = {
+        case Stmt.App(Block.BlockVar(f, _, _), targs, vargs, bargs) if bargs.nonEmpty =>
+          combine(values(f), combine(all(vargs, query), all(bargs, query)))
+      }
+    }
+    passes.query(block)(using ())
+  }
+  val successors = nodes.map { case (f, block) => f -> passing(block) }
+
+  val group = components(nodes.keys, successors).zipWithIndex.flatMap {
     case (members, number) => members.map(_ -> number)
   }.toMap
 
-  functions.toList.flatMap { case (f, block) =>
-    val defined = definitions(block.body, toplevel)
+  nodes.toList.flatMap { case (f, block) =>
+    val defined = block match {
+      case BlockLit(_, _, _, _, body) => definitions(body, toplevel).keySet
+      case Block.New(impl) => impl.operations.flatMap { operation => definitions(operation.body, toplevel).keySet }.toSet
+      case _ => Set.empty
+    }
     object passing extends Tree.Query[Unit, Set[(Id, Int)]] {
       def empty = Set.empty
       def combine = _ ++ _
       override def stmt(using Unit) = {
-        case Stmt.App(Block.BlockVar(g, _, _), targs, vargs, bargs) if group.get(g) == group.get(f) =>
-          val passed = bargs.zipWithIndex.collect {
-            case (Block.BlockVar(x, _, _), position) if defined.contains(x) => (g, position)
-            case (_: BlockLit | _: Block.New, position) => (g, position)
-          }.toSet
+        case Stmt.App(Block.BlockVar(g, _, _), targs, vargs, bargs) =>
+          val passed = for {
+            target <- values(g) if group.get(target) == group.get(f)
+            (argument, position) <- bargs.zipWithIndex
+            if (argument match {
+              case Block.BlockVar(x, _, _) => defined.contains(x)
+              case _: BlockLit | _: Block.New => true
+              case _ => false
+            })
+          } yield (target, position)
           combine(passed, combine(all(vargs, query), all(bargs, query)))
       }
     }
-    passing.query(block.body)(using ())
+    passing.query(block)(using ())
   }.toSet
 }
-
 
 // Specialize
 // ----------
@@ -176,14 +219,13 @@ def growing(m: ModuleDecl, toplevel: Set[Id]): Set[(Id, Int)] = {
 type Key = (Id, List[Option[Id]])
 
 /**
- * What is in scope: the local definitions of literals and objects, the aliases `def x = y`, the copies, and the
- * callees of the copies we are in, by where their names come from.
+ * What is in scope: the local definitions of literals, objects, and toplevel functions, the aliases `def x = y`,
+ * and where to report the copies the calls ask for.
  */
 case class Scope(
   definitions: Map[Id, Block],
   aliases: Map[Id, Id],
-  copies: Map[Key, Id],
-  within: Set[Id]
+  reports: mutable.ListBuffer[Key]
 ) {
   def resolve(id: Id): Id = aliases.get(id).map(resolve).getOrElse(id)
 }
@@ -191,17 +233,13 @@ case class Scope(
 /**
  * One copy per callee and local definitions passed to it, right after the last of them:
  *
- *   [[ def g = b; s ]] = def g = [[ b ]]; def f_g(x){h} = [[ body of f ]][k := g]; [[ s ]]   for each `f(…){g, h}` in `s`
- *   [[ f(e){g, h} ]] = f_g(e){h}   if the copy is in scope
+ *   [[ f(e){g, h} ]] = f_g(e){h}   reporting the copy `f_g`
+ *   [[ def g = b; s ]] = def g = [[ b ]]; def f_g(x){h} = [[ body of f ]][k := g]; [[ s ]]   if `[[ s ]]` reports `f_g`
  *
- * where `g` is a local definition and `h` is not.
- * The copies that copies ask for with blocks defined there are made there too, each after the copies it calls,
- * so that all calls share them. Mutually recursive copies cannot come after each other, so each copy entering such
- * a group gets the copies of the rest of the group at its beginning, where they see it:
- *
- *   def ping_g(x) = { def pong_g(y) = … ping_g(…) …; … pong_g(…) … }
- *
- * A copy of `f` within a copy of `f` would be built up recursively, so we do not make it.
+ * where `g` is a local definition and `h` is not. Reports travel outwards to the definition of the last of the blocks
+ * (or the callee, if it is local), where the copy is made. The body of a copy reports further copies: those made at the
+ * same definition are made before it, unless they are still being made themselves, which closes a cycle of mutual
+ * recursion; then the copies made since go around, at the beginning of the copy the cycle returns to.
  */
 def specialize(m: ModuleDecl, functions: Set[Id], growing: Set[(Id, Int)]): ModuleDecl = {
   val toplevel: Map[Id, BlockLit] = m.definitions.collect {
@@ -223,25 +261,6 @@ def specialize(m: ModuleDecl, functions: Set[Id], growing: Set[(Id, Int)]): Modu
       case block: BlockLit if block.bparams.nonEmpty => block
     }
 
-  /** The keys of the calls in [[s]], by what the names stand for; we only know which names are definitions later. */
-  def calls(s: Stmt, scope: Scope): Set[(Id, List[Option[Id]])] = {
-    object collecting extends Tree.Query[Map[Id, Id], Set[(Id, List[Option[Id]])]] {
-      def empty = Set.empty
-      def combine = _ ++ _
-      def resolve(id: Id)(using aliases: Map[Id, Id]): Id = aliases.get(id).map(resolve).getOrElse(scope.resolve(id))
-      override def stmt(using aliases: Map[Id, Id]) = {
-        case Stmt.Def(id, Block.BlockVar(x, _, _), body) if !functions.contains(x) => query(body)(using aliases + (id -> x))
-        case Stmt.App(Block.BlockVar(f, _, _), targs, vargs, bargs) if bargs.nonEmpty =>
-          val arguments = bargs.map {
-            case Block.BlockVar(x, _, _) => Some(resolve(x))
-            case _ => None
-          }
-          combine(Set(resolve(f) -> arguments), combine(all(vargs, query), all(bargs, query)))
-      }
-    }
-    collecting.query(s)(using Map.empty)
-  }
-
   /** The key of a call, given what is defined: arguments that are not local definitions are unknown. */
   def key(f: Id, arguments: List[Option[Id]], defined: Map[Id, Block]): Option[Key] = {
     val known = arguments.zipWithIndex.map { case (argument, position) =>
@@ -250,63 +269,15 @@ def specialize(m: ModuleDecl, functions: Set[Id], growing: Set[(Id, Int)]): Modu
     Option.when(known.exists(_.isDefined) && callee(f, defined).exists(_.bparams.size == arguments.size))((f, known))
   }
 
-  /**
-   * The copies asked for in [[s]], also by the copies themselves, with the copies each asks for in turn; we look
-   * through the copies for blocks defined later in [[s]] too, since they may ask for copies for blocks defined here.
-   */
-  val asked = mutable.Map.empty[Key, List[Key]]
-  def requests(s: Stmt, defined: Map[Id, Block], scope: Scope): List[Key] =
-    calls(s, scope).toList.flatMap { case (f, arguments) => key(f, arguments, defined) }.distinct
-
-  /**
-   * The copies to make here, of those [[s]] asks for: the ones whose callee and blocks are all in scope and that
-   * [[here]] decides for, each after the ones it calls, named, and the scope with them.
-   * Of a group of mutually recursive copies, only the entries, which are asked for from outside of the group, are
-   * made here; each gets the rest at its beginning.
-   */
-  def provide(s: Stmt, scope: Scope)(here: Key => Boolean): (List[(Key, Id)], Scope) = {
-    def fresh(k: Key): Boolean = !scope.copies.contains(k) && !scope.within.contains(originOf(k._1))
-    val successors = mutable.LinkedHashMap.empty[Key, List[Key]]
-    def known(k: Key, defined: Map[Id, Block]): Boolean =
-      callee(k._1, defined).isDefined && k._2.flatten.forall(defined.contains)
-    def explore(k: Key, defined: Map[Id, Block]): Unit =
-      if !successors.contains(k) then {
-        successors(k) = Nil
-        val body = substituted(k, defined)
-        val inner = defined ++ definitions(body, functions)
-        val next = asked.getOrElseUpdate(k, requests(body, inner, scope)).filter { k => fresh(k) && known(k, inner) }
-        successors(k) = next
-        next.foreach(explore(_, inner))
-      }
-    val defined = scope.definitions ++ definitions(s, functions)
-    val roots = requests(s, defined, scope).filter(fresh)
-    roots.foreach(explore(_, defined))
-    def visible(k: Key): Boolean = known(k, scope.definitions)
-    val groups = components(roots, successors)
-    val group = groups.flatMap { members => members.map(_ -> members) }.toMap
-    def entry(k: Key): Boolean = roots.contains(k) || successors.exists {
-      case (caller, called) => called.contains(k) && !group(k).contains(caller)
-    }
-    val ordered = groups.flatMap { members =>
-      (if members.size == 1 then members else members.filter(entry)).filter { k => visible(k) && here(k) }
-    }
-    val named = ordered.map { case k @ (f, arguments) =>
-      k -> Id((f.name.name :: arguments.flatten.map(_.name.name)).mkString("_"))
-    }
-    (named, scope.copy(copies = scope.copies ++ named))
+  /** The local definitions the copy for [[k]] needs to see. */
+  def needs(k: Key): Set[Id] = k match {
+    case (f, arguments) => arguments.flatten.toSet ++ Option.when(!toplevel.contains(f))(f)
   }
 
-  /** The body of the callee of [[k]] with the blocks of [[k]] put in. */
-  def substituted(k: Key, defined: Map[Id, Block]): Stmt = {
-    val (f, arguments) = k
-    val block = callee(f, defined).get
-    val passed = (block.bparams zip arguments).collect {
-      case (param, Some(g)) =>
-        val argument = defined(g)
-        param.id -> Block.BlockVar(g, argument.tpe, argument.capt)
-    }
-    substitute(block.body)(using Substitution(DB.empty, DB.empty, DB.empty, DB.from(passed)))
-  }
+  val names = mutable.Map.empty[Key, Id]
+  def name(k: Key): Id = names.getOrElseUpdate(k, k match {
+    case (f, arguments) => Id((f.name.name :: arguments.flatten.map(_.name.name)).mkString("_"))
+  })
 
   def copy(k: Key, scope: Scope): BlockLit = {
     val (f, arguments) = k
@@ -320,22 +291,51 @@ def specialize(m: ModuleDecl, functions: Set[Id], growing: Set[(Id, Int)]): Modu
       DB.from(passed.map { case (_, capture, variable) => capture -> variable.capt }), DB.empty,
       DB.from(passed.map { case (param, _, variable) => param.id -> variable })))
     val kept = (block.bparams zip block.cparams zip arguments).collect { case ((param, capture), None) => (param, capture) }
-    val inner = scope.copy(within = scope.within + originOf(f))
-    val (group, withGroup) = provide(body, inner) { _ => true }
-    BlockLit(block.tparams, kept.map(_._2), block.vparams, kept.map(_._1),
-      bind(group, withGroup, specializing.rewrite(body)(using withGroup)))
+    BlockLit(block.tparams, kept.map(_._2), block.vparams, kept.map(_._1), specializing.rewrite(body)(using scope))
   }
 
-  /** Binds the copies [[named]] in order, each seeing itself and the ones before it. */
-  def bind(named: List[(Key, Id)], scope: Scope, rest: Stmt): Stmt = {
-    val before = scope.copy(copies = scope.copies -- named.map(_._1))
-    def go(named: List[(Key, Id)], scope: Scope): Stmt = named match {
-      case Nil => rest
-      case (k, c) :: more =>
-        val seeing = scope.copy(copies = scope.copies + (k -> c))
-        Stmt.Def(c, copy(k, seeing), go(more, seeing))
+  /**
+   * Makes the copies [[reported]] at the definition of [[id]] asks for there, and the ones they ask for in turn,
+   * each before the copies calling it, or around them if they call it back. The other reports travel on.
+   */
+  def make(id: Id, scope: Scope, reported: List[Key]): (Stmt => Stmt, List[Key]) = {
+    def here(k: Key): Boolean = needs(k).contains(id) && needs(k).forall(scope.definitions.contains)
+
+    val made = mutable.LinkedHashMap.empty[Key, BlockLit]
+    val around = mutable.Map.empty[Key, Key]
+    val inside = mutable.Map.empty[Key, mutable.ListBuffer[(Key, BlockLit)]]
+    val making = mutable.ArrayBuffer.empty[Key]
+    val outside = mutable.ListBuffer.empty[Key]
+
+    def build(k: Key): Unit = {
+      making += k
+      val reports = mutable.ListBuffer.empty[Key]
+      val block = copy(k, scope.copy(reports = reports))
+      reports.distinct.foreach { r =>
+        if !here(r) then outside += r
+        else if r != k && !made.contains(r) then making.indexOf(r) match {
+          case -1 => build(r)
+          case cycle => making.drop(cycle + 1).foreach { member => if !around.contains(member) then around(member) = r }
+        }
+      }
+      making.remove(making.size - 1)
+      around.get(k) match {
+        case Some(enclosing) => inside.getOrElseUpdate(enclosing, mutable.ListBuffer.empty) += (k -> block)
+        case None => made(k) = block
+      }
     }
-    go(named, before)
+    reported.distinct.foreach { k => if !here(k) then outside += k else if !made.contains(k) then build(k) }
+
+    def enclose(k: Key, block: BlockLit): BlockLit = inside.get(k) match {
+      case None => block
+      case Some(members) =>
+        val renamed = members.toList.map { case (member, body) => (member, Id(name(member)), enclose(member, body)) }
+        val renaming = renamed.map { case (member, renamed, body) => name(member) -> Block.BlockVar(renamed, body.tpe, body.capt) }
+        val body = renamed.foldRight(block.body) { case ((_, renamed, body), rest) => Stmt.Def(renamed, body, rest) }
+        block.copy(body = substitute(body)(using Substitution(DB.empty, DB.empty, DB.empty, DB.from(renaming))))
+    }
+    val bind = (rest: Stmt) => made.toList.foldRight(rest) { case ((k, block), rest) => Stmt.Def(name(k), enclose(k, block), rest) }
+    (bind, outside.toList)
   }
 
   object specializing extends Tree.RewriteWithContext[Scope] {
@@ -344,17 +344,21 @@ def specialize(m: ModuleDecl, functions: Set[Id], growing: Set[(Id, Int)]): Modu
         Stmt.Def(id, alias, rewrite(body)(using scope.copy(aliases = scope.aliases + (id -> x))))
 
       case Stmt.Def(id, block @ (_: BlockLit | _: Block.New | _: Block.BlockVar), body) =>
-        val defined = scope.copy(definitions = scope.definitions + (id -> block))
-        val (named, withCopies) = provide(body, defined) { case (f, arguments) => f == id || arguments.contains(Some(id)) }
-        Stmt.Def(id, rewrite(block)(using defined), bind(named, withCopies, rewrite(body)(using withCopies)))
+        val defined = Scope(scope.definitions + (id -> block), scope.aliases, mutable.ListBuffer.empty)
+        val rewrittenBlock = rewrite(block)
+        val rewrittenBody = rewrite(body)(using defined)
+        val (bind, outside) = make(id, defined, defined.reports.toList)
+        scope.reports ++= outside
+        Stmt.Def(id, rewrittenBlock, bind(rewrittenBody))
 
       case Stmt.App(callee @ Block.BlockVar(f, _, capt), targs, vargs, bargs) if bargs.nonEmpty =>
         val arguments = bargs.map {
           case Block.BlockVar(x, _, _) => Some(scope.resolve(x))
           case _ => None
         }
-        key(scope.resolve(f), arguments, scope.definitions).flatMap { k => scope.copies.get(k).map(k -> _) } match {
-          case Some(((_, known), c)) =>
+        key(scope.resolve(f), arguments, scope.definitions) match {
+          case Some(k @ (_, known)) =>
+            scope.reports += k
             val unknown = (bargs zip known).collect { case (b, None) => rewrite(b) }
             val tpe = callee.tpe match {
               case BlockType.Function(tparams, cparams, vparams, bparams, result) =>
@@ -363,7 +367,7 @@ def specialize(m: ModuleDecl, functions: Set[Id], growing: Set[(Id, Int)]): Modu
               case other => other
             }
             val captures = capt ++ (bargs zip known).collect { case (b, Some(_)) => b.capt }.flatten
-            Stmt.App(Block.BlockVar(c, tpe, captures), targs, vargs.map(rewrite), unknown)
+            Stmt.App(Block.BlockVar(name(k), tpe, captures), targs, vargs.map(rewrite), unknown)
           case None => super.rewrite(s)
         }
 
@@ -371,9 +375,9 @@ def specialize(m: ModuleDecl, functions: Set[Id], growing: Set[(Id, Int)]): Modu
     }
   }
 
-  val empty = Scope(Map.empty, Map.empty, Map.empty, Set.empty)
+  def scope = Scope(Map.empty, Map.empty, mutable.ListBuffer.empty)
   m.copy(definitions = m.definitions.map {
-    case Toplevel.Def(id, block) => Toplevel.Def(id, specializing.rewrite(block)(using empty))
-    case Toplevel.Val(id, binding) => Toplevel.Val(id, specializing.rewrite(binding)(using empty))
+    case Toplevel.Def(id, block) => Toplevel.Def(id, specializing.rewrite(block)(using scope))
+    case Toplevel.Val(id, binding) => Toplevel.Val(id, specializing.rewrite(binding)(using scope))
   })
 }
