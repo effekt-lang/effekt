@@ -2,7 +2,7 @@ package effekt
 package context
 
 import effekt.util.paths._
-import effekt.util.MarkdownSource
+import effekt.util.{ IncludedFileSource, MarkdownSource }
 import kiama.util.{ FileSource, Filenames, IO, Source }
 
 trait IOModuleDB extends ModuleDB { self: Context =>
@@ -14,7 +14,7 @@ trait IOModuleDB extends ModuleDB { self: Context =>
    */
   override def contentsOf(path: String): Option[String] = {
     val parent = file(module.source.name).parent
-    (parent :: config.includes().map(file)).collectFirst {
+    (parent :: config.includes().map { root => file(root.dir) }).collectFirst {
       case base if (base / path).exists => FileSource((base / path).toString).content
     }
   }
@@ -29,8 +29,10 @@ trait IOModuleDB extends ModuleDB { self: Context =>
     def mdFile(include: File) = include / (modulePath + ".effekt.md")
 
     config.includes().collectFirst {
-      case p if effektFile(p).exists => FileSource(effektFile(p).toString)
-      case p if mdFile(p).exists     => MarkdownSource(FileSource(mdFile(p).toString))
+      case root if effektFile(file(root.dir)).exists =>
+        IncludedFileSource(effektFile(file(root.dir)).toString, root.shown, modulePath + ".effekt")
+      case root if mdFile(file(root.dir)).exists =>
+        MarkdownSource(IncludedFileSource(mdFile(file(root.dir)).toString, root.shown, modulePath + ".effekt.md"))
     }
   }
 }

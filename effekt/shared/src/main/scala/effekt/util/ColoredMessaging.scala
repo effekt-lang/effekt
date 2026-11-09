@@ -87,10 +87,15 @@ trait ColoredMessaging extends EffektMessaging with Style {
     val excerpt = from.source.optLineContents(from.line).map { src =>
       Excerpt(from.line, util.AnsiHighlight(src), (" " * (from.column - 1)) + ("^" * (to.column - from.column)))
     }
-    Formatted(s"[$severity] ${homogenizePath(from.format)} ${text}", excerpt)
+    Formatted(s"[$severity] ${homogenizePath(place(from))} ${text}", excerpt)
   }
 
   override def formatContent(err: Diagnostic): String = content(err)
+
+  def place(p: Position): String = {
+    val name = shownName(p.source)
+    if (name == "") s"${p.line}:${p.column}:" else s"${name}:${p.line}:${p.column}:"
+  }
 }
 
 class PlainMessaging extends ColoredMessaging {
@@ -105,7 +110,7 @@ class PlainMessaging extends ColoredMessaging {
   // Don't show context in plain messaging.
   override def formatMessage(message: Diagnostic, text: String, from: Position): Formatted = {
     val severity = severityToWord(message.severity)
-    Formatted(s"[$severity] ${homogenizePath(from.format)} ${text}", None)
+    Formatted(s"[$severity] ${homogenizePath(place(from))} ${text}", None)
   }
 
   override def formatMessage(message: Diagnostic, text: String, from: Position, to: Position): Formatted =

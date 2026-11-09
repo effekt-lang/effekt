@@ -40,7 +40,7 @@ trait ModuleDB { self: Context =>
    */
   def moduleOf(source: Source): Module =
     tryModuleOf(source).getOrElse {
-      abort(s"Cannot compile dependency: ${stripSuffix(source.name)}")
+      abort(s"Cannot compile dependency: ${stripSuffix(util.shownName(source))}")
     }
 
   private def stripSuffix(path: String): String =

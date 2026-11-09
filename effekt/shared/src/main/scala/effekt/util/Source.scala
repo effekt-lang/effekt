@@ -5,7 +5,7 @@ import scala.collection.mutable.ListBuffer
 
 import effekt.source.ModuleDecl
 
-import kiama.util.Source
+import kiama.util.{ FileSource, Source }
 
 /**
  * A decorator for markdown sources -- useful for literate programming
@@ -122,4 +122,15 @@ case class VirtualSource(virtualModule: ModuleDecl, input: Source) extends Sourc
   }
 
   override def hashCode(): Int = super.hashCode() + System.identityHashCode(virtualModule)
+}
+
+/** A file found under an include root, shown as `root/path`. */
+class IncludedFileSource(name: String, root: String, path: String) extends FileSource(name) {
+  def shown: String = s"${root}/${path}"
+}
+
+def shownName(source: Source): String = source match {
+  case s: IncludedFileSource => s.shown
+  case MarkdownSource(s)     => shownName(s)
+  case s                     => s.name
 }
