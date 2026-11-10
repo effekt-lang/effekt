@@ -322,7 +322,7 @@ class Repl(driver: Driver) extends REPL[Tree, EffektConfig, KiamaMessage] {
       val fullSpan = Span(source, 0, source.content.length, origin = Origin.Synthesized)
       ModuleDecl("interactive", includes,
         definitions :+ FunDef(IdDef(defName, fakeSpan), Many.empty(fakeSpan), Many.empty(fakeSpan), Many.empty(fakeSpan), Maybe.None(fakeSpan), Maybe.None(fakeSpan),
-          body, Info.empty(fakeSpan), fullSpan), None, fullSpan)
+          body, Info.empty(fakeSpan), fullSpan), Maybe.None(fakeSpan), fullSpan)
     }
 
     def makeEval(source: Source, expr: Term): ModuleDecl = {

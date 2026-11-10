@@ -9,6 +9,7 @@ import effekt.symbols.scopes.Scope
 import effekt.source.sourceOf
 import effekt.util.HtmlHighlight
 import effekt.source.Spans
+import effekt.Intelligence.{ getDefinitionOf, getDefinitionNameOf }
 
 trait Intelligence {
 
@@ -23,7 +24,7 @@ trait Intelligence {
     header: String,
     signature: Option[String],
     description: Option[String],
-    documentation: Doc
+    documentation: Option[String]
   ) {
     def fullDescription: String = {
       val sig = signature.map(sig => s"```effekt\n$sig\n```").getOrElse { "" }
@@ -46,7 +47,7 @@ trait Intelligence {
     }
   }
 
-  def showDocumentation(documentation: Doc): String =
+  def showDocumentation(documentation: Option[String]): String =
     documentation.map('\n' +: _)
       .getOrElse("")
       .replace("\\n", "\n")
@@ -107,25 +108,21 @@ trait Intelligence {
       case _ => None
     }
 
-  def getDefinitionAt(position: Position)(using C: Context): Option[Tree] = for {
-    (_, sym) <- getSymbolAt(position)
-    decl <- getDefinitionOf(resolveCallTarget(sym))
-  } yield decl
+  // the reference at `position`, and the declaration and name of what it refers to
+  def getDefinitionAt(position: Position)(using C: Context): Option[(Tree, Tree, Tree)] = for {
+    (reference, sym) <- getSymbolAt(position)
+    target = resolveCallTarget(sym)
+    decl <- getDefinitionOf(target)
+    name <- getDefinitionNameOf(target)
+  } yield (reference, decl, name)
 
-  def getDefinitionOf(s: Symbol)(using C: Context): Option[Tree] = s match {
-    case m: Module       => Some(m.decl)
-    case t: TypeSymbol   => Some(t.decl)
-    case t: TermSymbol   => Some(t.decl)
-    case u => C.definitionTreeOption(u)
-  }
-
-  def getDocumentationOf(s: Symbol)(using C: Context): Doc =
+  def getDocumentationOf(s: Symbol)(using C: Context): Option[String] =
     getDefinitionOf(s).asInstanceOf[Option[Any]] match {
       case Some(p: Product) =>
         p.productElementNames.zip(p.productIterator)
           .collectFirst {
-            case ("doc", Some(s: String)) => s
-            case ("info", source.Info(Some(s: String), _, _)) => s
+            case ("doc", source.Maybe(Some(s: String), _)) => s
+            case ("info", source.Info(source.Maybe(Some(s: String), _), _, _)) => s
           }
       case _ => None
     }
@@ -475,6 +472,20 @@ trait Intelligence {
 }
 
 object Intelligence {
+
+  import effekt.symbols.*
+
+  // the whole declaration of a symbol, including its documentation and modifiers
+  def getDefinitionOf(s: Symbol)(using C: Context): Option[Tree] = s match {
+    case m: Module       => Some(m.decl)
+    case t: TypeSymbol   => Some(t.decl)
+    case t: TermSymbol   => Some(t.decl)
+    case u => C.definitionTreeOption(u)
+  }
+
+  // the name identifying a symbol's declaration, or the declaration if it has none
+  def getDefinitionNameOf(s: Symbol)(using C: Context): Option[Tree] =
+    C.definitionTreeOption(s).orElse(getDefinitionOf(s))
   case class HoleInfo(
      id: String,
      span: Span,
