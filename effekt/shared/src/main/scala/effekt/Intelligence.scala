@@ -23,7 +23,7 @@ trait Intelligence {
     header: String,
     signature: Option[String],
     description: Option[String],
-    documentation: Doc
+    documentation: Option[String]
   ) {
     def fullDescription: String = {
       val sig = signature.map(sig => s"```effekt\n$sig\n```").getOrElse { "" }
@@ -46,7 +46,7 @@ trait Intelligence {
     }
   }
 
-  def showDocumentation(documentation: Doc): String =
+  def showDocumentation(documentation: Option[String]): String =
     documentation.map('\n' +: _)
       .getOrElse("")
       .replace("\\n", "\n")
@@ -119,13 +119,13 @@ trait Intelligence {
     case u => C.definitionTreeOption(u)
   }
 
-  def getDocumentationOf(s: Symbol)(using C: Context): Doc =
+  def getDocumentationOf(s: Symbol)(using C: Context): Option[String] =
     getDefinitionOf(s).asInstanceOf[Option[Any]] match {
       case Some(p: Product) =>
         p.productElementNames.zip(p.productIterator)
           .collectFirst {
-            case ("doc", Some(s: String)) => s
-            case ("info", source.Info(Some(s: String), _, _)) => s
+            case ("doc", source.Maybe(Some(s: String), _)) => s
+            case ("info", source.Info(source.Maybe(Some(s: String), _), _, _)) => s
           }
       case _ => None
     }

@@ -1581,7 +1581,10 @@ class LSPTests extends FunSuite {
              |        Span(StringSource(def main() = <>, file://test.effekt), 13, 15, Real())
              |      ),
              |      Info(
-             |        None(),
+             |        Maybe(
+             |          None(),
+             |          Span(StringSource(def main() = <>, file://test.effekt), 0, 0, Real())
+             |        ),
              |        Maybe(
              |          None(),
              |          Span(StringSource(def main() = <>, file://test.effekt), 0, 0, Real())
@@ -1594,7 +1597,10 @@ class LSPTests extends FunSuite {
              |      Span(StringSource(def main() = <>, file://test.effekt), 0, 15, Real())
              |    )
              |  ),
-             |  None(),
+             |  Maybe(
+             |    None(),
+             |    Span(StringSource(def main() = <>, file://test.effekt), 0, 0, Synthesized())
+             |  ),
              |  Span(StringSource(def main() = <>, file://test.effekt), 0, 15, Real())
              |)
              |""".stripMargin

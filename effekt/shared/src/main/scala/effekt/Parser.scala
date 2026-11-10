@@ -520,24 +520,23 @@ class Parser(tokens: Seq[Token], source: Source) {
       toplevelDefs(info)
 
   private def toplevelDefs(info: Info): List[Def] =
-    nonterminal:
-      peek.kind match {
-        case `namespace` =>
-          consume(`namespace`)
-          val id = idDef()
-          peek.kind match {
-            case `{` =>
-              val defs = braces(toplevelDefs())
-              val df = toplevelDefs()
-              NamespaceDef(id, defs, info, span()) :: df
-            case _   =>
-              val defs = toplevelDefs()
-              List(NamespaceDef(id, defs, info, span()))
-          }
-        case _ if info.isExtern.nonEmpty || isToplevel =>
-          nonterminal { toplevelDef(info) } :: toplevelDefs()
-        case _ => Nil
-      }
+    peek.kind match {
+      case `namespace` =>
+        consume(`namespace`)
+        val id = idDef()
+        peek.kind match {
+          case `{` =>
+            val defs = braces(toplevelDefs())
+            val df = toplevelDefs()
+            NamespaceDef(id, defs, info, span()) :: df
+          case _   =>
+            val defs = toplevelDefs()
+            List(NamespaceDef(id, defs, info, span()))
+        }
+      case _ if info.isExtern.nonEmpty || isToplevel =>
+        toplevelDef(info) :: toplevelDefs()
+      case _ => Nil
+    }
 
   // Only aliases for toplevel defs as of #1251
   def isDefinition: Boolean = isToplevel
@@ -795,21 +794,22 @@ class Parser(tokens: Seq[Token], source: Source) {
       p(info())
 
   private def maybeDocumentation(): Doc =
-    peek.kind match {
-      case DocComment(_) =>
-        val docComments = manyWhile({
-          val msg = peek.kind match {
-            case DocComment(message) => message
-            case _ => ""
-          }
-          consume(peek.kind)
-          msg
-        }, peek.kind.isInstanceOf[DocComment])
+    nonterminal:
+      peek.kind match {
+        case DocComment(_) =>
+          val docComments = manyWhile({
+            val msg = peek.kind match {
+              case DocComment(message) => message
+              case _ => ""
+            }
+            consume(peek.kind)
+            msg
+          }, peek.kind.isInstanceOf[DocComment])
 
-        if (docComments.isEmpty) None
-        else Some(docComments.mkString("\\n"))
-      case _ => None
-    }
+          if (docComments.isEmpty) Maybe.None(span())
+          else Maybe.Some(docComments.mkString("\\n"), span())
+        case _ => Maybe.None(span())
+      }
 
   // /// some documentation
   // private

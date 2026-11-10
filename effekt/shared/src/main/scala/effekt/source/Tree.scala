@@ -111,7 +111,7 @@ case class Comment() extends Tree {
   val span: Span = Span.missing
 }
 
-type Doc = Option[String]
+type Doc = Maybe[String]
 
 /**
  * The meta-data of a definition / declaration, consisting of everything up
@@ -135,7 +135,7 @@ case class Info(
 }
 
 object Info {
-  def empty(span: Span) = Info(None, Maybe.None(span), Maybe.None(span))
+  def empty(span: Span) = Info(Maybe.None(span), Maybe.None(span), Maybe.None(span))
 }
 
 /**

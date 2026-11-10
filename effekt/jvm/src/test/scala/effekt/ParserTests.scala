@@ -1132,7 +1132,7 @@ class ParserTests extends munit.FunSuite {
 
     val definition = parseDefinition(source.content)
 
-    assertEquals(definition.doc, Some(" Calculate the answer to the ultimate question of life, the universe, and everything"))
+    assertEquals(definition.doc.unspan, Some(" Calculate the answer to the ultimate question of life, the universe, and everything"))
   }
 
   test("Function definition with whitespaces instead of return type") {
@@ -1197,7 +1197,7 @@ class ParserTests extends munit.FunSuite {
 
     parseInfo(source.content) match {
       case Info(
-          Some(doc),
+          Maybe(Some(doc), _),
           isPrivate,
           isExtern,
         ) =>
@@ -1220,9 +1220,48 @@ class ParserTests extends munit.FunSuite {
     parseInfo(source.content) match {
       case Info(doc, isPrivate, isExtern) =>
 
-        assertEquals(doc, Some(" Some doc comment"))
+        assertEquals(doc.unspan, Some(" Some doc comment"))
         assertEquals(isPrivate, Maybe(Some(()), Span(source, pos(0), pos(1))))
         assertEquals(isExtern, Maybe(None, Span(source, pos(1), pos(1))))
+    }
+  }
+
+  test("A definition contains its documentation and its modifiers") {
+    val (source, span) =
+      raw"""/// documented
+           |↑
+           |private extern def f(): Int = js "1"
+           |                                   ↑
+           |""".sourceAndSpan
+
+    parseDefinitions(source.content) match {
+      case List(definition) => assertEquals(definition.span, span)
+      case other => fail(s"Expected one definition but got ${other}")
+    }
+  }
+
+  test("A definition without documentation starts at its first modifier") {
+    val (source, span) =
+      raw"""private def f() = 1
+           |↑                 ↑
+           |""".sourceAndSpan
+
+    parseDefinitions(source.content) match {
+      case List(definition) => assertEquals(definition.span, span)
+      case other => fail(s"Expected one definition but got ${other}")
+    }
+  }
+
+  test("A documentation comment has its own span") {
+    val (source, span) =
+      raw"""/// documented
+           |↑            ↑
+           |def f() = 1
+           |""".sourceAndSpan
+
+    parseDefinitions(source.content) match {
+      case List(definition: FunDef) => assertEquals(definition.info.doc.span, span)
+      case other => fail(s"Expected one function definition but got ${other}")
     }
   }
 
@@ -1234,7 +1273,7 @@ class ParserTests extends munit.FunSuite {
 
     parseInfo(source.content) match {
       case Info(doc, isPrivate, isExtern) =>
-        assertEquals(doc, Some(" Some doc comment"))
+        assertEquals(doc.unspan, Some(" Some doc comment"))
         assertEquals(isPrivate, Maybe(None, Span(source, pos(0), pos(0))))
         assertEquals(isExtern, Maybe(None, Span(source, pos(0), pos(0))))
     }

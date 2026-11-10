@@ -24,7 +24,7 @@ trait DocumentationGenerator {
   def arr(docs: List[DocValue]) = DocArray(docs)
   def obj(doc: Documentation) = DocObject(doc)
 
-  def generate(doc: Doc): DocValue = str(doc.getOrElse("").replace("\"", "\\\""))
+  def generate(doc: Doc): DocValue = str(doc.unspan.getOrElse("").replace("\"", "\\\""))
 
   def generate(span: Span): DocValue = obj(HashMap(
     "file" -> str(span.source.name),
