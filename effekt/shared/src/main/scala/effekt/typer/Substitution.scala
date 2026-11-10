@@ -36,10 +36,7 @@ case class Substitutions(
 
   // shadowing
   private def without(tps: List[TypeVar], cps: List[Capture]): Substitutions =
-    Substitutions(
-      values.filterNot { case (t, _) => tps.contains(t) },
-      captures.filterNot { case (t, _) => cps.contains(t) }
-    )
+    Substitutions(values -- tps, captures -- cps)
 
   // TODO we DO need to distinguish between substituting unification variables for unification variables
   // and substituting concrete captures in unification variables... These are two fundamentally different operations.
