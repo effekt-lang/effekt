@@ -754,19 +754,19 @@ class VMTests extends munit.FunSuite {
     )),
 
     examplesDir / "casestudies" / "inference.effekt.md" -> Some(Summary(
-      staticDispatches = 2076239,
-      dynamicDispatches = 2059064,
+      staticDispatches = 2076236,
+      dynamicDispatches = 1174064,
       patternMatches = 1198171,
       branches = 304507,
-      pushedFrames = 2942973,
-      poppedFrames = 2365711,
+      pushedFrames = 2644499,
+      poppedFrames = 2067641,
       allocations = 2915007,
-      closures = 289723,
-      variableReads = 2930481,
-      variableWrites = 1466059,
-      resets = 288860,
-      shifts = 298083,
-      resumes = 9241
+      closures = 851,
+      variableReads = 2930501,
+      variableWrites = 1466069,
+      resets = 288450,
+      shifts = 297676,
+      resumes = 9239
     )),
 
     examplesDir / "pos" / "raytracer.effekt" -> Some(Summary(
@@ -1359,13 +1359,13 @@ class VMTests extends munit.FunSuite {
 
     examplesDir / "stdlib" / "stream" / "fix.effekt" -> Some(Summary(
       staticDispatches = 37,
-      dynamicDispatches = 41,
+      dynamicDispatches = 29,
       patternMatches = 32,
       branches = 0,
       pushedFrames = 17,
       poppedFrames = 17,
       allocations = 24,
-      closures = 39,
+      closures = 34,
       variableReads = 10,
       variableWrites = 9,
       resets = 0,

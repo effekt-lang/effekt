@@ -38,7 +38,7 @@ class Recursive(
         stack = id :: stack
         process(block)
         stack = before
-      case _ => ()
+      case other => process(other)
     }
 
   def process(s: Stmt): Unit = s match {
