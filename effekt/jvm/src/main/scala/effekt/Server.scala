@@ -21,7 +21,7 @@ import org.eclipse.lsp4j.jsonrpc.services.{JsonNotification, JsonRequest}
 import org.eclipse.lsp4j.jsonrpc.{Launcher, messages}
 import org.eclipse.lsp4j.launch.LSPLauncher
 import org.eclipse.lsp4j.services.*
-import org.eclipse.lsp4j.{CodeAction, CodeActionKind, CodeActionParams, Command, DefinitionParams, Diagnostic, DiagnosticRelatedInformation, DiagnosticSeverity, DidChangeConfigurationParams, DidChangeTextDocumentParams, DidChangeWatchedFilesParams, DidCloseTextDocumentParams, DidOpenTextDocumentParams, DidSaveTextDocumentParams, DocumentSymbol, DocumentSymbolParams, Hover, HoverParams, InitializeParams, InitializeResult, InitializedParams, InlayHint, InlayHintKind, InlayHintParams, Location, LocationLink, MarkupContent, MessageParams, MessageType, PublishDiagnosticsParams, ReferenceParams, SaveOptions, ServerCapabilities, SetTraceParams, SymbolInformation, SymbolKind, TextDocumentSyncKind, TextDocumentSyncOptions, TextEdit, WorkspaceEdit, Range as LSPRange}
+import org.eclipse.lsp4j.{CodeAction, CodeActionKind, CodeActionParams, Command, DefinitionParams, Diagnostic, DiagnosticRelatedInformation, DiagnosticSeverity, DidChangeConfigurationParams, DidChangeTextDocumentParams, DidChangeWatchedFilesParams, DidCloseTextDocumentParams, DidOpenTextDocumentParams, DidSaveTextDocumentParams, DocumentSymbol, DocumentSymbolParams, Hover, HoverParams, InitializeParams, InitializeResult, InitializedParams, InlayHint, InlayHintKind, InlayHintParams, Location, LocationLink, MarkupContent, MessageParams, MessageType, PublishDiagnosticsParams, ReferenceParams, SaveOptions, ServerCapabilities, SetTraceParams, SymbolInformation, SymbolKind, TextDocumentClientCapabilities, TextDocumentSyncKind, TextDocumentSyncOptions, TextEdit, WorkspaceEdit, Range as LSPRange}
 
 import java.io.{InputStream, OutputStream, PrintWriter}
 import java.net.ServerSocket
@@ -97,15 +97,15 @@ class Server(config: EffektConfig, compileOnChange: Boolean=false) extends Drive
     if (params.getInitializationOptions != null)
       workspaceService.didChangeConfiguration(new DidChangeConfigurationParams(params.getInitializationOptions))
 
-    relatedInformation = Option(params.getCapabilities)
-      .flatMap { c => Option(c.getTextDocument) }
-      .flatMap { t => Option(t.getPublishDiagnostics) }
-      .exists { p => p.getRelatedInformation == java.lang.Boolean.TRUE } // argh, we should really have a Scala wrapper for this
+    def supports[C](capability: TextDocumentClientCapabilities => C)(flag: C => java.lang.Boolean): Boolean =
+      Option(params.getCapabilities)
+        .flatMap { c => Option(c.getTextDocument) }
+        .flatMap { t => Option(capability(t)) }
+        .flatMap { c => Option(flag(c)) }
+        .exists { f => f.booleanValue }
 
-    linkSupport = Option(params.getCapabilities)
-      .flatMap { c => Option(c.getTextDocument) }
-      .flatMap { t => Option(t.getDefinition) }
-      .exists { d => d.getLinkSupport == java.lang.Boolean.TRUE }
+    relatedInformation = supports(_.getPublishDiagnostics)(_.getRelatedInformation)
+    linkSupport = supports(_.getDefinition)(_.getLinkSupport)
 
     val result = new InitializeResult(capabilities)
     CompletableFuture.completedFuture(result)
@@ -392,9 +392,11 @@ class Server(config: EffektConfig, compileOnChange: Boolean=false) extends Drive
   //
   //
 
+  type Definitions = messages.Either[util.List[? <: Location], util.List[? <: LocationLink]]
+
   @JsonRequest("textDocument/definition")
   @ResponseJsonAdapter(classOf[LocationLinkListAdapter])
-  def definition(params: DefinitionParams): CompletableFuture[messages.Either[util.List[? <: Location], util.List[? <: LocationLink]]] = {
+  def definition(params: DefinitionParams): CompletableFuture[Definitions] = {
     val definition = for {
       position <- sources.get(params.getTextDocument.getUri).map { source =>
         fromLSPPosition(params.getPosition, source)
@@ -403,15 +405,13 @@ class Server(config: EffektConfig, compileOnChange: Boolean=false) extends Drive
     } yield definition
 
     // a link spans the whole declaration and selects its name, like a document symbol
-    val result = definition match {
+    val result: Definitions = definition match {
       case Some((reference, decl, name)) if linkSupport =>
         val link = new LocationLink(Convert.toURI(decl.span.source.name),
           convertRange(decl.span.range), convertRange(name.span.range), convertRange(reference.span.range))
-        messages.Either.forRight[util.List[? <: Location], util.List[? <: LocationLink]](Collections.seqToJavaList(List(link)))
-      case Some((_, _, name)) =>
-        messages.Either.forLeft[util.List[? <: Location], util.List[? <: LocationLink]](Collections.seqToJavaList(List(rangeToLocation(name.span.range))))
-      case None =>
-        messages.Either.forLeft[util.List[? <: Location], util.List[? <: LocationLink]](Collections.seqToJavaList(List()))
+        messages.Either.forRight(Collections.seqToJavaList(List(link)))
+      case found =>
+        messages.Either.forLeft(Collections.seqToJavaList(found.toList.map { (_, _, name) => rangeToLocation(name.span.range) }))
     }
 
     CompletableFuture.completedFuture(result)
