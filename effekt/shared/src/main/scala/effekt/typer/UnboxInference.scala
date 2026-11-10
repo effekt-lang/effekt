@@ -123,13 +123,13 @@ object UnboxInference extends Phase[NameResolved, NameResolved] {
       } else if (!isBlockLike(receiver)) {
         // Value-UFCS: receiver becomes first value argument
         Call(IdTarget(id).inheritPosition(id), targs,
-          rewriteAsExpr(ValueArg.Unnamed(receiver)) :: vargsTransformed,
+          Many(rewriteAsExpr(ValueArg.Unnamed(receiver)) :: vargsTransformed.unspan, vargsTransformed.span),
           bargsTransformed, span)
       } else {
         // Block-UFCS: receiver becomes first block argument
         Call(IdTarget(id).inheritPosition(id), targs,
           vargsTransformed,
-          rewriteAsBlock(receiver) :: bargsTransformed, span)
+          Many(rewriteAsBlock(receiver) :: bargsTransformed.unspan, bargsTransformed.span), span)
       }
 
     case TryHandle(prog, handlers, span) =>

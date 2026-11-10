@@ -46,8 +46,8 @@ object ExplicitCapabilities extends Phase[Typechecked, Typechecked], Rewrite {
       val implicitValueArgs = Context.annotation(Annotations.ImplicitValueArguments, c)
       val implicitBlockArgs = Context.annotation(Annotations.ImplicitBlockArguments, c)
 
-      val transformedValueArgs = (vargs ++ implicitValueArgs).map(rewrite)
-      val transformedBlockArgs = (bargs ++ implicitBlockArgs).map(rewrite)
+      val transformedValueArgs = (vargs.unspan ++ implicitValueArgs).map(rewrite)
+      val transformedBlockArgs = (bargs.unspan ++ implicitBlockArgs).map(rewrite)
 
       // the receiver of this effect operation call
       val receiver = Context.annotation(Annotations.CapabilityReceiver, c)
@@ -62,18 +62,19 @@ object ExplicitCapabilities extends Phase[Typechecked, Typechecked], Rewrite {
       val typeArgs = typeArguments.map { e => ValueTypeTree(e, Span.missing) }
 
       // construct the member selection on the capability as receiver
-      MethodCall(referenceToCapability(receiver).inheritPosition(id), id, typeArgs, transformedValueArgs, transformedBlockArgs ++ capabilityArgs, span.synthesized)
+      MethodCall(referenceToCapability(receiver).inheritPosition(id), id, typeArgs,
+        Many(transformedValueArgs, vargs.span), Many(transformedBlockArgs ++ capabilityArgs, bargs.span), span.synthesized)
 
     // the function is a field, desugar to select
-    case c @ Call(fun: IdTarget, targs, List(receiver), Nil, span) if fun.definition.isInstanceOf[Field] =>
+    case c @ Call(fun: IdTarget, targs, Many(List(receiver), _), Many(Nil, _), span) if fun.definition.isInstanceOf[Field] =>
       Select(rewrite(receiver.value), fun.id, span.synthesized)
 
     case c @ MethodCall(receiver, id, targs, vargs, bargs, span) =>
       val implicitValueArgs = Context.annotation(Annotations.ImplicitValueArguments, c)
       val implicitBlockArgs = Context.annotation(Annotations.ImplicitBlockArguments, c)
 
-      val valueArgs = (vargs ++ implicitValueArgs).map { a => rewrite(a) }
-      val blockArgs = (bargs ++ implicitBlockArgs).map { a => rewrite(a) }
+      val valueArgs = (vargs.unspan ++ implicitValueArgs).map { a => rewrite(a) }
+      val blockArgs = (bargs.unspan ++ implicitBlockArgs).map { a => rewrite(a) }
 
       val capabilities = Context.annotation(Annotations.CapabilityArguments, c)
       val capabilityArgs = capabilities.map(referenceToCapability)
@@ -83,14 +84,14 @@ object ExplicitCapabilities extends Phase[Typechecked, Typechecked], Rewrite {
 
       val recv = rewrite(receiver)
 
-      MethodCall(recv, id, typeArgs, valueArgs, blockArgs ++ capabilityArgs, span)
+      MethodCall(recv, id, typeArgs, Many(valueArgs, vargs.span), Many(blockArgs ++ capabilityArgs, bargs.span), span)
 
     case c @ Call(recv, targs, vargs, bargs, span) =>
       val receiver = rewrite(recv)
       val implicitValueArgs = Context.annotation(Annotations.ImplicitValueArguments, c)
       val implicitBlockArgs = Context.annotation(Annotations.ImplicitBlockArguments, c)
-      val valueArgs = (vargs ++ implicitValueArgs).map { a => rewrite(a) }
-      val blockArgs = (bargs ++ implicitBlockArgs).map { a => rewrite(a) }
+      val valueArgs = (vargs.unspan ++ implicitValueArgs).map { a => rewrite(a) }
+      val blockArgs = (bargs.unspan ++ implicitBlockArgs).map { a => rewrite(a) }
 
       val capabilities = Context.annotation(Annotations.CapabilityArguments, c)
       val capabilityArgs = capabilities.map(referenceToCapability)
@@ -98,7 +99,7 @@ object ExplicitCapabilities extends Phase[Typechecked, Typechecked], Rewrite {
       val typeArguments = Context.annotation(Annotations.TypeArguments, c)
       val typeArgs = typeArguments.map { e => ValueTypeTree(e, Span.missing) }
 
-      Call(receiver, typeArgs, valueArgs, blockArgs ++ capabilityArgs, span)
+      Call(receiver, typeArgs, Many(valueArgs, vargs.span), Many(blockArgs ++ capabilityArgs, bargs.span), span)
 
     case h @ TryHandle(prog, handlers, span) =>
       val body = rewrite(prog)

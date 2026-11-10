@@ -371,15 +371,15 @@ class Parser(tokens: Seq[Token], source: Source) {
 
   def desugarWith(call: Term, blockLit: BlockLiteral, withSpan: Span): Stmt = call match {
     case MethodCall(receiver, id, tps, vargs, bargs, callSpan) =>
-      Return(MethodCall(receiver, id, tps, vargs, bargs :+ blockLit, callSpan), withSpan.synthesized)
+      Return(MethodCall(receiver, id, tps, vargs, Many(bargs.unspan :+ blockLit, bargs.span), callSpan), withSpan.synthesized)
     case Call(callee, tps, vargs, bargs, callSpan) =>
-      Return(Call(callee, tps, vargs, bargs :+ blockLit, callSpan), withSpan.synthesized)
+      Return(Call(callee, tps, vargs, Many(bargs.unspan :+ blockLit, bargs.span), callSpan), withSpan.synthesized)
     case Var(id, varSpan) =>
-      Return(Call(IdTarget(id), Nil, Nil, blockLit :: Nil, varSpan), withSpan.synthesized)
+      Return(Call(IdTarget(id), Nil, Many.empty(varSpan.emptyAfter), Many(blockLit :: Nil, varSpan.emptyAfter), varSpan), withSpan.synthesized)
     case Do(id, targs, vargs, bargs, doSpan) =>
-      Return(Do(id, targs, vargs, bargs :+ blockLit, doSpan), withSpan.synthesized)
+      Return(Do(id, targs, vargs, Many(bargs.unspan :+ blockLit, bargs.span), doSpan), withSpan.synthesized)
     case term =>
-      Return(Call(ExprTarget(term), Nil, Nil, blockLit :: Nil, term.span.synthesized), withSpan.synthesized)
+      Return(Call(ExprTarget(term), Nil, Many.empty(term.span.emptyAfter), Many(blockLit :: Nil, term.span.emptyAfter), term.span.synthesized), withSpan.synthesized)
   }
 
   def maybeSemi(): Unit = if isSemi then semi()
@@ -1110,7 +1110,7 @@ class Parser(tokens: Seq[Token], source: Source) {
             val (targs, vargs, bargs) = arguments()
             e = Term.MethodCall(e, member, targs, vargs, bargs, span())
           } else {
-            e = Term.MethodCall(e, member, Nil, Nil, Nil, span())
+            e = Term.MethodCall(e, member, Nil, Many.empty(member.span.emptyAfter), Many.empty(member.span.emptyAfter), span())
           }
 
         // function call
@@ -1190,21 +1190,23 @@ class Parser(tokens: Seq[Token], source: Source) {
 
   private def binaryOp(lhs: Term, op: Token, rhs: Term): Term =
     nonterminal:
+       val callSpan = Span(source, lhs.span.from, rhs.span.to, Synthesized)
+       val afterOp = op.span(source).emptyAfter
        if isThunkedOp(op.kind) then
          Call(
            IdTarget(IdRef(Nil, opName(op.kind), op.span(source).synthesized)),
-           Nil, Nil,
-           List(
+           Nil, Many.empty(afterOp),
+           Many(List(
              BlockLiteral(Nil, Nil, Nil, Return(lhs, lhs.span), lhs.span.synthesized),
              BlockLiteral(Nil, Nil, Nil, Return(rhs, rhs.span), rhs.span.synthesized),
-           ),
-           Span(source, lhs.span.from, rhs.span.to, Synthesized)
+           ), callSpan),
+           callSpan
          )
        else
          Call(
            IdTarget(IdRef(Nil, opName(op.kind), op.span(source).synthesized)),
-           Nil, List(ValueArg.Unnamed(lhs), ValueArg.Unnamed(rhs)), Nil,
-           Span(source, lhs.span.from, rhs.span.to, Synthesized)
+           Nil, Many(List(ValueArg.Unnamed(lhs), ValueArg.Unnamed(rhs)), callSpan), Many.empty(afterOp),
+           callSpan
          )
 
   private def isThunkedOp(op: TokenKind): Boolean = op match {
@@ -1267,15 +1269,19 @@ class Parser(tokens: Seq[Token], source: Source) {
   //   foo      ==    foo;
   //   ()             ()
   def isArguments: Boolean = !sawNewlineLast && (peek(`(`) || peek(`[`) || peek(`{`))
-  def arguments(): (List[ValueType], List[ValueArg], List[Term]) =
+  def arguments(): (List[ValueType], Many[ValueArg], Many[Term]) =
     if (!isArguments) fail("at least one argument section (types, values, or blocks)", peek.kind)
     (maybeTypeArgs().unspan, maybeValueArgs(), maybeBlockArgs())
 
   def maybeTypeArgs(): Many[ValueType] =
     nonterminal:
       if peek(`[`) then typeArgs() else Many.empty(span())
-  def maybeValueArgs(): List[ValueArg] = if peek(`(`) then valueArgs() else Nil
-  def maybeBlockArgs(): List[Term] = if peek(`{`) then blockArgs() else Nil
+  def maybeValueArgs(): Many[ValueArg] =
+    nonterminal:
+      if peek(`(`) then valueArgs() else Many.empty(span())
+  def maybeBlockArgs(): Many[Term] =
+    nonterminal:
+      if peek(`{`) then blockArgs() else Many.empty(span())
 
   inline def valueArg(): ValueArg = {
     if (isIdent && peek(1).kind == `=`) {
@@ -1288,12 +1294,12 @@ class Parser(tokens: Seq[Token], source: Source) {
   def typeArgs(): Many[ValueType] =
     nonterminal:
       some(valueType, `[`, `,`, `]`)
-  def valueArgs(): List[ValueArg] =
+  def valueArgs(): Many[ValueArg] =
     nonterminal:
-      many(valueArg, `(`, `,`, `)`).unspan
-  def blockArgs(): List[Term] =
+      many(valueArg, `(`, `,`, `)`)
+  def blockArgs(): Many[Term] =
     nonterminal:
-      someWhile(blockArg(), `{`).unspan
+      someWhile(blockArg(), `{`)
 
   /**
    * Note: for this nonterminal, we need some backtracking.
@@ -1363,10 +1369,11 @@ class Parser(tokens: Seq[Token], source: Source) {
             case `+=` | `-=` | `*=` | `/=` =>
               val op = next()
               val operand = expr()
+              val callSpan = Span(source, lhs.span.from, operand.span.to, Synthesized)
               val rhs = Call(
                 IdTarget(IdRef(Nil, opName(op.kind), op.span(source).synthesized)),
-                Nil, List(ValueArg.Unnamed(lhs), ValueArg.Unnamed(operand)), Nil,
-                Span(source, lhs.span.from, operand.span.to, Synthesized)
+                Nil, Many(List(ValueArg.Unnamed(lhs), ValueArg.Unnamed(operand)), callSpan), Many.empty(op.span(source).emptyAfter),
+                callSpan
               )
               Assign(lhs.id, rhs, span())
             case _ => lhs
@@ -1399,14 +1406,14 @@ class Parser(tokens: Seq[Token], source: Source) {
       many(() => spanned(expr()), `[`, `,`, `]`).unspan.foldRight(NilTree) { ConsTree }
 
   private def NilTree: Term =
-    Call(IdTarget(IdRef(List(), "Nil", span())), Nil, Nil, Nil, span())
+    Call(IdTarget(IdRef(List(), "Nil", span())), Nil, Many.empty(span().emptyAfter), Many.empty(span().emptyAfter), span())
 
   private def ConsTree(el: Spanned[Term], rest: Term): Term =
     Call(
       IdTarget(IdRef(List(), "Cons", el.span.synthesized)),
       Nil,
-      List(ValueArg.Unnamed(el.unspan), ValueArg.Unnamed(rest)),
-      Nil,
+      Many(List(ValueArg.Unnamed(el.unspan), ValueArg.Unnamed(rest)), el.span.synthesized),
+      Many.empty(el.span.emptyAfter),
       el.span.synthesized
     )
 
@@ -1415,7 +1422,7 @@ class Parser(tokens: Seq[Token], source: Source) {
     nonterminal:
       some(expr, `(`, `,`, `)`, failOnSingleton = true) match {
         case Many(e :: Nil, _) => e
-        case Many(xs, _) => Call(IdTarget(IdRef(List("effekt"), s"Tuple${xs.size}", span().synthesized)), Nil, xs.map(ValueArg.Unnamed), Nil, span().synthesized)
+        case Many(xs, _) => Call(IdTarget(IdRef(List("effekt"), s"Tuple${xs.size}", span().synthesized)), Nil, Many(xs.map(ValueArg.Unnamed), span().synthesized), Many.empty(span().emptyAfter), span().synthesized)
       }
 
   def isHole: Boolean = peek.kind match {
@@ -1492,8 +1499,8 @@ class Parser(tokens: Seq[Token], source: Source) {
             Do(
               IdRef(Nil, "write", s.span.synthesized),
               Nil,
-              List(ValueArg.Unnamed(StringLit(s.unspan, s.span))),
-              Nil,
+              Many(List(ValueArg.Unnamed(StringLit(s.unspan, s.span))), s.span.synthesized),
+              Many.empty(s.span.emptyAfter),
               s.span.synthesized
             )
           }
@@ -1501,8 +1508,8 @@ class Parser(tokens: Seq[Token], source: Source) {
             Do(
               IdRef(Nil, "splice", arg.span.synthesized),
               Nil,
-              List(ValueArg.Unnamed(arg.unspan)),
-              Nil,
+              Many(List(ValueArg.Unnamed(arg.unspan)), arg.span.synthesized),
+              Many.empty(arg.span.emptyAfter),
               arg.span.synthesized
             )
           }
@@ -1511,7 +1518,7 @@ class Parser(tokens: Seq[Token], source: Source) {
               Return(UnitLit(span().synthesized), span().synthesized)
             ) { (term, acc) => ExprStmt(term, acc, term.span.synthesized) }
           val blk = BlockLiteral(Nil, Nil, Nil, body, span().synthesized)
-          Call(IdTarget(target), Nil, Nil, List(blk), span().synthesized)
+          Call(IdTarget(target), Nil, Many.empty(target.span.emptyAfter), Many(List(blk), span().synthesized), span().synthesized)
       }
 
   // TODO: This should use `expect` as it follows the same pattern.

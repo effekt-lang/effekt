@@ -285,17 +285,18 @@ class ParserTests extends munit.FunSuite {
     {
       val (source, pos) =
         raw"""loop { f }
-             |↑   ↑  ↑↑ ↑
+             |↑   ↑↑ ↑↑ ↑
              |""".sourceAndPositions
 
       assertEquals(
         parseExpr(source.content),
         Call(
           IdTarget(IdRef(Nil, "loop", Span(source, pos(0), pos(1)))),
-          Nil, Nil,
-          List(
-            Var(IdRef(Nil, "f", Span(source, pos(2), pos(3))), Span(source, pos(2), pos(3)))
-          ),
+          Nil,
+          Many(Nil, Span(source, pos(1), pos(1))),
+          Many(List(
+            Var(IdRef(Nil, "f", Span(source, pos(3), pos(4))), Span(source, pos(3), pos(4)))
+          ), Span(source, pos(2), pos.last)),
           Span(source, pos(0), pos.last)
         )
       )
@@ -319,7 +320,8 @@ class ParserTests extends munit.FunSuite {
         // At the moment uniform function call syntax is always a method call
         MethodCall(
           Var(IdRef(Nil, "foo", Span(source, pos(0), pos(1))), Span(source, pos(0), pos(1))),
-          IdRef(Nil, "bar", Span(source, pos(2), pos(3))), Nil, Nil, Nil,
+          IdRef(Nil, "bar", Span(source, pos(2), pos(3))), Nil,
+          Many(Nil, Span(source, pos(3), pos(3), Synthesized)), Many(Nil, Span(source, pos(3), pos(3), Synthesized)),
           Span(source, pos(0), pos.last)
         )
       )
