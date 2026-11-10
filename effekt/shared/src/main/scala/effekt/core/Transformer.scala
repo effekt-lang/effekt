@@ -424,8 +424,8 @@ object Transformer extends Phase[Typechecked, CoreTransformed] {
     case c @ source.MethodCall(receiver, id, targs, vargs, bargs, _) =>
       val rec = transformAsObject(receiver)
       val typeArgs = Context.typeArguments(c).map(transform)
-      val valueArgs = vargs.map { a => transformAsExpr(a.value) }
-      val blockArgs = bargs.map(transformAsBlock)
+      val valueArgs = vargs.unspan.map { a => transformAsExpr(a.value) }
+      val blockArgs = bargs.unspan.map(transformAsBlock)
 
       // TODO if we always just use .capt, then why annotate it?
       // val captArgs = blockArgs.map(_.capt) //bargs.map(b => transform(Context.inferredCapture(b)))
@@ -450,14 +450,14 @@ object Transformer extends Phase[Typechecked, CoreTransformed] {
       }
       val e = transformAsExpr(expr)
       val typeArgs = Context.typeArguments(c).map(transform)
-      val valueArgs = vargs.map { a => transformAsExpr(a.value) }
-      val blockArgs = bargs.map(transformAsBlock)
+      val valueArgs = vargs.unspan.map { a => transformAsExpr(a.value) }
+      val blockArgs = bargs.unspan.map(transformAsBlock)
       // val captArgs = blockArgs.map(b => b.capt) //transform(Context.inferredCapture(b)))
       App(Unbox(e), typeArgs, valueArgs, blockArgs)
 
     case c @ source.Call(fun: source.IdTarget, _, vargs, bargs, _) =>
       // assumption: typer removed all ambiguous references, so there is exactly one
-      makeFunctionCall(c, fun.definition, vargs, bargs)
+      makeFunctionCall(c, fun.definition, vargs.unspan, bargs.unspan)
 
     case c @ source.Call(s: source.ExprTarget, targs, vargs, bargs, _) =>
       Context.panic("Should not happen. Unbox should have been inferred.")

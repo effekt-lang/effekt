@@ -53,7 +53,7 @@ object AnnotateCaptures extends Phase[Typechecked, Typechecked], Query[Unit, Cap
 
     case t @ source.Do(op, targs, vargs, bargs, _) =>
       val cap = Context.annotation(Annotations.CapabilityReceiver, t)
-      combineAll(vargs.map(query)) ++ combineAll(bargs.map(query)) ++ CaptureSet(cap.capture)
+      combineAll(vargs.unspan.map(query)) ++ combineAll(bargs.unspan.map(query)) ++ CaptureSet(cap.capture)
 
     case t @ source.TryHandle(prog, handlers, _) =>
       val progCapture = query(prog)
@@ -72,7 +72,7 @@ object AnnotateCaptures extends Phase[Typechecked, Typechecked], Query[Unit, Cap
         case ExprTarget(receiver) => query(receiver)
       }
 
-      tcaps ++ combineAll(vargs map query) ++ combineAll(bargs map query)
+      tcaps ++ combineAll(vargs.unspan map query) ++ combineAll(bargs.unspan map query)
 
     case b @ source.BlockLiteral(tps, vps, bps, body, _) =>
       query(body) -- CaptureSet(bps.map(_.symbol.capture))

@@ -586,14 +586,14 @@ object Namer extends Phase[Parsed, NameResolved] {
         }
       }
       targs foreach resolveValueType
-      vargs foreach resolve
-      bargs foreach resolve
+      vargs.foreach(resolve)
+      bargs.foreach(resolve)
 
     case source.Do(target, targs, vargs, bargs, _) =>
       Context.resolveEffectCall(target)
       targs foreach resolveValueType
-      vargs foreach resolve
-      bargs foreach resolve
+      vargs.foreach(resolve)
+      bargs.foreach(resolve)
 
     case source.Call(target, targs, vargs, bargs, _) =>
       Context.focusing(target) {
@@ -601,8 +601,8 @@ object Namer extends Phase[Parsed, NameResolved] {
         case source.ExprTarget(expr) => resolve(expr)
       }
       targs foreach resolveValueType
-      vargs foreach resolve
-      bargs foreach resolve
+      vargs.foreach(resolve)
+      bargs.foreach(resolve)
 
     case source.Var(id, _) => Context.resolveVar(id)
 

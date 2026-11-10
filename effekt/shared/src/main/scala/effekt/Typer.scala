@@ -191,7 +191,7 @@ object Typer extends Phase[NameResolved, Typechecked] {
         Context.abort("Expected an expression, but got an unbox (which is a block).")
 
       case c @ source.Select(receiver, field, _) =>
-        checkOverloadedFunctionCall(c, field, Nil, List(source.ValueArg.Unnamed(receiver)), Nil, expected)
+        checkOverloadedFunctionCall(c, field, Nil, Many(List(source.ValueArg.Unnamed(receiver)), c.span.synthesized), Many.empty(field.span.emptyAfter), expected)
 
       case c @ source.Do(op, targs, vargs, bargs, _) =>
         // (1) first check the call
@@ -1164,8 +1164,8 @@ object Typer extends Phase[NameResolved, Typechecked] {
     receiver: source.Term,
     id: source.IdRef,
     targs: List[ValueType],
-    vargs: List[source.ValueArg],
-    bargs: List[source.Term],
+    vargs: Many[source.ValueArg],
+    bargs: Many[source.Term],
     expected: Option[ValueType]
   )(using Context, Captures): Result[ValueType] = {
     val sym = id.symbol
@@ -1234,8 +1234,8 @@ object Typer extends Phase[NameResolved, Typechecked] {
     call: source.CallLike,
     id: source.IdRef,
     targs: List[ValueType],
-    vargs: List[source.ValueArg],
-    bargs: List[source.Term],
+    vargs: Many[source.ValueArg],
+    bargs: Many[source.Term],
     expected: Option[ValueType]
   )(using Context, Captures): Result[ValueType] = {
 
@@ -1468,20 +1468,20 @@ object Typer extends Phase[NameResolved, Typechecked] {
     knownBParams: List[BlockParam],
     funTpe: FunctionType,
     targs: List[ValueType],
-    vargs: List[source.ValueArg],
-    bargs: List[source.Term],
+    vargs: Many[source.ValueArg],
+    bargs: Many[source.Term],
     expected: Option[ValueType],
     scope: Option[scopes.Scope]
   )(using Context, Captures): Result[ValueType] = {
     val callsite = currentCapture
-    val span = call.span
 
     // (0) Check that arg & param counts align
+    // implicit arguments are placed in the argument list they extend
     val atargs = Aligned(targs, funTpe.tparams)
-    val (avargs, implicitVargs) = Aligned(vargs, funTpe.vparams)
-      .fillImplicit(knownVParams) { (i, p) => source.GenerateImplicitArgs.resolveImplicitValue(p, i, scope, span) }
-    val (abargs, implicitBargs) = Aligned(bargs, funTpe.bparams)
-      .fillImplicit(knownBParams) { (i, p) => source.GenerateImplicitArgs.resolveImplicitBlock(p, i, scope, span) }
+    val (avargs, implicitVargs) = Aligned(vargs.unspan, funTpe.vparams)
+      .fillImplicit(knownVParams) { (i, p) => source.GenerateImplicitArgs.resolveImplicitValue(p, i, scope, vargs.span) }
+    val (abargs, implicitBargs) = Aligned(bargs.unspan, funTpe.bparams)
+      .fillImplicit(knownBParams) { (i, p) => source.GenerateImplicitArgs.resolveImplicitBlock(p, i, scope, bargs.span) }
     assertArgsParamsAlign(name = Some(name), atargs, avargs, abargs)
 
     // (1) Instantiate blocktype
@@ -1500,7 +1500,7 @@ object Typer extends Phase[NameResolved, Typechecked] {
     var effs: Effects = Effects()
 
     val vpnames = knownVParams.map { p => p.name.name }
-    (vpnames.map(Some.apply).zipAll(vargs, None, source.ValueArg.Unnamed(source.UnitLit(source.Span.missing)))) foreach {
+    (vpnames.map(Some.apply).zipAll(vargs.unspan, None, source.ValueArg.Unnamed(source.UnitLit(source.Span.missing)))) foreach {
       case (Some(expName), source.ValueArg(Some(gotName), _, _)) if expName != gotName =>
         if (vpnames.contains(gotName)) {
           Context.error(s"Unexpected name in named argument: got ${gotName}, but expected ${expName} in this position. " ++
@@ -1517,7 +1517,7 @@ object Typer extends Phase[NameResolved, Typechecked] {
     val instImplicitBargs: mutable.ListBuffer[source.Term] = mutable.ListBuffer.empty
     val (explicitVps, implicitVps) = vps.splitAt(vargs.length)
 
-    (explicitVps zip vargs) foreach { case (tpe, expr) =>
+    (explicitVps zip vargs.unspan) foreach { case (tpe, expr) =>
       val Result(t, eff) = checkExpr(expr.value, Some(tpe))
       effs = effs ++ eff.toEffects
     }
@@ -1525,7 +1525,7 @@ object Typer extends Phase[NameResolved, Typechecked] {
     // implicit arguments work like normal ones, except that we first have to instantiate them,
     // and later annotate them to be inserted
     (implicitVps zip implicitVargs).zipWithIndex foreach { case ((tpe, expr), ii) =>
-      val inst = source.GenerateImplicitArgs.instantiateImplicitValue(expr, tpe, span)
+      val inst = source.GenerateImplicitArgs.instantiateImplicitValue(expr, tpe, vargs.span)
       instImplicitVargs.append(inst)
       val Result(t, eff) = source.GenerateImplicitArgs.recursionGuard(expr, "value argument", vargs.length + ii, inst, tpe) {
         checkExpr(inst.value, Some(tpe))
@@ -1538,7 +1538,7 @@ object Typer extends Phase[NameResolved, Typechecked] {
     val (explicitBps, implicitBps) = bps.splitAt(bargs.length)
     val (explicitCaptArgs, implicitCaptArgs) = captArgs.splitAt(bargs.length)
 
-    val (withoutEffects, withEffects) = (explicitBps zip (bargs zip explicitCaptArgs)).partitionMap {
+    val (withoutEffects, withEffects) = (explicitBps zip (bargs.unspan zip explicitCaptArgs)).partitionMap {
       // TODO refine and check that eff.args refers to (inferred) type arguments of this application (`typeArgs`)
       case (tpe : FunctionType, rest) if tpe.effects.exists { eff => eff.args.nonEmpty } => Right((tpe, rest))
       case (tpe, rest) => Left((tpe, rest))
@@ -1559,7 +1559,7 @@ object Typer extends Phase[NameResolved, Typechecked] {
       flowsInto(capt, callsite)
       // capture of block <: ?C
       flowingInto(capt) {
-        val inst = source.GenerateImplicitArgs.instantiateImplicitBlock(expr, tpe, span)
+        val inst = source.GenerateImplicitArgs.instantiateImplicitBlock(expr, tpe, bargs.span)
         instImplicitBargs.append(inst)
         val Result(t, eff) = source.GenerateImplicitArgs.recursionGuard(expr, "block argument", bargs.length + ii, inst, tpe){
           checkExprAsBlock(inst, Some(tpe))

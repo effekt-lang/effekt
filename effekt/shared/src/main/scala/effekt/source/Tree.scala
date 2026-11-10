@@ -550,12 +550,12 @@ enum Term extends Tree {
   /**
    * A call to an effect operation, i.e., `do raise()`.
    */
-  case Do(id: IdRef, targs: List[ValueType], vargs: List[ValueArg], bargs: List[Term], span: Span) extends Term, Reference
+  case Do(id: IdRef, targs: List[ValueType], vargs: Many[ValueArg], bargs: Many[Term], span: Span) extends Term, Reference
 
   /**
    * A call to either an expression, i.e., `(box { () => ... })()`; or a named function, i.e., `foo()`
    */
-  case Call(target: CallTarget, targs: List[ValueType], vargs: List[ValueArg], bargs: List[Term], span: Span)
+  case Call(target: CallTarget, targs: List[ValueType], vargs: Many[ValueArg], bargs: Many[Term], span: Span)
 
   /**
    * Models:
@@ -564,7 +564,7 @@ enum Term extends Tree {
    *
    * The resolved target can help to determine whether the receiver needs to be type-checked as first- or second-class.
    */
-  case MethodCall(receiver: Term, id: IdRef, targs: List[ValueType], vargs: List[ValueArg], bargs: List[Term], span: Span) extends Term, Reference
+  case MethodCall(receiver: Term, id: IdRef, targs: List[ValueType], vargs: Many[ValueArg], bargs: Many[Term], span: Span) extends Term, Reference
 
   // Control Flow
   case If(guards: List[MatchGuard], thn: Stmt, els: Stmt, span: Span)
