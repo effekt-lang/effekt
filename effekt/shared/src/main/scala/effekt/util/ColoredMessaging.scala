@@ -95,7 +95,7 @@ trait ColoredMessaging extends EffektMessaging with Style {
     val from = range.from
     val to = if (range.from.line == range.to.line) range.to else from.copy(column = from.column + 1)
     from.source.optLineContents(from.line).map { src =>
-      Excerpt(from.line, util.AnsiHighlight(src), (" " * (from.column - 1)) + ("^" * (to.column - from.column)))
+      Excerpt(from.line, util.AnsiHighlight(src), (" " * (from.column - 1)) + ("^" * (to.column - from.column).max(1)))
     }
   }
 
