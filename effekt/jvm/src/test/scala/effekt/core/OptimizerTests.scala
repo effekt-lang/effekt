@@ -301,6 +301,45 @@ class OptimizerTests extends CoreTests {
     normalizeWith(Default(threshold = 0, onceLimit = Some(0), carryingLimit = 0))(input, input)
   }
 
+  test("a frame moves into the resumptions of a shift that only resumes") {
+    val input =
+      """ def g = { (n: Int) => return n:Int }
+        | def main = { (){p: Prompt[Int]} =>
+        |   val x = shift (p : Prompt[Int] @ {p}) { {k: (Int) ~> Int} => resume (k : (Int) ~> Int @ {k}) { return 1 } };
+        |   (g : (Int) => Int @ {})(x: Int)
+        | }
+        |""".stripMargin
+
+    val expected =
+      """ def g = { (n: Int) => return n:Int }
+        | def main = { (){p: Prompt[Int]} =>
+        |   shift (p : Prompt[Int] @ {p}) { {k: (Int) ~> Int} => resume (k : (Int) ~> Int @ {k}) { let x = 1 (g : (Int) => Int @ {})(x: Int) } }
+        | }
+        |""".stripMargin
+
+    normalizeWith(Default(threshold = 0, onceLimit = Some(0), carryingLimit = 0))(input, expected)
+  }
+
+
+  test("a frame that shifts to the same prompt moves as well") {
+    val input =
+      """ def main = { (){p: Prompt[Int]} =>
+        |   val x = shift (p : Prompt[Int] @ {p}) { {k: (Int) ~> Int} => resume (k : (Int) ~> Int @ {k}) { return 1 } };
+        |   shift (p : Prompt[Int] @ {p}) { {k: (Int) ~> Int} => resume (k : (Int) ~> Int @ {k}) { return x:Int } }
+        | }
+        |""".stripMargin
+
+    val expected =
+      """ def main = { (){p: Prompt[Int]} =>
+        |   def j = { (x: Int) => shift (p : Prompt[Int] @ {p}) { {k2: (Int) ~> Int} => resume (k2 : (Int) ~> Int @ {k2}) { return x:Int } } }
+        |   shift (p : Prompt[Int] @ {p}) { {k: (Int) ~> Int} => resume (k : (Int) ~> Int @ {k}) { let x = 1 (j : (Int) => Int @ {p})(x: Int) } }
+        | }
+        |""".stripMargin
+
+    normalizeWith(Default(threshold = 0, onceLimit = Some(0), carryingLimit = 0))(input, expected)
+  }
+
+
   test("a reset with multiple answers is inlined") {
     val input =
       """ def foo = { () => reset { (){p: Prompt[(Int, Bool)]} => shift (p : Prompt[(Int, Bool)] @ {p}) { {k: (Int, Bool) ~> (Int, Bool)} => resume (k : (Int, Bool) ~> (Int, Bool) @ {k}) { return 1, true } } } }

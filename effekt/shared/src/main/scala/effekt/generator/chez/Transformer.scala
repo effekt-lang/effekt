@@ -110,12 +110,12 @@ trait Transformer {
 
     case Reset(body) => chez.Reset(toChez(body))
 
-    case Shift(p, k, body) => chez.Shift(nameRef(p.id), chez.Lambda(toChez(k) :: Nil, toChez(body)))
+    case Shift(p, k, body) =>
+      val resumed = nameDef(Id("resumed"))
+      bind(chez.Shift(nameRef(p.id), chez.Lambda(toChez(k) :: Nil, toChez(body))), List(resumed),
+        chez.Block(Nil, Nil, chez.Call(chez.Variable(resumed), Nil)))
 
-    // currently bidirectional handlers are not supported
-    case Resume(k, Return(exprs)) => chez.Call(toChez(k), exprs.map(toChez))
-
-    case Resume(k, other) => sys error s"Not supported yet: ${util.show(stmt)}"
+    case Resume(k, body) => chez.Call(toChez(k), List(chez.Lambda(Nil, chez.Block(Nil, Nil, toChezExpr(body)))))
 
     case Region(body) => chez.Builtin("with-region", toChez(body))
 
