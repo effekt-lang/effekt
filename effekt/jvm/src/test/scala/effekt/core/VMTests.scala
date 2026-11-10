@@ -1656,8 +1656,8 @@ class VMTests extends munit.FunSuite {
       poppedFrames = 4,
       allocations = 0,
       closures = 0,
-      variableReads = 5,
-      variableWrites = 2,
+      variableReads = 0,
+      variableWrites = 0,
       resets = 3,
       shifts = 4,
       resumes = 4

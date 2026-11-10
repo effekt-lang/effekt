@@ -45,6 +45,7 @@ object ReferencesToParameters extends Tree.Rewrite {
    */
   private def escapes(ref: Id, uses: Set[Id], body: Stmt): Boolean = {
     def mentioned(free: Free): Boolean = mentions(ref, uses, free)
+    val outside = body.free
 
     def escaping(s: Stmt): Boolean = s match {
       case Stmt.Def(id, lit: BlockLit, rest) if uses.contains(id) => escaping(lit.body) || escaping(rest)
@@ -64,6 +65,11 @@ object ReferencesToParameters extends Tree.Rewrite {
       case Stmt.Get(id, tpe, other, capt, rest) => escaping(rest)
       case Stmt.Put(other, capt, value, rest) => mentioned(value.free) || escaping(rest)
       case Stmt.Hole(_, _) => false
+      case shift @ Stmt.Shift(prompt, BlockParam(k, BlockType.Resume(result, _), _), _) if mentioned(shift.free) =>
+        val captured = StaticResumptions.Shift(shift, k, result)
+        !outside.contains(prompt.id) || !captured.resumesOnly ||
+          mentioned(captured.replaceResumptions { _ => Stmt.Return(Nil) }.free) ||
+          resumed(k, shift.body).exists(escaping)
       case other => mentioned(other.free)
     }
 
@@ -78,6 +84,18 @@ object ReferencesToParameters extends Tree.Rewrite {
     val transformed = Stmt.Let(initial, init,
       transformation.dropState(transformation.go(body, ValueVar(initial, stateType)), body.tpe))
     RemoveCapture(capture).rewrite(transformed)
+  }
+
+  /** The statements [[k]] is resumed with in [[body]]. */
+  private def resumed(k: Id, body: Stmt): List[Stmt] = {
+    object query extends Tree.Query[Unit, List[Stmt]] {
+      def empty = Nil
+      def combine = _ ++ _
+      override def stmt(using Unit) = {
+        case Stmt.Resume(BlockVar(id, _, _), resumed) if id == k => List(resumed)
+      }
+    }
+    query.query(body)(using ())
   }
 
   /** Whether [[free]] contains the reference or one of the definitions that use it. */
@@ -154,6 +172,11 @@ object ReferencesToParameters extends Tree.Rewrite {
         Stmt.Let(next, value, go(rest, ValueVar(next, stateType)))
       case Stmt.Put(other, capt, value, rest) => Stmt.Put(other, capt, value, go(rest, current))
       case Stmt.Hole(tpe, span) => Stmt.Hole(tpe :+ stateType, span)
+      case shift @ Stmt.Shift(prompt, BlockParam(k, BlockType.Resume(result, answer), capt), _) if mentions(ref, uses, shift.free) =>
+        val retyped = BlockParam(k, BlockType.Resume(result :+ stateType, answer), capt)
+        Stmt.Shift(prompt, retyped, StaticResumptions.Shift(shift, k, result).replaceResumptions { resumed =>
+          Stmt.Resume(BlockVar(k, retyped.tpe, retyped.capt), go(resumed, current))
+        })
       case other => andReturn(other, current)
     }
   }

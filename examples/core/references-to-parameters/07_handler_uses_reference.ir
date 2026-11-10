@@ -1,0 +1,19 @@
+// A handler that uses the reference outside of its resumptions keeps it.
+
+def main = { (){p: Prompt[Int]} =>
+  var x @ c = 0;
+  shift (p : Prompt[Int] @ {p}) { {k: (Int) ~> Int} =>
+    put x @ c = 1;
+    resume (k : (Int) ~> Int @ {k}) { get s: Int = !x @ c; return s: Int }
+  }
+}
+
+/// REFERENCES_TO_PARAMETERS
+
+def main = { (){p: Prompt[Int]} =>
+  var x @ c = 0;
+  shift (p : Prompt[Int] @ {p}) { {k: (Int) ~> Int} =>
+    put x @ c = 1;
+    resume (k : (Int) ~> Int @ {k}) { get s: Int = !x @ c; return s: Int }
+  }
+}
