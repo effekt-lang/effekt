@@ -5,7 +5,7 @@ import effekt.Intelligence.CaptureInfo
 import effekt.context.Context
 import effekt.source.Def.FunDef
 import effekt.source.Term.Hole
-import effekt.source.{Origin, Span, Tree}
+import effekt.source.{Span, Tree}
 import effekt.symbols.Binder.{ValBinder, VarBinder}
 import effekt.symbols.BlockTypeConstructor.{ExternInterface, Interface}
 import effekt.symbols.TypeConstructor.{DataType, ExternType}
@@ -220,14 +220,14 @@ class Server(config: EffektConfig, compileOnChange: Boolean=false) extends Drive
   //
   //
 
-  def toLSP(diagnostic: EffektDiagnostic): Diagnostic = diagnostic.range match {
-    case Some(range) if relatedInformation && related(diagnostic, range).nonEmpty =>
+  def toLSP(diagnostic: EffektDiagnostic): Diagnostic = diagnostic.range.map { range => (range, related(diagnostic, range)) } match {
+    case Some((range, related)) if relatedInformation && related.nonEmpty =>
       val content = (lspMessaging.content(diagnostic) :: diagnostic.reason.details.map(lspMessaging.message)).mkString("\n")
       val lspDiagnostic = new Diagnostic(convertRange(range), content, toLSP(diagnostic.severity), lspMessaging.lspSource(diagnostic))
-      lspDiagnostic.setRelatedInformation(Collections.seqToJavaList(related(diagnostic, range)))
+      lspDiagnostic.setRelatedInformation(Collections.seqToJavaList(related))
       lspDiagnostic
-    case range =>
-      new Diagnostic(range.map(convertRange).getOrElse(emptyRange), lspMessaging.contentWithSubdiagnostics(diagnostic), toLSP(diagnostic.severity), lspMessaging.lspSource(diagnostic))
+    case _ =>
+      new Diagnostic(diagnostic.range.map(convertRange).getOrElse(emptyRange), lspMessaging.contentWithSubdiagnostics(diagnostic), toLSP(diagnostic.severity), lspMessaging.lspSource(diagnostic))
   }
 
   def related(diagnostic: EffektDiagnostic, range: Range): List[DiagnosticRelatedInformation] =
@@ -237,8 +237,8 @@ class Server(config: EffektConfig, compileOnChange: Boolean=false) extends Drive
 
   def toLSP(candidate: Candidate): List[DiagnosticRelatedInformation] = {
     val name = lspMessaging.code(fullname(candidate.symbol.name))
-    val declaration = candidate.definitionTree.filter { name => name.span.origin != Origin.Missing }.map { name => name.span.range }
-    declaration.map { r => at(r, s"candidate: ${name} of type ${lspMessaging.code(TypePrinter.show(candidate.tpe))}") }.toList ++
+    val declaration = candidate.definitionTree.filterNot(_.span.isMissing).map { name => name.span.range }
+    declaration.map { r => at(r, s"candidate: ${lspMessaging.message(candidate.show)}") }.toList ++
       candidate.errors.flatMap { e =>
         e.range.orElse(declaration).map { r => at(r, s"${name}: ${lspMessaging.message(e.reason.claim)}") }
       }
@@ -373,7 +373,7 @@ class Server(config: EffektConfig, compileOnChange: Boolean=false) extends Drive
       decl <- getSourceTreeFor(sym)
       kind <- getSymbolKind(sym)
       detail <- getInfoOf(sym)(using context)
-      if decl.span.origin != Origin.Missing
+      if !decl.span.isMissing
       declRange = convertRange(decl.span.range)
       idRange = convertRange(id.span.range)
     } yield new DocumentSymbol(sym.name.name, kind, declRange, idRange, detail.header)

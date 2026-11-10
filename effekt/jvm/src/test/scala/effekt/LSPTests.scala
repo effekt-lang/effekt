@@ -308,6 +308,42 @@ class LSPTests extends FunSuite {
     server.initialize(initializeParams).get()
   }
 
+  test("an overload search's candidates are part of its message in LSP, provided the client does not show related information") {
+    withClientAndServer { (client, server) =>
+      val textDoc = raw"""
+                       |def f(x: Int): Int = x
+                       |def f(x: Bool): Bool = x
+                       |def main() = f("a")
+                       |""".textDocument
+
+      val didOpenParams = new DidOpenTextDocumentParams()
+      didOpenParams.setTextDocument(textDoc)
+      server.didOpen(didOpenParams)
+
+      val diagnostic = new Diagnostic()
+      diagnostic.setRange(new Range(new Position(3, 13), new Position(3, 19)))
+      diagnostic.setSeverity(DiagnosticSeverity.Error)
+      diagnostic.setSource("effekt [typer]")
+      diagnostic.setMessage(
+        """Cannot typecheck call.
+          |There are multiple overloads, which all fail to check:
+          |* test::f of type Int => Int
+          |  Expected Int but got String.
+          |* test::f of type Bool => Bool
+          |  Expected Bool but got String.""".stripMargin)
+
+      val diagnosticsWithError = new util.ArrayList[Diagnostic]()
+      diagnosticsWithError.add(diagnostic)
+
+      val expected = List(
+        new PublishDiagnosticsParams("file://test.effekt", new util.ArrayList[Diagnostic]()),
+        new PublishDiagnosticsParams("file://test.effekt", diagnosticsWithError)
+      )
+
+      assertEquals(client.receivedDiagnostics(), expected)
+    }
+  }
+
   test("an overload search's candidates are its related information in LSP, if the client shows it") {
     withClientAndServer { (client, server) =>
       initializeWithRelatedInformation(server)

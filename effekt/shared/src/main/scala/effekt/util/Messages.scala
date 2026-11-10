@@ -1,7 +1,7 @@
 package effekt
 package util
 
-import effekt.source.{Origin, Span, Tree}
+import effekt.source.{Span, Tree}
 import effekt.symbols.{Capture, Captures, Effects, ErrorMessageInterpolator, Name, QualifiedName, TypePrinter}
 import kiama.util.Range
 
@@ -110,7 +110,7 @@ object messages {
 
     def contentWithSubdiagnostics(d: Diagnostic): String = {
       val alternatives = d.reason.alternatives.map { c =>
-        val header = s"* ${code(fullname(c.symbol.name))} of type ${message(pretty"${c.tpe}")}"
+        val header = s"* ${message(c.show)}"
         (header :: c.errors.toList.map { e => indent(contentWithSubdiagnostics(e)) }).mkString("\n")
       }
       val causes = d.reason.causes.toList.map { e => indent(contentWithSubdiagnostics(e)) }
@@ -183,7 +183,10 @@ object messages {
     override def alternatives = candidates
   }
 
-  case class Candidate(symbol: symbols.BlockSymbol, tpe: symbols.FunctionType, errors: EffektMessages, definitionTree: Option[source.IdDef])
+  case class Candidate(symbol: symbols.BlockSymbol, tpe: symbols.FunctionType, errors: EffektMessages, definitionTree: Option[source.IdDef]) {
+    // without its declaration
+    def show: StructuredMessage = pretty"${Piece.Code(fullname(symbol.name))} of type ${tpe}"
+  }
 
   // Iterative deepening of the implicit search matches on this class.
   case class ImplicitMaxRecursion(text: String) extends Reason {
@@ -200,7 +203,7 @@ object messages {
         case 2 => "3rd"
         case n => s"${n + 1}th"
       }
-      pretty"Cannot instantiate ${index} ${stencil.kind} ${stencil.name} of type ${tpe}." :: stencil.explanation.map { line => pretty"${line}" }
+      pretty"Cannot instantiate ${index} ${stencil.kind} ${stencil.name} of type ${tpe}." :: stencil.explanation
     }
 
     override def causes = stencil.msgs
@@ -308,7 +311,7 @@ object messages {
 
     def diagnostic(reason: Reason, severity: Severity, at: Option[Span]): Diagnostic =
       // spans with a missing origin give no position
-      Diagnostic(severity, at.filter { s => s.origin != Origin.Missing }.map(Label(_)), Nil, reason, phase)
+      Diagnostic(severity, at.filterNot(_.isMissing).map(Label(_)), Nil, reason, phase)
 
     def diagnostic(reason: Reason, severity: Severity): Diagnostic =
       diagnostic(reason, severity, spanOf(focus))

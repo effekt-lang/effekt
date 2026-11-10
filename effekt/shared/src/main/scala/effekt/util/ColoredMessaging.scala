@@ -45,8 +45,7 @@ trait ColoredMessaging extends EffektMessaging with Style {
 
   private def block(c: Candidate): Block = {
     val declaration = c.definitionTree.toList.flatMap { name => excerpt(name.span) }
-    val name = Piece.Code(fullname(c.symbol.name))
-    val text = if declaration.isEmpty then Some(pretty"${name} of type ${c.tpe}") else None
+    val text = if declaration.isEmpty then Some(c.show) else None
     Block.Item(ItemKind.Candidate, text, declaration, Body(Nil, c.errors.toList.map(block)))
   }
 
@@ -61,7 +60,7 @@ trait ColoredMessaging extends EffektMessaging with Style {
   // the code at a span, marked
   def excerpt(span: source.Span): Option[Excerpt] = {
     val at = span.range.from
-    if span.origin == source.Origin.Missing then None
+    if span.isMissing then None
     else at.source.optLineContents(at.line).map { _ => Excerpt(at, List(Label(span))) }
   }
 
