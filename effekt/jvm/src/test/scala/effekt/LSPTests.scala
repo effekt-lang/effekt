@@ -3,7 +3,7 @@ package effekt
 import com.google.gson.{Gson, GsonBuilder, JsonElement, JsonParser}
 import effekt.Intelligence.{BindingInfo, BindingKind, BindingOrigin, Code, LSPLocation, HoleItemKind, LSPPosition, LSPRange, NaturalLanguage, ScopeInfo, ScopeKind, TermBinding, TypeBinding}
 import munit.FunSuite
-import org.eclipse.lsp4j.{ClientCapabilities, CodeAction, CodeActionKind, CodeActionParams, Command, DefinitionParams, Diagnostic, DiagnosticRelatedInformation, DiagnosticSeverity, DidChangeConfigurationParams, DidChangeTextDocumentParams, DidCloseTextDocumentParams, DidOpenTextDocumentParams, DidSaveTextDocumentParams, DocumentSymbol, DocumentSymbolParams, Hover, HoverParams, InitializeParams, InitializeResult, InlayHint, InlayHintKind, InlayHintParams, Location, MarkupContent, MessageActionItem, MessageParams, Position, PublishDiagnosticsCapabilities, PublishDiagnosticsParams, Range, ReferenceContext, ReferenceParams, SaveOptions, ServerCapabilities, SetTraceParams, ShowMessageRequestParams, SymbolInformation, SymbolKind, TextDocumentClientCapabilities, TextDocumentContentChangeEvent, TextDocumentItem, TextDocumentSyncKind, TextDocumentSyncOptions, TextEdit, VersionedTextDocumentIdentifier, WorkspaceEdit}
+import org.eclipse.lsp4j.{ClientCapabilities, CodeAction, DefinitionCapabilities, LocationLink, CodeActionKind, CodeActionParams, Command, DefinitionParams, Diagnostic, DiagnosticRelatedInformation, DiagnosticSeverity, DidChangeConfigurationParams, DidChangeTextDocumentParams, DidCloseTextDocumentParams, DidOpenTextDocumentParams, DidSaveTextDocumentParams, DocumentSymbol, DocumentSymbolParams, Hover, HoverParams, InitializeParams, InitializeResult, InlayHint, InlayHintKind, InlayHintParams, Location, MarkupContent, MessageActionItem, MessageParams, Position, PublishDiagnosticsCapabilities, PublishDiagnosticsParams, Range, ReferenceContext, ReferenceParams, SaveOptions, ServerCapabilities, SetTraceParams, ShowMessageRequestParams, SymbolInformation, SymbolKind, TextDocumentClientCapabilities, TextDocumentContentChangeEvent, TextDocumentItem, TextDocumentSyncKind, TextDocumentSyncOptions, TextEdit, VersionedTextDocumentIdentifier, WorkspaceEdit}
 import org.eclipse.lsp4j.jsonrpc.messages
 import org.eclipse.lsp4j.jsonrpc.services.ServiceEndpoints
 
@@ -838,12 +838,12 @@ class LSPTests extends FunSuite {
   //
   //
 
-  test("definition returns expected range") {
+  test("definition returns the name of the definition") {
     withClientAndServer { (client, server) =>
       val (textDoc, positions) =
         raw"""
              |def foo() = <>
-             |↑             ↑
+             |    ↑  ↑
              |def bar() = foo()
              |             ↑
            """.textDocumentAndPositions
@@ -863,12 +863,12 @@ class LSPTests extends FunSuite {
     }
   }
 
-  test("right edge of definition returns expected range") {
+  test("right edge of a reference returns the name of the definition") {
     withClientAndServer { (client, server) =>
       val (textDoc, positions) =
         raw"""
              |def foo() = <>
-             |↑             ↑
+             |    ↑  ↑
              |def bar() = foo()
              |               ↑
              """.textDocumentAndPositions
@@ -885,6 +885,45 @@ class LSPTests extends FunSuite {
 
       val definition = server.definition(params).get().getLeft.get(0)
       assertEquals(definition.getRange, expectedRange)
+    }
+  }
+
+  test("definition is a link to the whole declaration, selecting its name, provided the client follows definition links") {
+    withClientAndServer { (client, server) =>
+      val definitionCapabilities = new DefinitionCapabilities()
+      definitionCapabilities.setLinkSupport(true)
+      val textDocumentCapabilities = new TextDocumentClientCapabilities()
+      textDocumentCapabilities.setDefinition(definitionCapabilities)
+      val capabilities = new ClientCapabilities()
+      capabilities.setTextDocument(textDocumentCapabilities)
+      val initializeParams = new InitializeParams()
+      initializeParams.setCapabilities(capabilities)
+      server.initialize(initializeParams).get()
+
+      val (textDoc, positions) =
+        raw"""
+             |/// Does nothing.
+             |↑
+             |private def foo() = <>
+             |            ↑  ↑     ↑
+             |def bar() = foo()
+             |            ↑  ↑
+             |""".textDocumentAndPositions
+
+      val didOpenParams = new DidOpenTextDocumentParams()
+      didOpenParams.setTextDocument(textDoc)
+      server.didOpen(didOpenParams)
+
+      val params = new DefinitionParams()
+      params.setTextDocument(textDoc.versionedTextDocumentIdentifier)
+      params.setPosition(positions(4))
+
+      val links = server.definition(params).get().getRight
+      val expected = new LocationLink("file://test.effekt",
+        new Range(positions(0), new Position(positions(3).getLine, positions(3).getCharacter + 1)),
+        new Range(positions(1), positions(2)),
+        new Range(positions(4), positions(5)))
+      assertEquals(links, util.List.of(expected))
     }
   }
 

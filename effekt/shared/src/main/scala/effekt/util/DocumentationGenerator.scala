@@ -78,20 +78,11 @@ trait DocumentationGenerator {
     ))
   }
 
-  // from LSP Intelligence
-  def getDefinitionOf(s: effekt.symbols.Symbol)(using C: Context): Option[Span] = s match {
-    case u: effekt.symbols.UserFunction => Some(u.decl.span)
-    case u: effekt.symbols.Binder       => Some(u.decl.span)
-    case d: effekt.symbols.Operation    => C.definitionTreeOption(d.interface).map(_.span)
-    case a: effekt.symbols.Anon         => Some(a.decl.span)
-    case m: effekt.symbols.Module       => Some(m.decl.span)
-    case u => C.definitionTreeOption(u).map(_.span)
-  }
-
+  // where the symbol of `id` is defined: the name of its declaration
   def findOrigin(id: Id)(using C: Context): Option[DocValue] = for {
     sym <- C.symbolOption(id)
-    dfn <- getDefinitionOf(id.symbol)
-  } yield generate(dfn)
+    name <- effekt.Intelligence.getDefinitionNameOf(sym)
+  } yield generate(name.span)
 
   def generate(id: Id)(using C: Context): DocValue = obj(HashMap(
     "name" -> str(id.name),
