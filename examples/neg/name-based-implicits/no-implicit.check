@@ -4,15 +4,19 @@
 
    There are multiple overloads, which all fail to check:
 1  * def foo(?barbaz: String): Unit = ()
+         ^^^
 8  |    foo()
    |    ^^^^^ Cannot instantiate implicit argument.
+   |
    |  |  Cannot instantiate 1st value argument barbaz of type String.
 8  |  |    foo()
    |  |    ^^^^^ Could not resolve term barbaz
 
 3  * def foo{ ?foobaz: => Unit }: Unit = foobaz()
+         ^^^
 8  |    foo()
    |         ^ Cannot instantiate implicit argument.
+   |
    |  |  Cannot instantiate 1st block argument foobaz of type () => Unit.
 8  |  |    foo()
    |  |         ^ Wrong number of arguments to foobaz: expected 1 value argument, but got 0 value arguments

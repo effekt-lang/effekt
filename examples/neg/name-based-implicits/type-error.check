@@ -4,15 +4,19 @@
 
    There are multiple overloads, which all fail to check:
 3  * def baz{ ?foo: => Int }: String = "1"
+         ^^^
 7  |    val y: String = baz()
    |                         ^ Cannot instantiate implicit argument.
+   |
    |  |  Cannot instantiate 1st block argument foo of type () => Int.
 7  |  |    val y: String = baz()
    |  |                         ^ Expected Int but got Bool.
 
 4  * def baz{ ?foo: => List[Bool] }: String = "2"
+         ^^^
 7  |    val y: String = baz()
    |                         ^ Cannot instantiate implicit argument.
+   |
    |  |  Cannot instantiate 1st block argument foo of type () => List[Bool].
 7  |  |    val y: String = baz()
    |  |                         ^ Expected List[Bool] but got Bool.

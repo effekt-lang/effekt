@@ -4,10 +4,12 @@
 
      There are multiple overloads, which all fail to check:
 343  * extern def infixPlus(x: Int, y: Int) at {}: Int =   /libraries/common/effekt.effekt:343:12
+                  ^^^^^^^^^
   4  |    val _: JustCauseATypeErrorPlease = 1 +2   examples/neg/parsing/bin_op_spaces_recovers.effekt:4:38
      |                                       ^^^^ Expected JustCauseATypeErrorPlease but got Int.
 
 406  * extern def infixPlus(x: Double, y: Double) at {}: Double =   /libraries/common/effekt.effekt:406:12
+                  ^^^^^^^^^
   4  |    val _: JustCauseATypeErrorPlease = 1 +2   examples/neg/parsing/bin_op_spaces_recovers.effekt:4:38
      |                                       ^^^^ Expected JustCauseATypeErrorPlease but got Double.
      |

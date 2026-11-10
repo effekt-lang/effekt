@@ -4,10 +4,13 @@
 
    There are multiple overloads, which all fail to check:
 1  * def foo(x: (Int, String)): Int = 42
+         ^^^
 5  |    val _ = foo(42, "hello")
    |            ^^^^^^^^^^^^^^^^ Wrong number of arguments to foo: expected 1 value argument, but got 2 value arguments
+   |
    |  |  * help: Did you mean to call foo with a single tuple argument instead of separate arguments?
 
 2  * def foo(x: Int, y: Int): Int = x + y
+         ^^^
 5  |    val _ = foo(42, "hello")
    |                    ^^^^^^^ Expected Int but got String.

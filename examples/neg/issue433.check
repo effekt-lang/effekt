@@ -4,10 +4,12 @@
 
    There are multiple overloads, which all fail to check:
 1  * def run(n: Int)    { action: => Unit }: Unit = action()
+         ^^^
 7  |      val s: Int = add(1, "Hello world!");
    |                          ^^^^^^^^^^^^^^ Expected Int but got String.
 
 2  * def run(s: String) { action: => Unit }: Unit = action()
+         ^^^
 6  |    run(42) {
    |        ^^ Expected String but got Int.
    |

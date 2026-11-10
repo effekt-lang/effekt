@@ -4,10 +4,13 @@
 
      There are multiple overloads, which all fail to check:
   1  * def run(n: Int)    { action: => Unit }: Unit = action()
+           ^^^
   6  |      "type error" ++ 42
      |      ^^^^^^^^^^^^^^^^^^ Cannot typecheck call.
+     |
      |  |  There are multiple overloads, which all fail to check:
 147  |  |  * extern def infixPlusPlus(s1: String, s2: String) at {}: String =   /libraries/common/effekt.effekt:147:12
+     |  |               ^^^^^^^^^^^^^
   6  |  |  |      "type error" ++ 42   examples/neg/issue433b.effekt:6:5
      |  |  |      ^^^^^^^^^^^^^^^^^^ Expected Unit but got String.
      |  |  |
@@ -15,6 +18,7 @@
      |  |  |                      ^^ Expected String but got Int.
      |  |
 431  |  |  * def infixPlusPlus[A](l: List[A], other: List[A]): List[A] =   /libraries/common/list.effekt:431:5
+     |  |        ^^^^^^^^^^^^^
   6  |  |  |      "type error" ++ 42   examples/neg/issue433b.effekt:6:5
      |  |  |      ^^^^^^^^^^^^^^^^^^ Expected Unit but got List[A].
      |  |  |
@@ -25,13 +29,16 @@
      |  |  |                      ^^ Expected List[A] but got Int.
 
   2  * def run(s: String) { action: => Unit }: Unit = action()
+           ^^^
   5  |    run(42) {
      |        ^^ Expected String but got Int.
      |
   6  |      "type error" ++ 42
      |      ^^^^^^^^^^^^^^^^^^ Cannot typecheck call.
+     |
      |  |  There are multiple overloads, which all fail to check:
 147  |  |  * extern def infixPlusPlus(s1: String, s2: String) at {}: String =   /libraries/common/effekt.effekt:147:12
+     |  |               ^^^^^^^^^^^^^
   6  |  |  |      "type error" ++ 42   examples/neg/issue433b.effekt:6:5
      |  |  |      ^^^^^^^^^^^^^^^^^^ Expected Unit but got String.
      |  |  |
@@ -39,6 +46,7 @@
      |  |  |                      ^^ Expected String but got Int.
      |  |
 431  |  |  * def infixPlusPlus[A](l: List[A], other: List[A]): List[A] =   /libraries/common/list.effekt:431:5
+     |  |        ^^^^^^^^^^^^^
   6  |  |  |      "type error" ++ 42   examples/neg/issue433b.effekt:6:5
      |  |  |      ^^^^^^^^^^^^^^^^^^ Expected Unit but got List[A].
      |  |  |

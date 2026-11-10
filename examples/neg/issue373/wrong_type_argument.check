@@ -4,6 +4,7 @@
 
     There are multiple overloads, which all fail to check:
  6  * def myPrintLine(n: Int): Unit = println(n)
+          ^^^^^^^^^^^
 11  |    try { myPrintLine(eff.op[Bool]("hello")) } // ERROR Expected Bool but got Int
     |                      ^^^^^^^^^^^^^^^^^^^^^ Expected Int but got Bool.
     |
@@ -14,6 +15,7 @@
     |                      ^^^^^^^^^^^^^^^^^^^^^ Expected Bool but got Int.
 
  7  * def myPrintLine(b: Bool): Unit = println(b)
+          ^^^^^^^^^^^
 11  |    try { myPrintLine(eff.op[Bool]("hello")) } // ERROR Expected Bool but got Int
     |                                   ^^^^^^^ Expected Bool but got String.
     |
@@ -21,6 +23,7 @@
     |                      ^^^^^^^^^^^^^^^^^^^^^ Expected Bool but got Int.
 
  8  * def myPrintLine(s: String): Unit = println(s)
+          ^^^^^^^^^^^
 11  |    try { myPrintLine(eff.op[Bool]("hello")) } // ERROR Expected Bool but got Int
     |                      ^^^^^^^^^^^^^^^^^^^^^ Expected String but got Bool.
     |

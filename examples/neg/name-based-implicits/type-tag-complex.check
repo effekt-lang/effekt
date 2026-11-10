@@ -4,7 +4,7 @@
 
     There are multiple overloads, which all would type check:
 15  * def typeTag[F,S]{ ?typeTag: => TypeTag[F] }{ ?typeTag: => TypeTag[S] }: TypeTag[(F,S)] = Pair(typeTag(), typeTag())
-                        ^^^^^^^^^^^^^^^^^^^^^^^ is a block parameter
+                         ^^^^^^^
 
 15  * def typeTag[F,S]{ ?typeTag: => TypeTag[F] }{ ?typeTag: => TypeTag[S] }: TypeTag[(F,S)] = Pair(typeTag(), typeTag())
-                                                   ^^^^^^^^^^^^^^^^^^^^^^^ is a block parameter
+                                                    ^^^^^^^

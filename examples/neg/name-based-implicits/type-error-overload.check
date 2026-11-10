@@ -4,31 +4,41 @@
 
    There are multiple overloads, which all fail to check:
 4  * def baz{ ?foo: => Int }: String = "1"
+         ^^^
 8  |    val y: String = baz()
    |                         ^ Cannot instantiate implicit argument.
+   |
    |  |  Cannot instantiate 1st block argument foo of type () => Int.
 8  |  |    val y: String = baz()
    |  |                         ^ Cannot typecheck call.
+   |  |
    |  |  |  There are multiple overloads, which all fail to check:
 1  |  |  |  * def foo(): Bool = false
+   |  |  |        ^^^
 8  |  |  |  |    val y: String = baz()
    |  |  |  |                         ^ Expected Int but got Bool.
    |  |  |
 2  |  |  |  * def foo(): Double = 0.0
+   |  |  |        ^^^
 8  |  |  |  |    val y: String = baz()
    |  |  |  |                         ^ Expected Int but got Double.
 
 5  * def baz{ ?foo: => List[Bool] }: String = "2"
+         ^^^
 8  |    val y: String = baz()
    |                         ^ Cannot instantiate implicit argument.
+   |
    |  |  Cannot instantiate 1st block argument foo of type () => List[Bool].
 8  |  |    val y: String = baz()
    |  |                         ^ Cannot typecheck call.
+   |  |
    |  |  |  There are multiple overloads, which all fail to check:
 1  |  |  |  * def foo(): Bool = false
+   |  |  |        ^^^
 8  |  |  |  |    val y: String = baz()
    |  |  |  |                         ^ Expected List[Bool] but got Bool.
    |  |  |
 2  |  |  |  * def foo(): Double = 0.0
+   |  |  |        ^^^
 8  |  |  |  |    val y: String = baz()
    |  |  |  |                         ^ Expected List[Bool] but got Double.
