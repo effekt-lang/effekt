@@ -60,8 +60,8 @@ abstract class Context
   // cache used by tasks to save their results (in addition to information in the AnnotationsDB)
   var cache: util.Task.Cache = util.Task.emptyCache
 
-  // the targets computed by the task currently running, per context
-  var trace: List[util.Task.Info] = Nil
+  // the targets computed by the task currently running, per context (or `None` if no task is running)
+  var trace: Option[List[util.Task.Info]] = None
 
   // We assume the backend never changes
   lazy val backend = config.backend()
@@ -107,6 +107,18 @@ abstract class Context
     val msgs = messaging.buffer
     messaging.buffer = bufferBefore
     (msgs, res)
+  }
+
+  /** Temporarily switch to a fresh trace to collect the targets which a task needs */
+  def withTrace[T](block: => T): (List[util.Task.Info], T) = {
+    val traceBefore = trace
+    trace = Some(Nil)
+    try {
+      val res = block
+      (trace.getOrElse(Nil), res)
+    } finally {
+      trace = traceBefore
+    }
   }
 
   /**

@@ -112,34 +112,25 @@ object Task { build =>
   def update[K, V](target: Target[K, V], trace: Trace[V])(using C: Context): Unit =
     C.cache.update(coerce(target), coerce(trace))
 
-  def clearTrace()(using C: Context): List[Info] = {
-    val before = C.trace
-    C.trace = Nil
-    before
-  }
-  def restoreTrace(tr: List[Info])(using C: Context) = {
-    C.trace = tr
-  }
-  def appendToTrace(t: List[Info])(using C: Context) = {
-    val extended = C.trace ++ t
-    C.trace = extended.distinct
-  }
+  // only a running task records the targets it needs, so outside of one nothing accumulates
+  def appendToTrace(t: List[Info])(using C: Context) =
+    C.trace = C.trace.map { trace => (trace ++ t).distinct }
 
   def compute[K, V](target: Target[K, V])(using C: Context): Option[V] = {
-    val before = clearTrace()
     // log(s"computing for ${target}")
 
     // capture the messages, so they can be replayed later
-    val (msgs, res) = C.withMessages {
-      target.task.run(target.key)
+    val (depends, (msgs, res)) = C.withTrace {
+      C.withMessages {
+        target.task.run(target.key)
+      }
     }
     C.messaging.append(msgs)
 
-    val tr = Trace(Info(target, target.fingerprint), C.trace, res, msgs)
+    val tr = Trace(Info(target, target.fingerprint), depends, res, msgs)
     build.update(target, tr)
 
     // for the potential parent task, we append our trace to the existing one
-    restoreTrace(before)
     appendToTrace(tr.trace)
     res
   }
