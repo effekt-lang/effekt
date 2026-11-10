@@ -1,12 +1,13 @@
 [error] examples/neg/typer/expected_block_got_value_overload_wrong_arity.effekt:5:11: Cannot typecheck call. [typer]
-There are multiple overloads, which all fail to check:
-
-Possible overload: expected_block_got_value_overload_wrong_arity::twice of type {Int => Int} => Int
-  Wrong number of arguments to twice: expected 0 value arguments and 1 block argument, but got 1 value argument and 0 block arguments
-  Did you mean to pass 1 value argument as a block (computation)?
-
-Possible overload: expected_block_got_value_overload_wrong_arity::twice of type (Int, Int) => Int
-  Wrong number of arguments to twice: expected 2 value arguments, but got 1 value argument
-
 5    val _ = twice(box { (x: Int) => x + 1 })
              ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+   There are multiple overloads, which all fail to check:
+1  * def twice { f: Int => Int }: Int = f(f(0))
+5  |    val _ = twice(box { (x: Int) => x + 1 })
+   |            ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^ Wrong number of arguments to twice: expected 0 value arguments and 1 block argument, but got 1 value argument and 0 block arguments
+   |  |  * help: Did you mean to pass 1 value argument as a block (computation)?
+
+2  * def twice(a: Int, b: Int): Int = a + b
+5  |    val _ = twice(box { (x: Int) => x + 1 })
+   |            ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^ Wrong number of arguments to twice: expected 2 value arguments, but got 1 value argument

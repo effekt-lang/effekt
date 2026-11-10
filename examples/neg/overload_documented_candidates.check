@@ -1,0 +1,12 @@
+[error] examples/neg/overload_documented_candidates.effekt:5:17: Cannot typecheck call. [typer]
+5    val doubled = twice(true)
+                   ^^^^^^^^^^^
+
+   There are multiple overloads, which all fail to check:
+1  * private def twice(x: Int): Int = x * 2
+5  |    val doubled = twice(true)
+   |                        ^^^^ Expected Int but got Bool.
+
+2  * private def twice(x: String): String = x ++ x
+5  |    val doubled = twice(true)
+   |                        ^^^^ Expected String but got Bool.

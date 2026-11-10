@@ -1,65 +1,84 @@
 [error] examples/neg/issue373/wrong_type_argument_arity.effekt:6:9: Cannot typecheck call. [typer]
-There are multiple overloads, which all fail to check:
+  6    try { println(eff.op[Bool, Int]("hello")) } // ERROR Wrong number of type arguments, given 2 but expected 1
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
-Possible overload: array::println of type Array[Int] => Unit
-  Wrong number of type arguments, given 2 but expected 1
+     There are multiple overloads, which all fail to check:
+643  * def println(l: Array[Int]): Unit = println(showBuiltin(l))   /libraries/common/array.effekt:643:5
+  6  |    try { println(eff.op[Bool, Int]("hello")) } // ERROR Wrong number of type arguments, given 2 but expected 1   examples/neg/issue373/wrong_type_argument_arity.effekt:6:17
+     |                  ^^^^^^^^^^^^^^^^^^^^^^^^^^ Wrong number of type arguments, given 2 but expected 1
 
-Possible overload: array::println of type Array[Double] => Unit
-  Wrong number of type arguments, given 2 but expected 1
+644  * def println(l: Array[Double]): Unit = println(showBuiltin(l))   /libraries/common/array.effekt:644:5
+  6  |    try { println(eff.op[Bool, Int]("hello")) } // ERROR Wrong number of type arguments, given 2 but expected 1   examples/neg/issue373/wrong_type_argument_arity.effekt:6:17
+     |                  ^^^^^^^^^^^^^^^^^^^^^^^^^^ Wrong number of type arguments, given 2 but expected 1
 
-Possible overload: array::println of type Array[Bool] => Unit
-  Wrong number of type arguments, given 2 but expected 1
+645  * def println(l: Array[Bool]): Unit = println(showBuiltin(l))   /libraries/common/array.effekt:645:5
+  6  |    try { println(eff.op[Bool, Int]("hello")) } // ERROR Wrong number of type arguments, given 2 but expected 1   examples/neg/issue373/wrong_type_argument_arity.effekt:6:17
+     |                  ^^^^^^^^^^^^^^^^^^^^^^^^^^ Wrong number of type arguments, given 2 but expected 1
 
-Possible overload: array::println of type Array[String] => Unit
-  Wrong number of type arguments, given 2 but expected 1
+646  * def println(l: Array[String]): Unit = println(showBuiltin(l))   /libraries/common/array.effekt:646:5
+  6  |    try { println(eff.op[Bool, Int]("hello")) } // ERROR Wrong number of type arguments, given 2 but expected 1   examples/neg/issue373/wrong_type_argument_arity.effekt:6:17
+     |                  ^^^^^^^^^^^^^^^^^^^^^^^^^^ Wrong number of type arguments, given 2 but expected 1
 
-Possible overload: effekt::println of type String => Unit
-  Wrong number of type arguments, given 2 but expected 1
+ 50  * extern def println(value: String): Unit =   /libraries/common/effekt.effekt:50:12
+  6  |    try { println(eff.op[Bool, Int]("hello")) } // ERROR Wrong number of type arguments, given 2 but expected 1   examples/neg/issue373/wrong_type_argument_arity.effekt:6:17
+     |                  ^^^^^^^^^^^^^^^^^^^^^^^^^^ Wrong number of type arguments, given 2 but expected 1
 
-Possible overload: effekt::println of type Int => Unit
-  Wrong number of type arguments, given 2 but expected 1
+ 79  * def println(value: Int): Unit = println(value.show)   /libraries/common/effekt.effekt:79:5
+  6  |    try { println(eff.op[Bool, Int]("hello")) } // ERROR Wrong number of type arguments, given 2 but expected 1   examples/neg/issue373/wrong_type_argument_arity.effekt:6:17
+     |                  ^^^^^^^^^^^^^^^^^^^^^^^^^^ Wrong number of type arguments, given 2 but expected 1
 
-Possible overload: effekt::println of type Unit => Unit
-  Wrong number of type arguments, given 2 but expected 1
+ 80  * def println(value: Unit): Unit = println(value.show)   /libraries/common/effekt.effekt:80:5
+  6  |    try { println(eff.op[Bool, Int]("hello")) } // ERROR Wrong number of type arguments, given 2 but expected 1   examples/neg/issue373/wrong_type_argument_arity.effekt:6:17
+     |                  ^^^^^^^^^^^^^^^^^^^^^^^^^^ Wrong number of type arguments, given 2 but expected 1
 
-Possible overload: effekt::println of type Double => Unit
-  Wrong number of type arguments, given 2 but expected 1
+ 81  * def println(value: Double): Unit = println(value.show)   /libraries/common/effekt.effekt:81:5
+  6  |    try { println(eff.op[Bool, Int]("hello")) } // ERROR Wrong number of type arguments, given 2 but expected 1   examples/neg/issue373/wrong_type_argument_arity.effekt:6:17
+     |                  ^^^^^^^^^^^^^^^^^^^^^^^^^^ Wrong number of type arguments, given 2 but expected 1
 
-Possible overload: effekt::println of type Bool => Unit
-  Wrong number of type arguments, given 2 but expected 1
+ 82  * def println(value: Bool): Unit = println(value.show)   /libraries/common/effekt.effekt:82:5
+  6  |    try { println(eff.op[Bool, Int]("hello")) } // ERROR Wrong number of type arguments, given 2 but expected 1   examples/neg/issue373/wrong_type_argument_arity.effekt:6:17
+     |                  ^^^^^^^^^^^^^^^^^^^^^^^^^^ Wrong number of type arguments, given 2 but expected 1
 
-Possible overload: effekt::println of type Byte => Unit
-  Wrong number of type arguments, given 2 but expected 1
+ 83  * def println(value: Byte): Unit = println(value.show)   /libraries/common/effekt.effekt:83:5
+  6  |    try { println(eff.op[Bool, Int]("hello")) } // ERROR Wrong number of type arguments, given 2 but expected 1   examples/neg/issue373/wrong_type_argument_arity.effekt:6:17
+     |                  ^^^^^^^^^^^^^^^^^^^^^^^^^^ Wrong number of type arguments, given 2 but expected 1
 
-Possible overload: effekt::println of type Char => Unit
-  Wrong number of type arguments, given 2 but expected 1
+ 84  * def println(value: Char): Unit = println(value.show)   /libraries/common/effekt.effekt:84:5
+  6  |    try { println(eff.op[Bool, Int]("hello")) } // ERROR Wrong number of type arguments, given 2 but expected 1   examples/neg/issue373/wrong_type_argument_arity.effekt:6:17
+     |                  ^^^^^^^^^^^^^^^^^^^^^^^^^^ Wrong number of type arguments, given 2 but expected 1
 
-Possible overload: effekt::println of type Ordering => Unit
-  Wrong number of type arguments, given 2 but expected 1
+226  * def println(o: Ordering): Unit = println(o.show)   /libraries/common/effekt.effekt:226:5
+  6  |    try { println(eff.op[Bool, Int]("hello")) } // ERROR Wrong number of type arguments, given 2 but expected 1   examples/neg/issue373/wrong_type_argument_arity.effekt:6:17
+     |                  ^^^^^^^^^^^^^^^^^^^^^^^^^^ Wrong number of type arguments, given 2 but expected 1
 
-Possible overload: list::println of type List[Int] => Unit
-  Wrong number of type arguments, given 2 but expected 1
+964  * def println(l: List[Int]): Unit = println(show(l))   /libraries/common/list.effekt:964:5
+  6  |    try { println(eff.op[Bool, Int]("hello")) } // ERROR Wrong number of type arguments, given 2 but expected 1   examples/neg/issue373/wrong_type_argument_arity.effekt:6:17
+     |                  ^^^^^^^^^^^^^^^^^^^^^^^^^^ Wrong number of type arguments, given 2 but expected 1
 
-Possible overload: list::println of type List[Double] => Unit
-  Wrong number of type arguments, given 2 but expected 1
+965  * def println(l: List[Double]): Unit = println(show(l))   /libraries/common/list.effekt:965:5
+  6  |    try { println(eff.op[Bool, Int]("hello")) } // ERROR Wrong number of type arguments, given 2 but expected 1   examples/neg/issue373/wrong_type_argument_arity.effekt:6:17
+     |                  ^^^^^^^^^^^^^^^^^^^^^^^^^^ Wrong number of type arguments, given 2 but expected 1
 
-Possible overload: list::println of type List[Char] => Unit
-  Wrong number of type arguments, given 2 but expected 1
+966  * def println(l: List[Char]): Unit = println(show(l))   /libraries/common/list.effekt:966:5
+  6  |    try { println(eff.op[Bool, Int]("hello")) } // ERROR Wrong number of type arguments, given 2 but expected 1   examples/neg/issue373/wrong_type_argument_arity.effekt:6:17
+     |                  ^^^^^^^^^^^^^^^^^^^^^^^^^^ Wrong number of type arguments, given 2 but expected 1
 
-Possible overload: list::println of type List[Bool] => Unit
-  Wrong number of type arguments, given 2 but expected 1
+967  * def println(l: List[Bool]): Unit = println(show(l))   /libraries/common/list.effekt:967:5
+  6  |    try { println(eff.op[Bool, Int]("hello")) } // ERROR Wrong number of type arguments, given 2 but expected 1   examples/neg/issue373/wrong_type_argument_arity.effekt:6:17
+     |                  ^^^^^^^^^^^^^^^^^^^^^^^^^^ Wrong number of type arguments, given 2 but expected 1
 
-Possible overload: list::println of type List[String] => Unit
-  Wrong number of type arguments, given 2 but expected 1
+968  * def println(l: List[String]): Unit = println(show(l))   /libraries/common/list.effekt:968:5
+  6  |    try { println(eff.op[Bool, Int]("hello")) } // ERROR Wrong number of type arguments, given 2 but expected 1   examples/neg/issue373/wrong_type_argument_arity.effekt:6:17
+     |                  ^^^^^^^^^^^^^^^^^^^^^^^^^^ Wrong number of type arguments, given 2 but expected 1
 
-Possible overload: option::println of type Option[Int] => Unit
-  Wrong number of type arguments, given 2 but expected 1
+ 63  * def println(o: Option[Int]): Unit = println(show(o))   /libraries/common/option.effekt:63:5
+  6  |    try { println(eff.op[Bool, Int]("hello")) } // ERROR Wrong number of type arguments, given 2 but expected 1   examples/neg/issue373/wrong_type_argument_arity.effekt:6:17
+     |                  ^^^^^^^^^^^^^^^^^^^^^^^^^^ Wrong number of type arguments, given 2 but expected 1
 
-Possible overload: option::println of type Option[Double] => Unit
-  Wrong number of type arguments, given 2 but expected 1
+ 64  * def println(o: Option[Double]): Unit = println(show(o))   /libraries/common/option.effekt:64:5
+  6  |    try { println(eff.op[Bool, Int]("hello")) } // ERROR Wrong number of type arguments, given 2 but expected 1   examples/neg/issue373/wrong_type_argument_arity.effekt:6:17
+     |                  ^^^^^^^^^^^^^^^^^^^^^^^^^^ Wrong number of type arguments, given 2 but expected 1
 
-Possible overload: option::println of type Option[Bool] => Unit
-  Wrong number of type arguments, given 2 but expected 1
-
-6    try { println(eff.op[Bool, Int]("hello")) } // ERROR Wrong number of type arguments, given 2 but expected 1
-           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+ 65  * def println(o: Option[Bool]): Unit = println(show(o))   /libraries/common/option.effekt:65:5
+  6  |    try { println(eff.op[Bool, Int]("hello")) } // ERROR Wrong number of type arguments, given 2 but expected 1   examples/neg/issue373/wrong_type_argument_arity.effekt:6:17
+     |                  ^^^^^^^^^^^^^^^^^^^^^^^^^^ Wrong number of type arguments, given 2 but expected 1

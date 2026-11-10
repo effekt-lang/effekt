@@ -1,32 +1,49 @@
 [error] examples/neg/issue433b.effekt:5:3: Cannot typecheck call. [typer]
-There are multiple overloads, which all fail to check:
+  5    run(42) {
+       ^
 
-Possible overload: issue433b::run of type (Int){() => Unit} => Unit
-  Cannot typecheck call.
-  There are multiple overloads, which all fail to check:
-  
-  Possible overload: effekt::infixPlusPlus of type (String, String) => String
-    Expected Unit but got String.
-    Expected String but got Int.
-  
-  Possible overload: list::infixPlusPlus of type [A](List[A], List[A]) => List[A]
-    Expected Unit but got List[A].
-    Expected List[A] but got String.
-    Expected List[A] but got Int.
+     There are multiple overloads, which all fail to check:
+  1  * def run(n: Int)    { action: => Unit }: Unit = action()
+  6  |      "type error" ++ 42
+     |      ^^^^^^^^^^^^^^^^^^ Cannot typecheck call.
+     |  |  There are multiple overloads, which all fail to check:
+147  |  |  * extern def infixPlusPlus(s1: String, s2: String) at {}: String =   /libraries/common/effekt.effekt:147:12
+  6  |  |  |      "type error" ++ 42   examples/neg/issue433b.effekt:6:5
+     |  |  |      ^^^^^^^^^^^^^^^^^^ Expected Unit but got String.
+     |  |  |
+  6  |  |  |      "type error" ++ 42
+     |  |  |                      ^^ Expected String but got Int.
+     |  |
+431  |  |  * def infixPlusPlus[A](l: List[A], other: List[A]): List[A] =   /libraries/common/list.effekt:431:5
+  6  |  |  |      "type error" ++ 42   examples/neg/issue433b.effekt:6:5
+     |  |  |      ^^^^^^^^^^^^^^^^^^ Expected Unit but got List[A].
+     |  |  |
+  6  |  |  |      "type error" ++ 42
+     |  |  |      ^^^^^^^^^^^^ Expected List[A] but got String.
+     |  |  |
+  6  |  |  |      "type error" ++ 42
+     |  |  |                      ^^ Expected List[A] but got Int.
 
-Possible overload: issue433b::run of type (String){() => Unit} => Unit
-  Expected String but got Int.
-  Cannot typecheck call.
-  There are multiple overloads, which all fail to check:
-  
-  Possible overload: effekt::infixPlusPlus of type (String, String) => String
-    Expected Unit but got String.
-    Expected String but got Int.
-  
-  Possible overload: list::infixPlusPlus of type [A](List[A], List[A]) => List[A]
-    Expected Unit but got List[A].
-    Expected List[A] but got String.
-    Expected List[A] but got Int.
-
-5    run(42) {
-     ^
+  2  * def run(s: String) { action: => Unit }: Unit = action()
+  5  |    run(42) {
+     |        ^^ Expected String but got Int.
+     |
+  6  |      "type error" ++ 42
+     |      ^^^^^^^^^^^^^^^^^^ Cannot typecheck call.
+     |  |  There are multiple overloads, which all fail to check:
+147  |  |  * extern def infixPlusPlus(s1: String, s2: String) at {}: String =   /libraries/common/effekt.effekt:147:12
+  6  |  |  |      "type error" ++ 42   examples/neg/issue433b.effekt:6:5
+     |  |  |      ^^^^^^^^^^^^^^^^^^ Expected Unit but got String.
+     |  |  |
+  6  |  |  |      "type error" ++ 42
+     |  |  |                      ^^ Expected String but got Int.
+     |  |
+431  |  |  * def infixPlusPlus[A](l: List[A], other: List[A]): List[A] =   /libraries/common/list.effekt:431:5
+  6  |  |  |      "type error" ++ 42   examples/neg/issue433b.effekt:6:5
+     |  |  |      ^^^^^^^^^^^^^^^^^^ Expected Unit but got List[A].
+     |  |  |
+  6  |  |  |      "type error" ++ 42
+     |  |  |      ^^^^^^^^^^^^ Expected List[A] but got String.
+     |  |  |
+  6  |  |  |      "type error" ++ 42
+     |  |  |                      ^^ Expected List[A] but got Int.

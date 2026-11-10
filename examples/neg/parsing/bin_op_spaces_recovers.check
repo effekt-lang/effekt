@@ -1,22 +1,21 @@
 [error] examples/neg/parsing/bin_op_spaces_recovers.effekt:4:38: Cannot typecheck call. [typer]
-There are multiple overloads, which all fail to check:
+  4    val _: JustCauseATypeErrorPlease = 1 +2
+                                          ^^^^
 
-Possible overload: effekt::infixPlus of type (Int, Int) => Int
-  Expected type
-    JustCauseATypeErrorPlease
-  but got type
-    Int
+     There are multiple overloads, which all fail to check:
+343  * extern def infixPlus(x: Int, y: Int) at {}: Int =   /libraries/common/effekt.effekt:343:12
+  4  |    val _: JustCauseATypeErrorPlease = 1 +2   examples/neg/parsing/bin_op_spaces_recovers.effekt:4:38
+     |                                       ^^^^ Expected JustCauseATypeErrorPlease but got Int.
 
-Possible overload: effekt::infixPlus of type (Double, Double) => Double
-  Expected type
-    JustCauseATypeErrorPlease
-  but got type
-    Double
-  Expected Double but got Int.
-  Expected Double but got Int.
-
-4    val _: JustCauseATypeErrorPlease = 1 +2
-                                        ^^^^
+406  * extern def infixPlus(x: Double, y: Double) at {}: Double =   /libraries/common/effekt.effekt:406:12
+  4  |    val _: JustCauseATypeErrorPlease = 1 +2   examples/neg/parsing/bin_op_spaces_recovers.effekt:4:38
+     |                                       ^^^^ Expected JustCauseATypeErrorPlease but got Double.
+     |
+  4  |    val _: JustCauseATypeErrorPlease = 1 +2
+     |                                       ^ Expected Double but got Int.
+     |
+  4  |    val _: JustCauseATypeErrorPlease = 1 +2
+     |                                          ^ Expected Double but got Int.
 [warning] examples/neg/parsing/bin_op_spaces_recovers.effekt:4:40: Missing whitespace around binary operator [parser]
 4    val _: JustCauseATypeErrorPlease = 1 +2
                                           ^

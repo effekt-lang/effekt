@@ -1,6 +1,7 @@
 [error] examples/neg/name-based-implicits/type-error-no-overload.effekt:6:24: Cannot instantiate implicit argument. [typer]
-Cannot instantiate 1st block argument foo of type () => Int.
-  Expected Int but got Bool.
-
 6    val y: String = baz()
                           ^
+
+   Cannot instantiate 1st block argument foo of type () => Int.
+6    val y: String = baz()
+                          ^ Expected Int but got Bool.

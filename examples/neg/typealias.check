@@ -1,13 +1,18 @@
 [error] examples/neg/typealias.effekt:33:32: Cannot typecheck call. [typer]
-There are multiple overloads, which all fail to check:
+ 33  def add(x: Foo, y: Foo): Bar = x + y
+                                    ^^^^^
 
-Possible overload: effekt::infixPlus of type (Int, Int) => Int
-  Expected String but got Int.
+     There are multiple overloads, which all fail to check:
+343  * extern def infixPlus(x: Int, y: Int) at {}: Int =   /libraries/common/effekt.effekt:343:12
+ 33  |  def add(x: Foo, y: Foo): Bar = x + y   examples/neg/typealias.effekt:33:32
+     |                                 ^^^^^ Expected String but got Int.
 
-Possible overload: effekt::infixPlus of type (Double, Double) => Double
-  Expected String but got Double.
-  Expected Double but got Int.
-  Expected Double but got Int.
-
-33  def add(x: Foo, y: Foo): Bar = x + y
-                                   ^^^^^
+406  * extern def infixPlus(x: Double, y: Double) at {}: Double =   /libraries/common/effekt.effekt:406:12
+ 33  |  def add(x: Foo, y: Foo): Bar = x + y   examples/neg/typealias.effekt:33:32
+     |                                 ^^^^^ Expected String but got Double.
+     |
+ 33  |  def add(x: Foo, y: Foo): Bar = x + y
+     |                                 ^ Expected Double but got Int.
+     |
+ 33  |  def add(x: Foo, y: Foo): Bar = x + y
+     |                                     ^ Expected Double but got Int.
