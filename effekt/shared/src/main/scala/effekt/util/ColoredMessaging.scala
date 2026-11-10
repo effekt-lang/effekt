@@ -71,11 +71,8 @@ trait ColoredMessaging extends EffektMessaging with Style {
     val bullet = s"${guides(depth)}* "
     val declaration = for {
       name <- c.definitionTree if name.span.origin != source.Origin.Missing
-      line <- excerpt(name.span.range)
-    } yield c.symbol match {
-      case _: symbols.BlockParam => marked(c.symbol.decl.span, bullet, s"${guides(depth)}  ", Some("is a block parameter"))
-      case _ => List(Line(Some(name.span.range.from), bullet + line.code))
-    }
+      _ <- excerpt(name.span.range)
+    } yield marked(name.span, bullet, s"${guides(depth)}  ", None)
     declaration.getOrElse(List(Line(None, bullet + message(pretty"${code(fullname(c.symbol.name))} of type ${c.tpe}")))) ++
       spaced(c.errors.toList.map { e => diagnostic(e, depth + 1) }, depth + 1)
   }
@@ -83,7 +80,11 @@ trait ColoredMessaging extends EffektMessaging with Style {
   private def diagnostic(d: Diagnostic, depth: Int): List[Line] = {
     val claim = message(d.reason.claim)
     val placed = d.primary.map(_.span).filter { span => span.origin != source.Origin.Missing }.map { span => marked(span, guides(depth), guides(depth), Some(claim)) }
-    placed.filter(_.nonEmpty).getOrElse(List(Line(None, guides(depth) + claim))) ++ parts(d, depth + 1)
+    val head = placed.filter(_.nonEmpty).getOrElse(List(Line(None, guides(depth) + claim)))
+    head ++ (parts(d, depth + 1) match {
+      case Nil   => Nil
+      case parts => blank(depth) :: parts
+    })
   }
 
   private def subdiagnostic(s: Subdiagnostic, depth: Int): List[Line] = s match {

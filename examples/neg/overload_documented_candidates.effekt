@@ -1,4 +1,7 @@
+/// Doubles a number.
 private def twice(x: Int): Int = x * 2
+
+/// Doubles a string.
 private def twice(x: String): String = x ++ x
 
 def main() = {
