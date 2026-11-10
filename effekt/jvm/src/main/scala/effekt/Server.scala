@@ -10,7 +10,7 @@ import effekt.symbols.Binder.{ValBinder, VarBinder}
 import effekt.symbols.BlockTypeConstructor.{ExternInterface, Interface}
 import effekt.symbols.TypeConstructor.{DataType, ExternType}
 import effekt.symbols.{Anon, Binder, Callable, Effects, ErrorMessageInterpolator, Module, Param, Symbol, TypeAlias, TypePrinter, UserFunction, ValueType, isSynthetic}
-import effekt.util.messages.{Diagnostic as EffektDiagnostic, Severity, Subdiagnostic}
+import effekt.util.messages.{Candidate, Diagnostic as EffektDiagnostic, Severity, Subdiagnostic, fullname}
 import effekt.util.{PlainMessaging, PrettyPrinter}
 import kiama.util.Collections.{mapToJavaMap, seqToJavaList}
 import kiama.util.Convert.*
@@ -221,13 +221,31 @@ class Server(config: EffektConfig, compileOnChange: Boolean=false) extends Drive
   //
 
   def toLSP(diagnostic: EffektDiagnostic): Diagnostic = diagnostic.range match {
-    case Some(range) if relatedInformation && diagnostic.subdiagnostics.nonEmpty =>
-      val lspDiagnostic = new Diagnostic(convertRange(range), lspMessaging.content(diagnostic), toLSP(diagnostic.severity), lspMessaging.lspSource(diagnostic))
-      lspDiagnostic.setRelatedInformation(Collections.seqToJavaList(diagnostic.subdiagnostics.map { s => toLSP(s, range) }))
+    case Some(range) if relatedInformation && related(diagnostic, range).nonEmpty =>
+      val content = (lspMessaging.content(diagnostic) :: diagnostic.reason.details.map(lspMessaging.message)).mkString("\n")
+      val lspDiagnostic = new Diagnostic(convertRange(range), content, toLSP(diagnostic.severity), lspMessaging.lspSource(diagnostic))
+      lspDiagnostic.setRelatedInformation(Collections.seqToJavaList(related(diagnostic, range)))
       lspDiagnostic
     case range =>
       new Diagnostic(range.map(convertRange).getOrElse(emptyRange), lspMessaging.contentWithSubdiagnostics(diagnostic), toLSP(diagnostic.severity), lspMessaging.lspSource(diagnostic))
   }
+
+  def related(diagnostic: EffektDiagnostic, range: Range): List[DiagnosticRelatedInformation] =
+    diagnostic.reason.alternatives.flatMap(toLSP) ++
+      diagnostic.reason.causes.toList.flatMap { cause => cause.range.map { r => at(r, lspMessaging.message(cause.reason.claim)) } } ++
+      diagnostic.subdiagnostics.map { s => toLSP(s, range) }
+
+  def toLSP(candidate: Candidate): List[DiagnosticRelatedInformation] = {
+    val name = lspMessaging.code(fullname(candidate.symbol.name))
+    val declaration = candidate.definitionTree.filter { name => name.span.origin != Origin.Missing }.map { name => name.span.range }
+    declaration.map { r => at(r, s"candidate: ${name} of type ${lspMessaging.code(TypePrinter.show(candidate.tpe))}") }.toList ++
+      candidate.errors.flatMap { e =>
+        e.range.orElse(declaration).map { r => at(r, s"${name}: ${lspMessaging.message(e.reason.claim)}") }
+      }
+  }
+
+  private def at(range: Range, text: String) =
+    new DiagnosticRelatedInformation(new Location(Convert.toURI(range.from.source.name), convertRange(range)), text)
 
   def toLSP(subdiagnostic: Subdiagnostic, diagnosticRange: Range): DiagnosticRelatedInformation = {
     val (kind, range) = subdiagnostic match {

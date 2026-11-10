@@ -45,14 +45,23 @@ object messages {
   trait Reason {
     def claim: StructuredMessage
 
+    // how the claim reads in an output with lines
     def show(using S: Style): List[String] = List(S.message(claim)) // claim only by default
+
+    // prose about the claim, e.g. a list's introduction
+    def details: List[StructuredMessage] = Nil
+
+    // the candidates of a search, each with the errors that rejected it
+    def alternatives: List[Candidate] = Nil
+
+    // the causes for this diagnostic
+    def causes: EffektMessages = Vector.empty
   }
 
   /** Semantic style for parts of error messages, leaving the styling to each output. */
   trait Style {
     def title(s: String): String
     def code(s: String): String
-    def candidate(s: String): String
 
     def indent(s: String): String = s.linesIterator.map(l => "  " + l).mkString("\n")
 
@@ -74,8 +83,14 @@ object messages {
       case other                     => other.toString
     }*)
 
-    def contentWithSubdiagnostics(d: Diagnostic): String =
-      (content(d) :: d.subdiagnostics.map(subdiagnostic)).mkString("\n")
+    def contentWithSubdiagnostics(d: Diagnostic): String = {
+      val alternatives = d.reason.alternatives.map { c =>
+        val header = s"* ${code(fullname(c.symbol.name))} of type ${message(pretty"${c.tpe}")}"
+        (header :: c.errors.toList.map { e => indent(contentWithSubdiagnostics(e)) }).mkString("\n")
+      }
+      val causes = d.reason.causes.toList.map { e => indent(contentWithSubdiagnostics(e)) }
+      (content(d) :: d.reason.details.map(message) ++ alternatives ++ causes ++ d.subdiagnostics.map(subdiagnostic)).mkString("\n")
+    }
   }
 
   case class StructuredMessage(stringContext: StringContext, args: Seq[Any])
@@ -117,27 +132,14 @@ object messages {
 
     def claim = if ambiguous then pretty"Ambiguous overload." else pretty"Cannot typecheck call."
 
-    override def show(using S: Style): List[String] =
-      if ambiguous then {
-        val longestNameLength = candidates.map { c => fullname(c.symbol.name).size }.max
-        val explanations = candidates.map { c =>
-          val name = fullname(c.symbol.name)
-          val padding = " " * (longestNameLength - name.size)
-          pp"- ${S.code(name)}: ${padding}${c.tpe}"
-        }
-        S.title(S.message(claim)) :: "There are multiple overloads, which all would type check:" :: explanations
-      } else {
-        val explanations = candidates.map { c =>
-          val nestedErrors = c.errors.map(S.contentWithSubdiagnostics).mkString("\n")
-          val header = S.candidate(pp"Possible overload: ${S.code(fullname(c.symbol.name))}") + S.candidate(pp" of type ${c.tpe}")
-          s"$header\n${S.indent(nestedErrors)}"
-        }
-        S.title(S.message(claim)) :: "There are multiple overloads, which all fail to check:" ::
-          "" :: explanations.flatMap { e => List(e, "") }
-      }
+    override def details =
+      if ambiguous then List(pretty"There are multiple overloads, which all would type check:")
+      else List(pretty"There are multiple overloads, which all fail to check:")
+
+    override def alternatives = candidates
   }
 
-  case class Candidate(symbol: symbols.BlockSymbol, tpe: symbols.FunctionType, errors: EffektMessages)
+  case class Candidate(symbol: symbols.BlockSymbol, tpe: symbols.FunctionType, errors: EffektMessages, definitionTree: Option[source.IdDef])
 
   // Iterative deepening of the implicit search matches on this class.
   case class ImplicitMaxRecursion(text: String) extends Reason {
@@ -147,24 +149,17 @@ object messages {
   case class ImplicitInstantiation(stencil: source.GenerateImplicitArgs.Error, tpe: symbols.Type) extends Reason {
     def claim = pretty"Cannot instantiate implicit argument."
 
-    override def show(using S: Style): List[String] = {
-      def formatIndex(i: Int): String = i match {
+    override def details = {
+      val index = stencil.index match {
         case 0 => "1st"
         case 1 => "2nd"
         case 2 => "3rd"
         case n => s"${n + 1}th"
       }
-      val prettyIndex = formatIndex(stencil.index)
-      val prettyTpe = TypePrinter.show(tpe)
-      val mainMessage = S.candidate(s"Cannot instantiate ${prettyIndex} ${stencil.kind} ${stencil.name} of type ${prettyTpe}.")
-      val info = stencil.explanation match {
-        case Some(e) => S.indent(e) + "\n"
-        case None => ""
-      }
-      val nestedErrors = S.indent(stencil.msgs.map(S.contentWithSubdiagnostics).mkString("\n"))
-
-      List(S.title(S.message(claim)), mainMessage + "\n" + info + nestedErrors + "\n")
+      pretty"Cannot instantiate ${index} ${stencil.kind} ${stencil.name} of type ${tpe}." :: stencil.explanation.map { line => pretty"${line}" }
     }
+
+    override def causes = stencil.msgs
   }
 
   /**

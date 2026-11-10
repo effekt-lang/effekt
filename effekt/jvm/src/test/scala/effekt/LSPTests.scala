@@ -308,6 +308,45 @@ class LSPTests extends FunSuite {
     server.initialize(initializeParams).get()
   }
 
+  test("an overload search's candidates are its related information in LSP, if the client shows it") {
+    withClientAndServer { (client, server) =>
+      initializeWithRelatedInformation(server)
+
+      val textDoc = raw"""
+                       |def f(x: Int): Int = x
+                       |def f(x: Bool): Bool = x
+                       |def main() = f("a")
+                       |""".textDocument
+      def range(line: Int, from: Int, to: Int) = new Range(new Position(line, from), new Position(line, to))
+      def at(r: Range, text: String) = new DiagnosticRelatedInformation(new Location("file://test.effekt", r), text)
+
+      val didOpenParams = new DidOpenTextDocumentParams()
+      didOpenParams.setTextDocument(textDoc)
+      server.didOpen(didOpenParams)
+
+      val diagnostic = new Diagnostic()
+      diagnostic.setRange(range(3, 13, 19))
+      diagnostic.setSeverity(DiagnosticSeverity.Error)
+      diagnostic.setSource("effekt [typer]")
+      diagnostic.setMessage("Cannot typecheck call.\nThere are multiple overloads, which all fail to check:")
+      diagnostic.setRelatedInformation(util.List.of(
+        at(range(1, 4, 5), "candidate: test::f of type Int => Int"),
+        at(range(3, 15, 18), "test::f: Expected Int but got String."),
+        at(range(2, 4, 5), "candidate: test::f of type Bool => Bool"),
+        at(range(3, 15, 18), "test::f: Expected Bool but got String.")))
+
+      val diagnosticsWithError = new util.ArrayList[Diagnostic]()
+      diagnosticsWithError.add(diagnostic)
+
+      val expected = List(
+        new PublishDiagnosticsParams("file://test.effekt", new util.ArrayList[Diagnostic]()),
+        new PublishDiagnosticsParams("file://test.effekt", diagnosticsWithError)
+      )
+
+      assertEquals(client.receivedDiagnostics(), expected)
+    }
+  }
+
   test("a diagnostic's helps are its related information in LSP, if the client shows it") {
     withClientAndServer { (client, server) =>
       initializeWithRelatedInformation(server)

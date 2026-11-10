@@ -1,0 +1,6 @@
+private def twice(x: Int): Int = x * 2
+private def twice(x: String): String = x ++ x
+
+def main() = {
+  val doubled = twice(true)
+}
