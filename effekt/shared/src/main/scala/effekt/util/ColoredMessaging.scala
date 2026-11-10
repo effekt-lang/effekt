@@ -101,8 +101,13 @@ trait ColoredMessaging extends EffektMessaging with Style {
 
   def contentWithPhase(d: Diagnostic): String = {
     val phase = d.phase.map { p => s" ${dim(s"[${p}]")}" }.getOrElse("")
-    d.reason.show.map(message) match {
-      case first :: rest => (title(first) + phase :: rest).mkString("\n")
+    // the title stays bold around the code in it
+    val titled = (m: StructuredMessage) => pieces(m).map {
+      case Piece.Code(s) => code(s)
+      case Piece.Text(s) => if (s.isEmpty) s else title(s)
+    }.mkString
+    d.reason.show match {
+      case first :: rest => (titled(first) + phase :: rest.map(message)).mkString("\n")
       case Nil => phase
     }
   }
