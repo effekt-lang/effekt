@@ -1,6 +1,5 @@
 [error] examples/neg/typer/mismatch/deferred_nil_as_two_lists.effekt:4:25: Expected List[String] but got List[Int]. [typer]
 4    val _: List[String] = empty
                            ^^^^^
-[info] examples/neg/typer/mismatch/deferred_nil_as_two_lists.effekt:4:25: Expected String but got Int.
-4    val _: List[String] = empty
-                           ^^^^^
+
+   * note: Expected String but got Int.

@@ -2,7 +2,7 @@ package effekt
 package util
 
 import effekt.util.messages.*
-import kiama.util.Position
+import kiama.util.{ Position, Range }
 
 trait ColoredMessaging extends EffektMessaging with Style {
 
@@ -30,13 +30,16 @@ trait ColoredMessaging extends EffektMessaging with Style {
     }
 
   override def formatMessage(message: Diagnostic): String = {
-    val formatted = formatOne(message, contentWithPhase(message)) :: message.subdiagnostics.map { s =>
-      val info = asInfo(message, s)
-      formatOne(info, formatContent(info))
-    }
+    val formatted = formatOne(message, contentWithPhase(message))
+    val items = message.subdiagnostics.map(item)
     // one gutter for the whole diagnostic, as wide as its largest line number
-    val width = formatted.flatMap(_.excerpt).map { e => e.line.toString.length }.maxOption.getOrElse(0)
-    formatted.map { f => f.render(width) }.mkString("")
+    val width = (formatted.excerpt ++ items.flatMap(_.excerpt)).map { e => e.line.toString.length }.maxOption.getOrElse(0)
+    // a blank line between the diagnostic and its items, and between items that span several lines
+    val rendered = items.zipWithIndex.map { case (it, i) =>
+      val gap = i == 0 || it.excerpt.nonEmpty || items(i - 1).excerpt.nonEmpty
+      (if gap then "\n" else "") + it.render(width)
+    }
+    formatted.render(width) + rendered.mkString("")
   }
 
   case class Excerpt(line: Int, code: String, marker: String)
@@ -49,12 +52,21 @@ trait ColoredMessaging extends EffektMessaging with Style {
     }
   }
 
-  private def asInfo(d: Diagnostic, s: Subdiagnostic): Diagnostic = {
-    val at = s match {
-      case Subdiagnostic.Note(_, Some(span)) => Some(Label(span))
-      case _ => d.primary
+  // a note or a help, under the diagnostic it belongs to
+  case class Item(kind: String, text: String, excerpt: Option[Excerpt]) {
+    def render(width: Int): String = {
+      val column = " " * (width + 2)
+      s"${column}* ${kind}: ${text}\n" + (excerpt match {
+        case Some(Excerpt(line, code, marker)) =>
+          s"${dim(" " * (width - line.toString.length) + line)}  ${dim("|")}  ${code}\n${column}${dim("|")}  ${marker}\n"
+        case None => ""
+      })
     }
-    Diagnostic(Severity.Info, at, Nil, Message(s.text), d.phase)
+  }
+
+  private def item(s: Subdiagnostic): Item = s match {
+    case Subdiagnostic.Note(text, at) => Item("note", message(text), at.flatMap { span => excerpt(span.range) })
+    case Subdiagnostic.Help(text)     => Item("help", message(text), None)
   }
 
   def contentWithPhase(d: Diagnostic): String = {
@@ -70,24 +82,21 @@ trait ColoredMessaging extends EffektMessaging with Style {
     case None => "effekt"
   }
 
-  private def formatOne(message: Diagnostic, text: String): Formatted =
-    message.range match {
-      case Some(range) if range.from.line == range.to.line => formatMessage(message, text, range.from, range.to)
-      case Some(range) => formatMessage(message, text, range.from)
-      case None =>
-        val severity = severityToWord(message.severity)
-        Formatted(s"[$severity] ${text}", None)
-    }
-
-  def formatMessage(message: Diagnostic, text: String, from: Position): Formatted =
-    formatMessage(message, text, from, from.copy(column = from.column + 1))
-
-  def formatMessage(message: Diagnostic, text: String, from: Position, to: Position): Formatted = {
+  private def formatOne(message: Diagnostic, text: String): Formatted = {
     val severity = severityToWord(message.severity)
-    val excerpt = from.source.optLineContents(from.line).map { src =>
+    message.range match {
+      case Some(range) => Formatted(s"[$severity] ${homogenizePath(place(range.from))} ${text}", excerpt(range))
+      case None        => Formatted(s"[$severity] ${text}", None)
+    }
+  }
+
+  // the line where `range` starts, marked to its end on that line
+  def excerpt(range: Range): Option[Excerpt] = {
+    val from = range.from
+    val to = if (range.from.line == range.to.line) range.to else from.copy(column = from.column + 1)
+    from.source.optLineContents(from.line).map { src =>
       Excerpt(from.line, util.AnsiHighlight(src), (" " * (from.column - 1)) + ("^" * (to.column - from.column)))
     }
-    Formatted(s"[$severity] ${homogenizePath(place(from))} ${text}", excerpt)
   }
 
   override def formatContent(err: Diagnostic): String = content(err)
@@ -108,13 +117,7 @@ class PlainMessaging extends ColoredMessaging {
   def dim(s: String): String = s
 
   // Don't show context in plain messaging.
-  override def formatMessage(message: Diagnostic, text: String, from: Position): Formatted = {
-    val severity = severityToWord(message.severity)
-    Formatted(s"[$severity] ${homogenizePath(place(from))} ${text}", None)
-  }
-
-  override def formatMessage(message: Diagnostic, text: String, from: Position, to: Position): Formatted =
-    formatMessage(message, text, from)
+  override def excerpt(range: Range): Option[Excerpt] = None
 }
 
 class AnsiColoredMessaging extends ColoredMessaging {

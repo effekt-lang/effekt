@@ -1,9 +1,11 @@
 [error] examples/neg/typer/mismatch/if_arms_int_and_string.effekt:1:23: The branches of this `if` have incompatible types. [typer]
 1  def choose(b: Bool) = if (b) 1 else "hello"
                          ^^^^^^^^^^^^^^^^^^^^^
-[info] examples/neg/typer/mismatch/if_arms_int_and_string.effekt:1:30: This branch has type Int.
-1  def choose(b: Bool) = if (b) 1 else "hello"
-                                ^
-[info] examples/neg/typer/mismatch/if_arms_int_and_string.effekt:1:37: This branch has type String.
-1  def choose(b: Bool) = if (b) 1 else "hello"
-                                       ^^^^^^^
+
+   * note: This branch has type Int.
+1  |  def choose(b: Bool) = if (b) 1 else "hello"
+   |                               ^
+
+   * note: This branch has type String.
+1  |  def choose(b: Bool) = if (b) 1 else "hello"
+   |                                      ^^^^^^^

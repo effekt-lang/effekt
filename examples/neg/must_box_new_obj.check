@@ -1,6 +1,5 @@
 [error] examples/neg/must_box_new_obj.effekt:10:10: Expected a value, but `new` creates a computation (an object instance). [unbox]
 10    return new Counter {
              ^
-[info] examples/neg/must_box_new_obj.effekt:10:10: Use `box new Counter[...] { ... }` to pass it as a value.
-10    return new Counter {
-             ^
+
+    * help: Use `box new Counter[...] { ... }` to pass it as a value.

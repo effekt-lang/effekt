@@ -1,6 +1,5 @@
 [error] examples/neg/typer/mismatch/expected_list_got_list.effekt:3:22: Expected List[Int] but got List[String]. [typer]
 3    val _: List[Int] = words
                         ^^^^^
-[info] examples/neg/typer/mismatch/expected_list_got_list.effekt:3:22: Expected Int but got String.
-3    val _: List[Int] = words
-                        ^^^^^
+
+   * note: Expected Int but got String.

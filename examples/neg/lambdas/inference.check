@@ -4,12 +4,10 @@ but got type
   (Int => Unit at {}) => String at ?C
 13    hof2(box { (f: (Int) => Unit at {}) => "" })
            ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-[info] examples/neg/lambdas/inference.effekt:13:8: Expected Bool but got Unit.
-13    hof2(box { (f: (Int) => Unit at {}) => "" })
-           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+    * note: Expected Bool but got Unit.
 [error] examples/neg/lambdas/inference.effekt:13:15: Type Int => Unit at {} does not match the declared type Int => Bool at {}. [typer]
 13    hof2(box { (f: (Int) => Unit at {}) => "" })
                   ^^^^^^^^^^^^^^^^^^^^^^
-[info] examples/neg/lambdas/inference.effekt:13:15: Expected Bool but got Unit.
-13    hof2(box { (f: (Int) => Unit at {}) => "" })
-                  ^^^^^^^^^^^^^^^^^^^^^^
+
+    * note: Expected Bool but got Unit.

@@ -4,9 +4,8 @@ but got type
   Int => Unit at ?C
 4    val _ = apply(box { (x: Int) => () })
                    ^^^^^^^^^^^^^^^^^^^^^^
-[info] examples/neg/typer/mismatch/expected_function_got_function_return.effekt:4:17: Expected Bool but got Unit.
-4    val _ = apply(box { (x: Int) => () })
-                   ^^^^^^^^^^^^^^^^^^^^^^
+
+   * note: Expected Bool but got Unit.
 [error] examples/neg/typer/mismatch/expected_function_got_function_return.effekt:4:35: Expected Bool but got Unit. [typer]
 4    val _ = apply(box { (x: Int) => () })
                                      ^^

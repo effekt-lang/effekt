@@ -1,9 +1,8 @@
 [error] ./examples/neg/cyclic_b.effekt:3:1: Cyclic import: cyclic_b depends on itself. [namer]
 3  import examples/neg/cyclic_a
    ^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-[info] ./examples/neg/cyclic_b.effekt:3:1: Import cycle: cyclic_b -> cyclic_a -> cyclic_b
-3  import examples/neg/cyclic_a
-   ^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+   * note: Import cycle: cyclic_b -> cyclic_a -> cyclic_b
 [error] ./examples/neg/cyclic_a.effekt:3:1: Cannot compile dependency: ./examples/neg/cyclic_b [namer]
 3  import examples/neg/cyclic_b
    ^^^^^^^^^^^^^^^^^^^^^^^^^^^^

@@ -1,6 +1,5 @@
 [error] examples/neg/def_instead_of_val.effekt:3:13: Expected the right-hand side of a `def` binding to be a block, but got a value of type Int. [typer]
 3  def three = addOne(2)
                ^^^^^^^^^
-[info] examples/neg/def_instead_of_val.effekt:3:13: Maybe try `val` if you're defining a value.
-3  def three = addOne(2)
-               ^^^^^^^^^
+
+   * help: Maybe try `val` if you're defining a value.

@@ -4,15 +4,13 @@ but got type
   () => Unit / { fail } at ?C
 9    val _ = apply(box mayFail)
                    ^^^^^^^^^^^
-[info] examples/neg/typer/mismatch/expected_function_got_other_effects.effekt:9:17: Expected the effects { other } but got { fail }.
-9    val _ = apply(box mayFail)
-                   ^^^^^^^^^^^
+
+   * note: Expected the effects { other } but got { fail }.
 [error] examples/neg/typer/mismatch/expected_function_got_other_effects.effekt:9:21: Expected type [typer]
   () => Unit / { other }
 but got type
   () => Unit / { fail }
 9    val _ = apply(box mayFail)
                        ^^^^^^^
-[info] examples/neg/typer/mismatch/expected_function_got_other_effects.effekt:9:21: Expected the effects { other } but got { fail }.
-9    val _ = apply(box mayFail)
-                       ^^^^^^^
+
+   * note: Expected the effects { other } but got { fail }.

@@ -4,6 +4,5 @@ but got type
   () => Unit / { fail }
 8    val _ = apply(box mayFail)
                        ^^^^^^^
-[info] examples/neg/typer/mismatch/expected_function_got_more_effects.effekt:8:21: Expected the effects {} but got { fail }.
-8    val _ = apply(box mayFail)
-                       ^^^^^^^
+
+   * note: Expected the effects {} but got { fail }.

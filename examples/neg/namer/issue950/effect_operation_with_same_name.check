@@ -1,6 +1,5 @@
 [error] examples/neg/namer/issue950/effect_operation_with_same_name.effekt:4:3: Cannot find a function named `sayHello`. [namer]
 4    sayHello()
      ^^^^^^^^
-[info] examples/neg/namer/issue950/effect_operation_with_same_name.effekt:4:3: There is an equally named effect operation sayHello of interface Greet. Use syntax `do sayHello()` to call it.
-4    sayHello()
-     ^^^^^^^^
+
+   * help: There is an equally named effect operation sayHello of interface Greet. Use syntax `do sayHello()` to call it.
