@@ -101,6 +101,7 @@ object messages {
         case n: Int                    => List(Piece.Code(n.toString))
         case nested: Diagnostic        => List(Piece.Text(contentWithSubdiagnostics(nested)))
         case nested: StructuredMessage => pieces(nested)
+        case piece: Piece              => List(piece)
         case other                     => List(Piece.Text(other.toString))
       }
       val parts = text.stringContext.parts.toList.map { p => Piece.Text(StringContext.processEscapes(p)) }
