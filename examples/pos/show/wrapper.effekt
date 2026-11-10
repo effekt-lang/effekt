@@ -1,0 +1,2 @@
+def showAll[A](xs: List[A]): String = xs.show
+def main() = println(showAll([1, 2]))
