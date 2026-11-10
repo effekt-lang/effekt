@@ -120,7 +120,7 @@ trait Structural {
 class StructuralMacro[Self: Type, Q <: Quotes](debug: Boolean)(using val q: Q) {
   import q.reflect.*
 
-  case class RewriteMethod(tpe: TypeRepr, method: Symbol)
+  case class RewriteMethod(tpe: TypeRepr, result: TypeRepr, method: Symbol)
 
   // Info
   // ----
@@ -165,7 +165,7 @@ class StructuralMacro[Self: Type, Q <: Quotes](debug: Boolean)(using val q: Q) {
         // For a valid query, the result needs to have the query domain type.
         // ...
 
-        RewriteMethod(argType, m)
+        RewriteMethod(argType, resType, m)
       case _ => report.errorAndAbort("Needs to be a method")
     }
   }
@@ -174,7 +174,7 @@ class StructuralMacro[Self: Type, Q <: Quotes](debug: Boolean)(using val q: Q) {
    * Returns all compatible rewrite methods sorted from more-specific to less-specific
    */
   def rewritesFor(tpt: TypeRepr): List[RewriteMethod] = rewrites.filter {
-    case RewriteMethod(tpe, m) => tpt <:< tpe
+    case RewriteMethod(tpe, _, m) => tpt <:< tpe
   }.sortWith {
     case (m1, m2) => m1.tpe <:< m2.tpe
   }
@@ -182,6 +182,9 @@ class StructuralMacro[Self: Type, Q <: Quotes](debug: Boolean)(using val q: Q) {
   def rewriteFor(tpt: TypeRepr): Option[RewriteMethod] = rewritesFor(tpt).headOption
 
   def hasRewriteFor(tpt: TypeRepr): Boolean = rewritesFor(tpt).nonEmpty
+
+  // can elements of this type be rewritten into this type again?
+  def rewritesInto(tpt: TypeRepr): Boolean = rewriteFor(tpt).exists(_.result <:< tpt)
 
 
   // Structural rewrites
@@ -218,14 +221,20 @@ class StructuralMacro[Self: Type, Q <: Quotes](debug: Boolean)(using val q: Q) {
     }
   }
 
+  def isSpanned(tpe: TypeRepr): Boolean =
+    tpe.derivesFrom(TypeRepr.of[effekt.source.Many[?]].typeSymbol) || tpe.derivesFrom(TypeRepr.of[effekt.source.Maybe[?]].typeSymbol)
+
+  def isContainer(tpe: TypeRepr): Boolean =
+    tpe <:< TypeRepr.of[List[Any]] || tpe <:< TypeRepr.of[Option[Any]] || isSpanned(tpe)
+
   def tryRewriteExpression(term: Term, tpe: TypeRepr, owner: Symbol): Option[Term] = {
     // base case: we can directly rewrite this type: rewrite(e)(context)
     if (hasRewriteFor(tpe)) {
       Some(rewrite(term, tpe))
 
-    // it is a list or option: term.map({ t => rewrite(t) })
-    } else if (tpe <:< TypeRepr.of[List[Any]] || tpe <:< TypeRepr.of[Option[Any]]) tpe.typeArgs match {
-      case List(elTpe) if hasRewriteFor(elTpe) =>
+    // it is a list or option, spanned or not: term.map({ t => rewrite(t) })
+    } else if (isContainer(tpe)) tpe.typeArgs match {
+      case List(elTpe) if rewritesInto(elTpe) =>
         Some(Select.overloaded(term, "map", List(elTpe),
           List(makeClosure(elTpe, elTpe, owner, (owner, t) => rewriteExpression(t, elTpe, owner))), tpe))
       case _ =>
@@ -375,10 +384,13 @@ class StructuralMacro[Self: Type, Q <: Quotes](debug: Boolean)(using val q: Q) {
     if (hasRewriteFor(tpe)) {
       Some(rewrite(term, tpe))
 
-    // it is a list or option: combine(term.toList.map({ t => query(t) }))
-    } else if (tpe <:< TypeRepr.of[List[Any]] || tpe <:< TypeRepr.of[Option[Any]]) tpe.typeArgs match {
+    // it is a list or option, spanned or not: combine(term.toList.map({ t => query(t) }))
+    } else if (isContainer(tpe)) tpe.typeArgs match {
       case List(elTpe) if hasRewriteFor(elTpe) =>
-        def toList(term: Term): Term = if (tpe <:< TypeRepr.of[List[Any]]) term else Select.unique(term, "toList")
+        def unspanned(term: Term): Term =
+          if (isSpanned(tpe)) Select.unique(term, "unspan") else term
+        def toList(term: Term): Term =
+          if (unspanned(term).tpe <:< TypeRepr.of[List[Any]]) unspanned(term) else Select.unique(unspanned(term), "toList")
         Some(Apply(Select.unique(info.combine, "apply"), List(
           Select.overloaded(toList(term), "map", List(info.domain),
             List(makeClosure(elTpe, info.domain, owner, (owner, t) => queryExpression(t, elTpe, info, owner))), tpe))))
