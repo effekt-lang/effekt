@@ -160,7 +160,7 @@ case class Span(source: kiama.util.Source, from: Int, to: Int, origin: Origin = 
    * [ - Span - ]
    *             [] <- emptyAfter
    */
-  def emptyAfter: Span = Span(source, to + 1,  to + 1, origin = Origin.Synthesized)
+  def emptyAfter: Span = Span(source, to, to, origin = Origin.Synthesized)
 
   /**
    * creates a fake copy of this span

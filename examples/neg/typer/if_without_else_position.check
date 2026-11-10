@@ -1,0 +1,14 @@
+[error] examples/neg/typer/if_without_else_position.effekt:1:23: The branches of this `if` have incompatible types. [typer]
+1  def f(b: Bool): Int = if (b) 1
+                         ^^^^^^^^
+
+   * note: This branch has type Int.
+1  |  def f(b: Bool): Int = if (b) 1
+   |                               ^
+
+   * note: This branch has type Unit.
+1  |  def f(b: Bool): Int = if (b) 1
+   |                                ^
+[error] examples/neg/typer/if_without_else_position.effekt:1:31: Expected Int but got Unit. [typer]
+1  def f(b: Bool): Int = if (b) 1
+                                 ^

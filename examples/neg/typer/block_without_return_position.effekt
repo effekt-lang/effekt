@@ -1,0 +1,5 @@
+def g(): Int = {
+  val x = 1
+}
+
+def main() = ()

@@ -1,0 +1,9 @@
+[error] examples/neg/typer/block_without_return_position.effekt:1:16: Expected Int but got Unit. [typer]
+1  def g(): Int = {
+                  ^
+[error] examples/neg/typer/block_without_return_position.effekt:2:3: Expected Int but got Unit. [typer]
+2    val x = 1
+     ^^^^^^^^^
+[error] examples/neg/typer/block_without_return_position.effekt:2:12: Expected Int but got Unit. [typer]
+2    val x = 1
+              ^
