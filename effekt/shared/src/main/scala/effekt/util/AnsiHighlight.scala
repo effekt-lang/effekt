@@ -17,45 +17,28 @@ import effekt.lexer.{ Lexer, Token, TokenKind }
  */
 object AnsiHighlight {
 
-  // Styles
-  // ------
+  enum Highlight { case Number, Str, Comment, Keyword, Error }
 
-  private def number(text: String): String =
-    Console.BLUE + text + Console.RESET
+  def escape(highlight: Highlight): String = highlight match {
+    case Highlight.Number  => Console.BLUE
+    case Highlight.Str     => Console.GREEN
+    case Highlight.Comment => Console.WHITE
+    case Highlight.Keyword => Console.MAGENTA
+    case Highlight.Error   => Console.RED + Console.UNDERLINED
+  }
 
-  private def string(text: String): String =
-    Console.GREEN + text + Console.RESET
+  def style(highlight: Highlight, text: String): String = escape(highlight) + text + Console.RESET
 
-  private def comment(text: String): String =
-    Console.WHITE + text + Console.RESET
-
-  private def keyword(text: String): String =
-    Console.MAGENTA + text + Console.RESET
-
-  private def error(text: String): String =
-    Console.RED + Console.UNDERLINED + text + Console.RESET
-
-
-  // Highlighting
-  // ------------
-
-  private def highlight(kind: TokenKind, text: String): String = kind match {
-    case EOF               => ""
-    case Error(message)    => error(text)
-
-    case Integer(n)        => number(text)
-    case Float(d)          => number(text)
-
-    case Str(s, multiline) => string(text)
-    case HoleStr(s)        => string(text)
-    case Chr(c)            => string(text)
-
-    case Ident(id)         => id
-
-    case Comment(msg)      => comment(text)
-    case DocComment(msg)   => comment(text)
-    case Shebang(cmd)      => comment(text)
-
+  def classify(kind: TokenKind): Option[Highlight] = kind match {
+    case Error(message)    => Some(Highlight.Error)
+    case Integer(n)        => Some(Highlight.Number)
+    case Float(d)          => Some(Highlight.Number)
+    case Str(s, multiline) => Some(Highlight.Str)
+    case HoleStr(s)        => Some(Highlight.Str)
+    case Chr(c)            => Some(Highlight.Str)
+    case Comment(msg)      => Some(Highlight.Comment)
+    case DocComment(msg)   => Some(Highlight.Comment)
+    case Shebang(cmd)      => Some(Highlight.Comment)
     // keywords
     case
       `let`  | `val` | `var` | `if` | `else` | `while` |
@@ -63,9 +46,8 @@ object AnsiHighlight {
       `true` | `false` |
       `match` | `def` | `module`| `import`| `export`| `extern`| `include`|
       `record` | `box` | `unbox` | `return` | `region` |
-      `resource` | `new` | `and` | `is` | `namespace` => keyword(text)
-
-    case _ => text
+      `resource` | `new` | `and` | `is` | `namespace` => Some(Highlight.Keyword)
+    case _ => None
   }
 
   extension (token: Token) {
@@ -75,7 +57,7 @@ object AnsiHighlight {
     }
   }
 
-  final def apply(input: String): String = {
+  def tokens(input: String): List[(String, Option[Highlight])] = {
 
     given source: Source = StringSource(input)
 
@@ -90,18 +72,25 @@ object AnsiHighlight {
     // so we need to emit from offset 3 to 4 (non-inclusive).
     var previousOffset = -1
 
-    val out = new StringBuffer
+    val out = scala.collection.mutable.ListBuffer.empty[(String, Option[Highlight])]
 
     while (in.hasNext) {
       val token = in.next()
 
       if (token.start > previousOffset) {
-        out.append(input.substring(previousOffset + 1, token.start))
+        out += ((input.substring(previousOffset + 1, token.start), None))
       }
       previousOffset = token.end
 
-      out.append(highlight(token.kind, token.content))
+      token.kind match {
+        case EOF       => ()
+        case Ident(id) => out += ((id, None))
+        case kind      => out += ((token.content, classify(kind)))
+      }
     }
-    out.toString
+    out.toList
   }
+
+  final def apply(input: String): String =
+    tokens(input).map { (text, highlight) => highlight.map { h => style(h, text) }.getOrElse(text) }.mkString
 }

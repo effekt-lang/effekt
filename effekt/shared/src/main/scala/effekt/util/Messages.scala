@@ -46,7 +46,7 @@ object messages {
     def claim: StructuredMessage
 
     // how the claim reads in an output with lines
-    def show(using S: Style): List[String] = List(S.message(claim)) // claim only by default
+    def show: List[StructuredMessage] = List(claim) // claim only by default
 
     // prose about the claim, e.g. a list's introduction
     def details: List[StructuredMessage] = Nil
@@ -58,30 +58,54 @@ object messages {
     def causes: EffektMessages = Vector.empty
   }
 
+  // what a part of a diagnostic is, so each output can style it
+  enum Role {
+    case Title, Code, Dim
+    case Severity(severity: messages.Severity)
+    case Token(highlight: AnsiHighlight.Highlight)
+  }
+
   /** Semantic style for parts of error messages, leaving the styling to each output. */
   trait Style {
-    def title(s: String): String
-    def code(s: String): String
+    // how this output starts each role, "" for none
+    def escape: Role => String
+
+    def styled(role: Role, s: String): String = escape(role) match {
+      case ""    => s
+      case start => start + s + Console.RESET
+    }
+
+    def title(s: String): String = styled(Role.Title, s)
+    def code(s: String): String = styled(Role.Code, s)
 
     def indent(s: String): String = s.linesIterator.map(l => "  " + l).mkString("\n")
 
-    def content(d: Diagnostic): String = d.reason.show(using this).mkString("\n")
+    def content(d: Diagnostic): String = d.reason.show.map(message).mkString("\n")
 
     def subdiagnostic(s: Subdiagnostic): String = message(s.text)
 
-    def message(text: StructuredMessage): String = text.stringContext.s(text.args.map {
-      case id: source.IdDef          => code(TypePrinter.show(id))
-      case id: source.IdRef          => code(TypePrinter.show(id))
-      case name: Name                => code(name.name)
-      case t: symbols.Type           => code(TypePrinter.show(t))
-      case t: Capture                => code(TypePrinter.show(t))
-      case t: Captures               => code(TypePrinter.show(t))
-      case t: Effects                => code(TypePrinter.show(t))
-      case n: Int                    => code(n.toString)
-      case nested: Diagnostic        => contentWithSubdiagnostics(nested)
-      case nested: StructuredMessage => message(nested)
-      case other                     => other.toString
-    }*)
+    def message(text: StructuredMessage): String = pieces(text).map {
+      case Piece.Code(s) => code(s)
+      case Piece.Text(s) => s
+    }.mkString
+
+    def pieces(text: StructuredMessage): List[Piece] = {
+      val args = text.args.toList.map {
+        case id: source.IdDef          => List(Piece.Code(TypePrinter.show(id)))
+        case id: source.IdRef          => List(Piece.Code(TypePrinter.show(id)))
+        case name: Name                => List(Piece.Code(name.name))
+        case t: symbols.Type           => List(Piece.Code(TypePrinter.show(t)))
+        case t: Capture                => List(Piece.Code(TypePrinter.show(t)))
+        case t: Captures               => List(Piece.Code(TypePrinter.show(t)))
+        case t: Effects                => List(Piece.Code(TypePrinter.show(t)))
+        case n: Int                    => List(Piece.Code(n.toString))
+        case nested: Diagnostic        => List(Piece.Text(contentWithSubdiagnostics(nested)))
+        case nested: StructuredMessage => pieces(nested)
+        case other                     => List(Piece.Text(other.toString))
+      }
+      val parts = text.stringContext.parts.toList.map { p => Piece.Text(StringContext.processEscapes(p)) }
+      parts.head :: args.zip(parts.tail).flatMap { (arg, part) => arg :+ part }
+    }
 
     def contentWithSubdiagnostics(d: Diagnostic): String = {
       val alternatives = d.reason.alternatives.map { c =>
@@ -93,7 +117,26 @@ object messages {
     }
   }
 
+  object Style {
+    val plain: Role => String = _ => ""
+    val ansi: Role => String = {
+      case Role.Title                      => Console.BOLD
+      case Role.Code                       => Console.BLACK + Console.WHITE_B
+      case Role.Dim                        => "\u001b[2m"
+      case Role.Severity(Severity.Error)   => Console.RED
+      case Role.Severity(Severity.Warning) => Console.YELLOW
+      case Role.Severity(Severity.Info)    => Console.WHITE
+      case Role.Severity(Severity.Hint)    => ""
+      case Role.Token(highlight)           => AnsiHighlight.escape(highlight)
+    }
+  }
+
   case class StructuredMessage(stringContext: StringContext, args: Seq[Any])
+
+  enum Piece {
+    case Code(text: String)
+    case Text(text: String)
+  }
 
   implicit class ErrorMessageReifier(private val sc: StringContext) extends AnyVal {
     def pretty(args: Any*): StructuredMessage = StructuredMessage(sc, args)
@@ -113,11 +156,11 @@ object messages {
     def claim = pretty"Expected ${expected} but got ${got}."
 
     // long types are shown aligned, one above the other
-    override def show(using S: Style): List[String] = {
+    override def show: List[StructuredMessage] = {
       val expectedShown = TypePrinter.show(expected)
       val gotShown = TypePrinter.show(got)
-      if ((expectedShown.size + gotShown.size) < 25) List(S.message(claim)) // TODO: think of a better way to do this...
-      else List("Expected type", s"  ${S.code(expectedShown)}", "but got type", s"  ${S.code(gotShown)}")
+      if ((expectedShown.size + gotShown.size) < 25) List(claim) // TODO: think of a better way to do this...
+      else List(pretty"Expected type", pretty"  ${expected}", pretty"but got type", pretty"  ${got}")
     }
   }
 

@@ -6,27 +6,14 @@ import kiama.util.{ Position, Range }
 
 trait ColoredMessaging extends EffektMessaging with Style {
 
-  // Colors
-  // ------
+  private def dim(s: String): String = styled(Role.Dim, s)
 
-  def yellow(s: String): String
-  def red(s: String): String
-  def white(s: String): String
-  def bold(s: String): String
-  def highlight(s: String): String
-  def underlined(s: String): String
-  def dim(s: String): String
-
-  def title(s: String): String = bold(s)
-  def code(s: String): String = highlight(s)
-
-  def severityToWord(severity: Severity): String =
-    severity match {
-      case Severity.Error   => red("error")
-      case Severity.Warning => yellow("warning")
-      case Severity.Info    => white("info")
-      case Severity.Hint    => "hint"
-    }
+  def severityToWord(severity: Severity): String = styled(Role.Severity(severity), severity match {
+    case Severity.Error   => "error"
+    case Severity.Warning => "warning"
+    case Severity.Info    => "info"
+    case Severity.Hint    => "hint"
+  })
 
   override def formatMessage(message: Diagnostic): String = {
     val formatted = formatOne(message, contentWithPhase(message))
@@ -113,7 +100,7 @@ trait ColoredMessaging extends EffektMessaging with Style {
 
   def contentWithPhase(d: Diagnostic): String = {
     val phase = d.phase.map { p => s" ${dim(s"[${p}]")}" }.getOrElse("")
-    d.reason.show(using this) match {
+    d.reason.show.map(message) match {
       case first :: rest => (title(first) + phase :: rest).mkString("\n")
       case Nil => phase
     }
@@ -149,25 +136,13 @@ trait ColoredMessaging extends EffektMessaging with Style {
 }
 
 class PlainMessaging extends ColoredMessaging {
-  def yellow(s: String): String = s
-  def red(s: String): String = s
-  def white(s: String): String = s
-  def bold(s: String): String = s
-  def highlight(s: String): String = s
-  def underlined(s: String): String = s
-  def dim(s: String): String = s
+  val escape = Style.plain
 
   // Don't show context in plain messaging.
   override def excerpt(range: Range): Option[Excerpt] = None
 }
 
 class AnsiColoredMessaging extends ColoredMessaging {
-  def yellow(s: String): String = Console.YELLOW + s + Console.RESET
-  def red(s: String): String = Console.RED + s + Console.RESET
-  def white(s: String): String = Console.WHITE + s + Console.RESET
-  def bold(s: String): String = Console.BOLD + s + Console.RESET
-  def highlight(s: String): String = Console.BLACK + Console.WHITE_B + s + Console.RESET
-  def underlined(s: String): String = Console.UNDERLINED + s + Console.RESET
-  def dim(s: String): String = "\u001b[2m" + s + Console.RESET
+  val escape = Style.ansi
 }
 
