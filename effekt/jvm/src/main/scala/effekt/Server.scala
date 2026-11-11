@@ -225,12 +225,12 @@ class Server(config: EffektConfig, compileOnChange: Boolean=false) extends Drive
     val range = diagnostic.range.map(convertRange).getOrElse(emptyRange)
     val related = diagnostic.range.toList.flatMap { r => this.related(drawing.body, r) }
     if (relatedInformation && related.nonEmpty) {
-      val content = (drawing.header.text ++ drawing.body.introduction).map(lspMessaging.message).mkString("\n")
+      val content = lspMessaging.contentWithSubdiagnostics(drawing.copy(body = drawing.body.copy(blocks = Nil)))
       val lspDiagnostic = new Diagnostic(range, content, toLSP(diagnostic.severity), lspSource(diagnostic))
       lspDiagnostic.setRelatedInformation(Collections.seqToJavaList(related))
       lspDiagnostic
     } else {
-      val content = lspMessaging.contentWithSubdiagnostics(diagnostic)
+      val content = lspMessaging.contentWithSubdiagnostics(drawing)
       new Diagnostic(range, content, toLSP(diagnostic.severity), lspSource(diagnostic))
     }
   }

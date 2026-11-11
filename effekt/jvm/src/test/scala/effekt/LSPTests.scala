@@ -326,11 +326,11 @@ class LSPTests extends FunSuite {
       diagnostic.setSource("effekt [typer]")
       diagnostic.setMessage(
         """Cannot typecheck call.
-          |There are multiple overloads, which all fail to check:
-          |* test::f of type Int => Int
-          |  Expected Int but got String.
-          |* test::f of type Bool => Bool
-          |  Expected Bool but got String.""".stripMargin)
+          |  There are multiple overloads, which all fail to check:
+          |  * test::f of type Int => Int
+          |    Expected Int but got String.
+          |  * test::f of type Bool => Bool
+          |    Expected Bool but got String.""".stripMargin)
 
       val diagnosticsWithError = new util.ArrayList[Diagnostic]()
       diagnosticsWithError.add(diagnostic)
@@ -364,7 +364,7 @@ class LSPTests extends FunSuite {
       diagnostic.setRange(range(3, 13, 19))
       diagnostic.setSeverity(DiagnosticSeverity.Error)
       diagnostic.setSource("effekt [typer]")
-      diagnostic.setMessage("Cannot typecheck call.\nThere are multiple overloads, which all fail to check:")
+      diagnostic.setMessage("Cannot typecheck call.\n  There are multiple overloads, which all fail to check:")
       diagnostic.setRelatedInformation(util.List.of(
         at(range(1, 4, 5), "candidate: test::f of type Int => Int"),
         at(range(3, 15, 18), "test::f of type Int => Int: Expected Int but got String."),
@@ -467,8 +467,8 @@ class LSPTests extends FunSuite {
       diagnostic.setSource("effekt [namer]")
       diagnostic.setMessage(
         """Expected value type, but got a second-class function type (Int, Int) => Bool.
-          |* help: Did you mean to use braces in order to receive a block type `(Int, Int) => Bool`?
-          |* help: Did you mean to use a first-class, boxed function type `(Int, Int) => Bool at {}`?""".stripMargin)
+          |  * help: Did you mean to use braces in order to receive a block type `(Int, Int) => Bool`?
+          |  * help: Did you mean to use a first-class, boxed function type `(Int, Int) => Bool at {}`?""".stripMargin)
 
       val diagnosticsWithError = new util.ArrayList[Diagnostic]()
       diagnosticsWithError.add(diagnostic)

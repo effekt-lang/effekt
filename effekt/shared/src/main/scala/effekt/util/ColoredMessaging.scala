@@ -203,7 +203,10 @@ trait ColoredMessaging extends EffektMessaging with Style {
 
   def content(d: Diagnostic): String = d.reason.show.map(message).mkString("\n")
 
-  def contentWithSubdiagnostics(d: Diagnostic): String = {
+  def contentWithSubdiagnostics(d: Diagnostic): String = contentWithSubdiagnostics(Drawing(d))
+
+  // the body one level deeper, so that the header stands apart
+  def contentWithSubdiagnostics(drawing: Drawing): String = {
     val lines = scala.collection.mutable.ListBuffer.empty[String]
     def body(b: Drawing.Body, depth: Int): Unit = {
       b.introduction.foreach { m => lines += "  " * depth + message(m) }
@@ -216,9 +219,8 @@ trait ColoredMessaging extends EffektMessaging with Style {
           body(nested, depth + 1)
       }
     }
-    val drawing = Drawing(d)
     drawing.header.text.foreach { m => lines += message(m) }
-    body(drawing.body, 0)
+    body(drawing.body, 1)
     lines.mkString("\n")
   }
 
