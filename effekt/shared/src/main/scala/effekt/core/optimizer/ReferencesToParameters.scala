@@ -24,13 +24,16 @@ object ReferencesToParameters extends Tree.Rewrite {
     case other => super.rewrite(other)
   }
 
-  /** The local definitions in [[body]] that use the reference, directly or by calling one that does. */
+  /**
+   * The local definitions, prompts and continuations in [[body]] that use the reference,
+   * directly or through one that does.
+   */
   private def uses(ref: Id, body: Stmt): Set[Id] = {
-    val definitions = localDefinitions(body)
+    val dependencies = dependenciesIn(body)
 
     @tailrec def leastFixedPoint(uses: Set[Id]): Set[Id] = {
-      val next = definitions.collect {
-        case (id, lit) if mentions(ref, uses, lit.free) => id
+      val next = dependencies.collect {
+        case (id, Dependency(free, handler)) if (free.contains(ref) || uses.exists(free.contains)) && handler.forall(uses.contains) => id
       }.toSet
       if next == uses then uses else leastFixedPoint(next)
     }
@@ -45,6 +48,7 @@ object ReferencesToParameters extends Tree.Rewrite {
    */
   private def escapes(ref: Id, uses: Set[Id], body: Stmt): Boolean = {
     def mentioned(free: Free): Boolean = mentions(ref, uses, free)
+    val outside = body.free
 
     def escaping(s: Stmt): Boolean = s match {
       case Stmt.Def(id, lit: BlockLit, rest) if uses.contains(id) => escaping(lit.body) || escaping(rest)
@@ -64,6 +68,14 @@ object ReferencesToParameters extends Tree.Rewrite {
       case Stmt.Get(id, tpe, other, capt, rest) => escaping(rest)
       case Stmt.Put(other, capt, value, rest) => mentioned(value.free) || escaping(rest)
       case Stmt.Hole(_, _) => false
+      case Stmt.Reset(BlockLit(_, _, _, List(BlockParam(prompt, _, _)), body)) if uses.contains(prompt) => escaping(body)
+      case Stmt.Shift(BlockVar(prompt, _, _), _, body) if uses.contains(prompt) => escaping(body)
+      case Stmt.Resume(BlockVar(k, _, _), body) if uses.contains(k) => escaping(body)
+      case shift @ Stmt.Shift(prompt, BlockParam(k, BlockType.Resume(result, _), _), _) if mentioned(shift.free) =>
+        val captured = StaticResumptions.Shift(shift, k, result)
+        !outside.contains(prompt.id) || !captured.resumesOnly ||
+          mentioned(captured.replaceResumptions { _ => Stmt.Return(Nil) }.free) ||
+          resumed(k, shift.body).exists(escaping)
       case other => mentioned(other.free)
     }
 
@@ -80,20 +92,41 @@ object ReferencesToParameters extends Tree.Rewrite {
     RemoveCapture(capture).rewrite(transformed)
   }
 
+  /** The statements [[k]] is resumed with in [[body]]. */
+  private def resumed(k: Id, body: Stmt): List[Stmt] = {
+    object query extends Tree.Query[Unit, List[Stmt]] {
+      def empty = Nil
+      def combine = _ ++ _
+      override def stmt(using Unit) = {
+        case Stmt.Resume(BlockVar(id, _, _), resumed) if id == k => List(resumed)
+      }
+    }
+    query.query(body)(using ())
+  }
+
   /** Whether [[free]] contains the reference or one of the definitions that use it. */
   private def mentions(ref: Id, uses: Set[Id], free: Free): Boolean =
     free.contains(ref) || uses.exists(free.contains)
 
-  /** All local definitions of block literals in [[s]], including nested ones. */
-  private def localDefinitions(s: Stmt): Map[Id, BlockLit] = {
-    object collector extends Tree.Query[Unit, Map[Id, BlockLit]] {
+  /**
+   * What a local definition, prompt or continuation refers to: a definition and a prompt their
+   * body, a continuation the prompt it is captured up to. One bound in the handler of a shift
+   * only uses the reference if the continuation of that shift does.
+   */
+  private case class Dependency(free: Set[Id], handler: Option[Id])
+
+  private def dependenciesIn(s: Stmt): Map[Id, Dependency] = {
+    object collector extends Tree.Query[Option[Id], Map[Id, Dependency]] {
       def empty = Map.empty
       def combine = _ ++ _
-      override def stmt(using Unit) = {
-        case Stmt.Def(id, lit: BlockLit, body) => Map(id -> lit) ++ query(lit) ++ query(body)
+      override def stmt(using handler: Option[Id]) = {
+        case Stmt.Def(id, lit: BlockLit, body) => Map(id -> Dependency(lit.free.freeIds, handler)) ++ query(lit) ++ query(body)
+        case Stmt.Reset(lit @ BlockLit(_, _, _, List(BlockParam(prompt, _, _)), body)) => Map(prompt -> Dependency(lit.free.freeIds, handler)) ++ query(body)
+        case Stmt.Shift(BlockVar(prompt, _, _), BlockParam(k, _, _), body) => Map(k -> Dependency(Set(prompt), handler)) ++ query(body)(using Some(k))
+        case Stmt.Resume(_, body) => query(body)(using None)
       }
     }
-    collector.query(s)(using ())
+    collector.query(s)(using None)
   }
 
   /** Removes the capture of the eliminated reference from all capture sets. */
@@ -154,6 +187,18 @@ object ReferencesToParameters extends Tree.Rewrite {
         Stmt.Let(next, value, go(rest, ValueVar(next, stateType)))
       case Stmt.Put(other, capt, value, rest) => Stmt.Put(other, capt, value, go(rest, current))
       case Stmt.Hole(tpe, span) => Stmt.Hole(tpe :+ stateType, span)
+      case Stmt.Reset(BlockLit(tparams, cparams, vparams, List(BlockParam(prompt, BlockType.Prompt(answer), capt)), body)) if uses.contains(prompt) =>
+        Stmt.Reset(BlockLit(tparams, cparams, vparams, List(BlockParam(prompt, BlockType.Prompt(answer :+ stateType), capt)), go(body, current)))
+      case Stmt.Shift(BlockVar(prompt, BlockType.Prompt(answer), promptCapt), BlockParam(k, BlockType.Resume(result, _), capt), body) if uses.contains(prompt) =>
+        Stmt.Shift(BlockVar(prompt, BlockType.Prompt(answer :+ stateType), promptCapt),
+          BlockParam(k, BlockType.Resume(result :+ stateType, answer :+ stateType), capt), go(body, current))
+      case Stmt.Resume(BlockVar(k, BlockType.Resume(result, answer), capt), body) if uses.contains(k) =>
+        Stmt.Resume(BlockVar(k, BlockType.Resume(result :+ stateType, answer :+ stateType), capt), go(body, current))
+      case shift @ Stmt.Shift(prompt, BlockParam(k, BlockType.Resume(result, answer), capt), _) if mentions(ref, uses, shift.free) =>
+        val retyped = BlockParam(k, BlockType.Resume(result :+ stateType, answer), capt)
+        Stmt.Shift(prompt, retyped, StaticResumptions.Shift(shift, k, result).replaceResumptions { resumed =>
+          Stmt.Resume(BlockVar(k, retyped.tpe, retyped.capt), go(resumed, current))
+        })
       case other => andReturn(other, current)
     }
   }

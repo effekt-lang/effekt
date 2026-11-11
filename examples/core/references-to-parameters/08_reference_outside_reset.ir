@@ -1,0 +1,28 @@
+// A reference shared with a handler is passed through the reset, the shift and the resumption.
+
+def main = { () =>
+  var x @ c = 0;
+  reset { (){p: Prompt[Int]} =>
+    val a: Int = shift (p: Prompt[Int] @ {p}) { {k: (Int) ~> Int} =>
+      put x @ c = 1;
+      resume (k: (Int) ~> Int @ {k}) { return 2 }
+    };
+    get b: Int = !x @ c;
+    return b: Int
+  }
+}
+
+/// REFERENCES_TO_PARAMETERS
+
+def main = { () =>
+  let x0 = 0
+  val r, x3 = reset { (){p: Prompt[(Int, Int)]} =>
+    val a, x2 = shift (p: Prompt[(Int, Int)] @ {p}) { {k: (Int, Int) ~> (Int, Int)} =>
+      let x1 = 1
+      resume (k: (Int, Int) ~> (Int, Int) @ {k}) { return 2, x1: Int }
+    };
+    let b = x2: Int
+    return b: Int, x2: Int
+  };
+  return r: Int
+}

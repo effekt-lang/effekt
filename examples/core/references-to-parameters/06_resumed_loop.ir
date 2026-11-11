@@ -1,0 +1,32 @@
+// A reference captured by a continuation holds, inside each resumption, the value it had at the shift.
+
+def main = { (){p: Prompt[Int]} =>
+  var x @ c = 0;
+  def go() = {
+    get s: Int = !x @ c;
+    put x @ c = s: Int;
+    shift (p : Prompt[Int] @ {p}) { {k: (Int) ~> Int} =>
+      val r = resume (k : (Int) ~> Int @ {k}) { (go : () => Int @ {c, p})() };
+      return r: Int
+    }
+  }
+  (go : () => Int @ {c, p})()
+}
+
+/// REFERENCES_TO_PARAMETERS
+
+def main = { (){p: Prompt[Int]} =>
+  let x0 = 0
+  val y, x3 = {
+    def go(x1: Int) = {
+      let s = x1: Int
+      let x2 = s: Int
+      shift (p : Prompt[Int] @ {p}) { {k: (Int, Int) ~> Int} =>
+        val r = resume (k : (Int, Int) ~> Int @ {k}) { (go : (Int) => (Int, Int) @ {p})(x2: Int) };
+        return r: Int
+      }
+    }
+    (go : (Int) => (Int, Int) @ {p})(x0: Int)
+  };
+  return y: Int
+}
