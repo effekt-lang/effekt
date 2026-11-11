@@ -627,7 +627,7 @@ object TransformerCps extends Transformer {
       case Stmt.LetExpr(id, binding, body) => notIn(binding) && canBeDirect(k, body)
       case Stmt.ImpureApp(id, callee, vargs, bargs, body) => vargs.forall(notIn) && bargs.forall(notIn) && canBeDirect(k, body)
       case Stmt.LetCont(id, Cont.ContLam(result, ks2, body), body2) =>
-        def willBeDirectItself = canBeDirect(id, body2) && canBeDirect(k, maintainDirectStyle(ks2, body))
+        def willBeDirectItself = notIn(body2) && canBeDirect(id, body2) && canBeDirect(k, maintainDirectStyle(ks2, body))
         def notFreeinContinuation = notIn(body) && canBeDirect(k, body2)
         willBeDirectItself || notFreeinContinuation
       case Stmt.Region(id, ks, body) => notIn(body)
