@@ -77,8 +77,8 @@ object BindSubexpressions {
     case Stmt.Return(exprs) => transformExprs(exprs).run { res => Stmt.Return(res) }
     case Stmt.Alloc(id, init, region, body) => transform(init).run { v => Stmt.Alloc(id, v, transform(region), transform(body)) }
     case Stmt.Var(ref, init, capture, body) => transform(init).run { v => Stmt.Var(ref, v, transform(capture), transform(body)) }
-    case Stmt.Get(id, tpe, ref, capt, body) => Stmt.Get(id, transform(tpe), ref, transform(capt), transform(body))
-    case Stmt.Put(ref, capt, value, body) => transform(value).run { v => Stmt.Put(ref, transform(capt), v, transform(body)) }
+    case Stmt.Get(id, tpe, ref, capt, body) => Stmt.Get(id, transform(tpe), transform(ref), transform(capt), transform(body))
+    case Stmt.Put(ref, capt, value, body) => transform(value).run { v => Stmt.Put(transform(ref), transform(capt), v, transform(body)) }
 
     case Stmt.If(cond, thn, els) => transform(cond).run { c =>
       Stmt.If(c, transform(thn), transform(els))

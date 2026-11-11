@@ -1,0 +1,69 @@
+// A definition that returns to a single continuation jumps there instead and moves right behind it.
+// Called once, it is then inlined.
+
+def main = { (b: Bool, c: Int) =>
+  def f(x: Bool) = {
+    if (x: Bool) {
+      return 1
+    } else {
+      return c: Int
+    }
+  }
+  let i = 9
+  val y = (f : (Bool) => Int @ {})(b: Bool);
+  return i: Int
+}
+
+/// IDENTIFY
+
+def main(b: Bool, c: Int) = {
+  def f(x: Bool) = {
+    if (x: Bool) {
+      return 1
+    } else {
+      return c: Int
+    }
+  }
+  let i = 9
+  def k(y: Int) = {
+    return i: Int
+  }
+  val r = f: (Bool) => Int @ {}(b: Bool);
+  k: (Int) => Int @ {}(r: Int)
+}
+
+/// RETURNS_TO
+
+f ↦ k
+k ↦ ?
+
+/// CONTIFY
+
+def main(b: Bool, c: Int) = {
+  let i = 9
+  def k(y: Int) = {
+    return i: Int
+  }
+  def f(x: Bool) = {
+    if (x: Bool) {
+      k: (Int) => Int @ {}(1)
+    } else {
+      k: (Int) => Int @ {}(c: Int)
+    }
+  }
+  f: (Bool) => Int @ {}(b: Bool)
+}
+
+/// CLEANUP
+
+def main(b: Bool, c: Int) = {
+  let i = 9
+  def k(y: Int) = {
+    return i: Int
+  }
+  if (b: Bool) {
+    k: (Int) => Int @ {}(1)
+  } else {
+    k: (Int) => Int @ {}(c: Int)
+  }
+}
