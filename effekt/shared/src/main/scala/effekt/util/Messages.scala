@@ -62,7 +62,7 @@ object messages {
   enum Role {
     case Title, Code, Dim
     case Severity(severity: messages.Severity)
-    case Token(highlight: AnsiHighlight.Highlight)
+    case Token(highlight: Highlight)
   }
 
   /** Semantic style for parts of error messages, leaving the styling to each output. */

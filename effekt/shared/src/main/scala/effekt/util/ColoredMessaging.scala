@@ -87,7 +87,7 @@ trait ColoredMessaging extends EffektMessaging with Style {
     case Piece.Text(s) => plain(s)
   }
 
-  private def highlighted(code: String): List[Segment] = AnsiHighlight.tokens(code).flatMap {
+  private def highlighted(code: String): List[Segment] = Highlight.tokens(code).flatMap {
     case (s, Some(highlight)) => as(Role.Token(highlight), s)
     case (s, None)            => plain(s)
   }
