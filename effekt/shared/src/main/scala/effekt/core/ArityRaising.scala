@@ -84,6 +84,11 @@ object ArityRaising extends Phase[CoreTransformed, CoreTransformed] {
     def bind(ids: List[Id], params: List[List[ValueParam]]): Env =
       ids.zip(params).foldLeft(this) { case (env, (id, ps)) => env.bind(id, ps) }
     def bindRef(id: Id, refs: List[Id]): Env = copy(refs = this.refs + (id -> refs))
+    def bindRefs(bparams: List[BlockParam], components: List[List[BlockParam]]): Env =
+      bparams.zip(components).foldLeft(this) {
+        case (env, (BlockParam(id, Type.TState(_), _), refs)) => env.bindRef(id, refs.map(_.id))
+        case (env, _) => env
+      }
   }
 
   private class Raise(m: ModuleDecl) {
@@ -134,8 +139,6 @@ object ArityRaising extends Phase[CoreTransformed, CoreTransformed] {
     val callSites = mutable.ListBuffer.empty[CallSite]
     val interfaceArguments = mutable.ListBuffer.empty[ValueType]
     val matched = mutable.Set.empty[ValueType]
-    // references used as blocks escape and keep the original representation
-    val blockVars = mutable.Set.empty[Id]
 
     visitAll(m.definitions) {
       case Expr.PureApp(BlockVar(f, _, _), targs, _) if externs.contains(f) =>
@@ -146,7 +149,6 @@ object ArityRaising extends Phase[CoreTransformed, CoreTransformed] {
         callSites += CallSite(externs(f), targs, true)
       case Stmt.Match(scrutinee, _, _, _) => matched += scrutinee.tpe
       case BlockType.Interface(_, targs) => interfaceArguments ++= targs
-      case BlockVar(id, _, _) => blockVars += id
       case _ => ()
     }
 
@@ -209,11 +211,20 @@ object ArityRaising extends Phase[CoreTransformed, CoreTransformed] {
 
     def repr(tpe: BlockType): BlockType = tpe match {
       case BlockType.Function(tparams, cparams, vparams, bparams, result) =>
-        BlockType.Function(tparams, cparams, vparams.flatMap(repr), bparams.map(repr), result.flatMap(repr))
+        val components = bparams.map(reprs)
+        BlockType.Function(tparams, captures(cparams, components), vparams.flatMap(repr), components.flatten, result.flatMap(repr))
       case BlockType.Interface(_, _) => tpe
       case BlockType.Prompt(answer) => BlockType.Prompt(answer.flatMap(repr))
       case BlockType.Resume(result, answer) => BlockType.Resume(result.flatMap(repr), answer.flatMap(repr))
     }
+
+    def reprs(tpe: BlockType): List[BlockType] = tpe match {
+      case Type.TState(t) => repr(t).map(Type.TState(_))
+      case other => List(repr(other))
+    }
+
+    def captures[T](cparams: List[Id], components: List[List[T]]): List[Id] =
+      cparams.zip(components).flatMap { case (c, ts) => ts.map(_ => c) }
 
     def binders(id: Id, tpe: ValueType): List[ValueParam] = repr(tpe) match {
       case List(t) => List(ValueParam(id, t))
@@ -312,6 +323,7 @@ object ArityRaising extends Phase[CoreTransformed, CoreTransformed] {
     // Statements
     // ----------
     def stmt(s: Stmt)(using env: Env): Stmt = s match {
+      case Stmt.Def(id, BlockVar(ref, _, _), body) if env.refs.contains(ref) => stmt(body)(using env.bindRef(id, env.refs(ref)))
       case Stmt.Def(id, b, body) => Stmt.Def(id, block(b), stmt(body))
 
       case Stmt.Let(id, e, body) => expr(e).run { es =>
@@ -339,11 +351,11 @@ object ArityRaising extends Phase[CoreTransformed, CoreTransformed] {
         }
 
       case Stmt.App(callee, targs, vargs, bargs) => exprs(vargs).run { vs =>
-        Stmt.App(block(callee), targs, vs, bargs.map(block))
+        Stmt.App(block(callee), targs, vs, bargs.flatMap(blocks))
       }
 
       case Stmt.Invoke(callee, method, tpe, targs, vargs, bargs) => exprs(vargs).run { vs =>
-        Stmt.Invoke(block(callee), method, repr(tpe), targs, vs, bargs.map(block))
+        Stmt.Invoke(block(callee), method, repr(tpe), targs, vs, bargs.flatMap(blocks))
       }
 
       case Stmt.If(cond, thn, els) => expr(cond).run { cs => Stmt.If(single(cs), stmt(thn), stmt(els)) }
@@ -369,38 +381,23 @@ object ArityRaising extends Phase[CoreTransformed, CoreTransformed] {
       case Stmt.Region(b) => Stmt.Region(blockLit(b))
 
       case Stmt.Alloc(id, init, region, body) => expr(init).run { es =>
-        if blockVars.contains(id) then Stmt.Alloc(id, pack(init.tpe, es), region, stmt(body))
-        else {
-          val refs = references(id, es.size)
-          refs.zip(es).foldRight(stmt(body)(using env.bindRef(id, refs))) { case ((r, e), rest) => Stmt.Alloc(r, e, region, rest) }
-        }
+        val refs = references(id, es.size)
+        refs.zip(es).foldRight(stmt(body)(using env.bindRef(id, refs))) { case ((r, e), rest) => Stmt.Alloc(r, e, region, rest) }
       }
 
       // all components share the capture of the original variable
       case Stmt.Var(ref, init, capture, body) => expr(init).run { es =>
-        if blockVars.contains(ref) then Stmt.Var(ref, pack(init.tpe, es), capture, stmt(body))
-        else {
-          val refs = references(ref, es.size)
-          refs.zip(es).foldRight(stmt(body)(using env.bindRef(ref, refs))) { case ((r, e), rest) => Stmt.Var(r, e, capture, rest) }
-        }
+        val refs = references(ref, es.size)
+        refs.zip(es).foldRight(stmt(body)(using env.bindRef(ref, refs))) { case ((r, e), rest) => Stmt.Var(r, e, capture, rest) }
       }
 
       case Stmt.Get(id, tpe, ref, capt, body) =>
         val params = binders(id, tpe)
         val rest = stmt(body)(using env.bind(id, params))
-        env.refs.get(ref) match {
-          case Some(refs) => params.zip(refs).foldRight(rest) { case ((p, r), rest) => Stmt.Get(p.id, p.tpe, r, capt, rest) }
-          // references that escape keep the original representation
-          case None =>
-            val tmp = Id(id)
-            Stmt.Get(tmp, tpe, ref, capt, open(ValueVar(tmp, tpe), tpe).run { es => lets(params, es, rest) })
-        }
+        params.zip(env.refs(ref)).foldRight(rest) { case ((p, r), rest) => Stmt.Get(p.id, p.tpe, r, capt, rest) }
 
       case Stmt.Put(ref, capt, value, body) => expr(value).run { es =>
-        env.refs.get(ref) match {
-          case Some(refs) => refs.zip(es).foldRight(stmt(body)) { case ((r, e), rest) => Stmt.Put(r, capt, e, rest) }
-          case None => Stmt.Put(ref, capt, pack(value.tpe, es), stmt(body))
-        }
+        env.refs(ref).zip(es).foldRight(stmt(body)) { case ((r, e), rest) => Stmt.Put(r, capt, e, rest) }
       }
 
       case Stmt.Reset(b) => Stmt.Reset(blockLit(b))
@@ -424,21 +421,33 @@ object ArityRaising extends Phase[CoreTransformed, CoreTransformed] {
       case New(Implementation(interface, operations)) => New(Implementation(interface, operations.map(operation)))
     }
 
+    def blocks(b: Block)(using env: Env): List[Block] = b match {
+      case BlockVar(id, tpe, capt) if env.refs.contains(id) => env.refs(id).zip(reprs(tpe)).map { case (r, t) => BlockVar(r, t, capt) }
+      case _ => List(block(b))
+    }
+
     def blockVar(b: BlockVar): BlockVar =
       if externs.contains(b.id) then b else BlockVar(b.id, repr(b.annotatedTpe), b.annotatedCapt)
 
     def blockParam(p: BlockParam): BlockParam = BlockParam(p.id, repr(p.tpe), p.capt)
 
+    def blockParams(p: BlockParam): List[BlockParam] =
+      references(p.id, reprs(p.tpe).size).zip(reprs(p.tpe)).map { case (r, t) => BlockParam(r, t, p.capt) }
+
     def blockLit(b: BlockLit)(using env: Env): BlockLit = b match {
       case BlockLit(tparams, cparams, vparams, bparams, body) =>
         val params = vparams.map(p => binders(p.id, p.tpe))
-        BlockLit(tparams, cparams, params.flatten, bparams.map(blockParam), stmt(body)(using env.bind(vparams.map(_.id), params)))
+        val components = bparams.map(blockParams)
+        BlockLit(tparams, captures(cparams, components), params.flatten, components.flatten,
+          stmt(body)(using env.bind(vparams.map(_.id), params).bindRefs(bparams, components)))
     }
 
     def operation(op: Operation)(using env: Env): Operation = op match {
       case Operation(name, tparams, cparams, vparams, bparams, body) =>
         val params = vparams.map(p => binders(p.id, p.tpe))
-        Operation(name, tparams, cparams, params.flatten, bparams.map(blockParam), stmt(body)(using env.bind(vparams.map(_.id), params)))
+        val components = bparams.map(blockParams)
+        Operation(name, tparams, captures(cparams, components), params.flatten, components.flatten,
+          stmt(body)(using env.bind(vparams.map(_.id), params).bindRefs(bparams, components)))
     }
 
     // Module

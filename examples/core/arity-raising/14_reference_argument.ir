@@ -1,0 +1,40 @@
+// A reference of record type passed as a block argument is split like the variable.
+
+type Point {
+  MkPoint(x: Int, y: Int)
+}
+
+def getX(){position: Ref[Point]} = {
+  get current: Point = ! position @ position;
+  current: Point match [Int] {
+    MkPoint: { (x: Int, y: Int) => return x: Int }
+  }
+}
+
+def main() = {
+  let start = make Point MkPoint(1, 2)
+  var position @ local = start: Point;
+  (getX: (){position: Ref[Point]} => Int @ {})(){position: Ref[Point] @ {local}}
+}
+
+/// ARITY_RAISE
+
+type Point {
+  MkPoint(x: Int, y: Int)
+}
+
+def getX(){position_0 @ position: Ref[Int]} {position_1 @ position: Ref[Int]} = {
+  get current_0: Int = ! position_0 @ position;
+  get current_1: Int = ! position_1 @ position;
+  let x = current_0: Int
+  let y = current_1: Int
+  return x: Int
+}
+
+def main() = {
+  let start_0 = 1
+  let start_1 = 2
+  var position_0 @ local = start_0: Int;
+  var position_1 @ local = start_1: Int;
+  (getX: (){position: Ref[Int]} {position: Ref[Int]} => Int @ {})(){position_0: Ref[Int] @ {local}} {position_1: Ref[Int] @ {local}}
+}
