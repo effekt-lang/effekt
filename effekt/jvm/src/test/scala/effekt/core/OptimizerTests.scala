@@ -285,8 +285,7 @@ class OptimizerTests extends CoreTests {
         |""".stripMargin
 
     val expected =
-      """ interface Foo { op: () => Int }
-        | def main = { () => def f = new Foo { def op() = return 42 } (f : Foo @ {}).op : () => Int () }
+      """ def main = { () => def op = { () => return 42 } (op : () => Int @ {})() }
         |""".stripMargin
 
     normalizeWith(Default(threshold = 0, onceLimit = Some(0), carryingLimit = 0))(input, expected)
@@ -595,8 +594,7 @@ class OptimizerTests extends CoreTests {
 
     // `foo` is inlined although it is over the "normal" budget (but inside the carryingLimit)
     val expected =
-      """ interface Exc { raise: () => Int }
-        | def main = { () => reset { (){p: Prompt[Int]} => def e = new Exc { def raise() = shift (p : Prompt[Int] @ {p}) { {k: (Int) ~> Int} => return 1 } } (e : Exc @ {e}).raise : () => Int () } }
+      """ def main = { () => reset { (){p: Prompt[Int]} => def raise = { () => shift (p : Prompt[Int] @ {p}) { {k: (Int) ~> Int} => return 1 } } (raise : () => Int @ {p})() } }
         |""".stripMargin
 
     normalizeWith(Default(threshold = 0, onceLimit = Some(0), carryingLimit = 100))(input, expected)

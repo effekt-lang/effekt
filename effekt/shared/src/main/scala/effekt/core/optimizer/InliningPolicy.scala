@@ -83,7 +83,15 @@ class Default(threshold: Int, onceLimit: Option[Int], carryingLimit: Int) extend
         case Stmt.Shift(prompt, _, _) => C.prompts.contains(prompt.id)
       }
     }
-    query.query(impl)(using ())
+    query.query(impl)(using ()) || impl.operations.exists { operation =>
+      operation.body match {
+        case Stmt.App(callee: BlockVar, _, _, _) => Normalizer.blockFor(callee.id) match {
+          case Some(jumpedTo: BlockLit) => query.query(jumpedTo)(using ())
+          case _ => false
+        }
+        case _ => false
+      }
+    }
 
   /** Does the body fit the budget this call site can afford? */
   private def affordable(site: CallSite)(using Context): Boolean =
