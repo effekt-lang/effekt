@@ -108,7 +108,7 @@ object Normalizer { normal =>
     case ValueType.Boxed(_, _) => false
   }
 
-  private def blockFor(id: Id)(using ctx: Context): Option[Block] =
+  private[optimizer] def blockFor(id: Id)(using ctx: Context): Option[Block] =
     ctx.blocks.get(id)
 
   private def exprFor(id: Id)(using ctx: Context): Option[Expr] =
@@ -253,9 +253,25 @@ object Normalizer { normal =>
     case Stmt.Def(id, block, body) if isUnused(id) =>
       normalize(body)
 
-    case Stmt.Def(id, block, body) =>
-      val normalized = active(block).dealiased
-      Stmt.Def(id, normalized, normalize(body)(using C.bind(id, normalized)))
+    case Stmt.Def(id, block, body) => active(block) match {
+      case NormalizedBlock.Known(known @ Block.New(Implementation(interface, operations)), None) if !known.free.contains(id) =>
+        val lifted = operations.map { operation =>
+          val (method, literal) = lift(operation)
+          C.usage.get(id).foreach { usage => C.usage.update(method.id, usage) }
+          (operation, method, literal, forward(operation, method))
+        }
+        val forwarding = Block.New(Implementation(interface, lifted.map { case (_, _, _, forwarder) => forwarder }))
+        val inner = lifted.foldLeft(C.bind(id, forwarding)) { case (context, (_, method, literal, _)) => context.bind(method.id, literal) }
+        val rest = normalize(body)(using inner)
+        val (definitions, implementation) = lifted.map {
+          case (_, method, literal, forwarder) if rest.free.contains(method.id) => (List(Binding.Def(method.id, literal)), forwarder)
+          case (operation, _, _, _) => (Nil, operation)
+        }.unzip
+        Binding(definitions.flatten, Stmt.Def(id, Block.New(Implementation(interface, implementation)), rest))
+      case normalized =>
+        val dealiased = normalized.dealiased
+        Stmt.Def(id, dealiased, normalize(body)(using C.bind(id, dealiased)))
+    }
 
     case Stmt.Let(id, expr, body) =>
       active(expr) match {
@@ -292,6 +308,7 @@ object Normalizer { normal =>
       active(b) match {
         case n @ NormalizedBlock.Known(Block.New(impl), boundBy) =>
           selectOperation(impl, method) match {
+            case jump @ BlockLit(_, _, _, _, _: Stmt.App) => reduce(jump, targs, vargs.map(normalize), bargs.map(normalize))
             case b: BlockLit if shouldInline(b, boundBy, vargs, bargs) => reduce(b, targs, vargs.map(normalize), bargs.map(normalize))
             case _ => Stmt.Invoke(n.shared, method, methodTpe, targs, vargs.map(normalize), bargs.map(normalize))
           }
@@ -552,6 +569,24 @@ object Normalizer { normal =>
     val body = substitutions.substitute(renamedLit, targs, vargs, bvars)
 
     normalize(Binding(bindings, body))
+  }
+
+  private def lift(operation: Operation): (Block.BlockVar, BlockLit) = operation match {
+    case Operation(name, tparams, cparams, vparams, bparams, body) =>
+      val literal: BlockLit = BlockLit(tparams, cparams, vparams, bparams, body)
+      (Block.BlockVar(Id(name), literal.tpe, literal.capt), literal)
+  }
+
+  private def forward(operation: Operation, method: Block.BlockVar)(using C: Context): Operation = operation match {
+    case Operation(name, tparams, cparams, vparams, bparams, body) =>
+      val renamer = Renamer()
+      val forwarding = renamer.rewrite(Operation(name, tparams, cparams, vparams, bparams,
+        Stmt.App(method,
+          tparams.map(ValueType.Var.apply),
+          vparams.map { parameter => Expr.ValueVar(parameter.id, parameter.tpe) },
+          bparams.map { parameter => Block.BlockVar(parameter.id, parameter.tpe, parameter.capt) })))
+      renamer.renamed.foreach { case (fresh, original) => C.usage.get(original).foreach { usage => C.usage.update(fresh, usage) } }
+      forwarding
   }
 
   private def selectOperation(impl: Implementation, method: Id): Block.BlockLit =
