@@ -4,65 +4,12 @@ package util
 import effekt.util.messages.*
 import kiama.util.{ Position, Source }
 
-case class Drawing(header: Drawing.Header, excerpts: List[Drawing.Excerpt], body: Drawing.Body)
-
-object Drawing {
-  case class Header(severity: Severity, at: Option[Position], text: List[StructuredMessage], phase: Option[String])
-
-  case class Body(introduction: List[StructuredMessage], blocks: List[Block]) {
-    def isEmpty: Boolean = introduction.isEmpty && blocks.isEmpty
-  }
-  object Body { val empty = Body(Nil, Nil) }
-
-  enum Block {
-    case Item(kind: ItemKind, text: Option[StructuredMessage], excerpts: List[Excerpt], body: Body)
-    case Nested(claim: StructuredMessage, excerpts: List[Excerpt], body: Body)
-  }
-
-  case class Excerpt(at: Position, labels: List[Label])
-
-  enum ItemKind { case Candidate, Note, Help }
-}
-
 trait ColoredMessaging extends EffektMessaging with Style {
   import Drawing.*
 
-  override def formatMessage(message: Diagnostic): String = render(draw(message))
+  override def formatMessage(message: Diagnostic): String = render(Drawing(message))
 
-  // What is drawn
-  // -------------
-
-  def draw(d: Diagnostic): Drawing =
-    Drawing(Header(d.severity, d.range.map(_.from), d.reason.show, d.phase), places(d), body(d))
-
-  private def places(d: Diagnostic): List[Excerpt] =
-    d.primary.toList.flatMap { label => excerpt(label.span) }
-
-  private def body(d: Diagnostic): Body = {
-    val blocks = d.reason.alternatives.map(block) ++ d.reason.causes.toList.map(block) ++ d.subdiagnostics.map(block)
-    Body(d.reason.details, blocks)
-  }
-
-  private def block(c: Candidate): Block = {
-    val declaration = c.definitionTree.toList.flatMap { name => excerpt(name.span) }
-    val text = if declaration.isEmpty then Some(c.show) else None
-    Block.Item(ItemKind.Candidate, text, declaration, Body(Nil, c.errors.toList.map(block)))
-  }
-
-  private def block(d: Diagnostic): Block =
-    Block.Nested(d.reason.claim, places(d), body(d))
-
-  private def block(s: Subdiagnostic): Block = s match {
-    case Subdiagnostic.Note(text, at) => Block.Item(ItemKind.Note, Some(text), at.toList.flatMap(excerpt), Body.empty)
-    case Subdiagnostic.Help(text)     => Block.Item(ItemKind.Help, Some(text), Nil, Body.empty)
-  }
-
-  // the code at a span, marked
-  def excerpt(span: source.Span): Option[Excerpt] = {
-    val at = span.range.from
-    if span.isMissing then None
-    else at.source.optLineContents(at.line).map { _ => Excerpt(at, List(Label(span))) }
-  }
+  def showsCode: Boolean = true
 
   // Where it is drawn
   // -----------------
@@ -96,10 +43,8 @@ trait ColoredMessaging extends EffektMessaging with Style {
   }
 
   private def lead(l: Lead): String = l match {
-    case Lead.Bullet(ItemKind.Candidate) => "* "
-    case Lead.Bullet(ItemKind.Note)      => "* note: "
-    case Lead.Bullet(ItemKind.Help)      => "* help: "
-    case Lead.Hang                       => "  "
+    case Lead.Bullet(kind) => "* " + kind.word
+    case Lead.Hang         => "  "
   }
 
   private def emit(line: Option[Lead] => Line)(using L: Lines): Unit = {
@@ -137,7 +82,7 @@ trait ColoredMessaging extends EffektMessaging with Style {
   private def plain(s: String): List[Segment] = if (s.isEmpty) Nil else List(Segment(s, None))
   private def as(role: Role, s: String): List[Segment] = if (s.isEmpty) Nil else List(Segment(s, Some(role)))
 
-  private def segments(m: StructuredMessage): List[Segment] = pieces(m).flatMap {
+  private def segments(m: StructuredMessage): List[Segment] = m.pieces.flatMap {
     case Piece.Code(s) => as(Role.Code, s)
     case Piece.Text(s) => plain(s)
   }
@@ -147,19 +92,22 @@ trait ColoredMessaging extends EffektMessaging with Style {
     case (s, None)            => plain(s)
   }
 
+  // the places whose code this output shows
+  private def shown(excerpts: List[Excerpt]): List[Excerpt] = if (showsCode) excerpts else Nil
+
   private def excerpts(body: Body): List[Excerpt] = body.blocks.flatMap(excerpts)
 
   private def excerpts(block: Block): List[Excerpt] = block match {
-    case Block.Item(_, _, excerpts, body) => excerpts ++ this.excerpts(body)
-    case Block.Nested(_, excerpts, body)  => excerpts ++ this.excerpts(body)
+    case Block.Item(_, _, excerpts, body) => shown(excerpts) ++ this.excerpts(body)
+    case Block.Nested(_, excerpts, body)  => shown(excerpts) ++ this.excerpts(body)
   }
 
   // as wide as the largest line number
   private def gutter(d: Drawing): Int =
-    (d.excerpts ++ excerpts(d.body)).map { e => e.at.line.toString.length }.maxOption.getOrElse(0)
+    (shown(d.excerpts) ++ excerpts(d.body)).map { e => e.at.line.toString.length }.maxOption.getOrElse(0)
 
   def layout(d: Drawing): List[Line] = Lines(gutter(d)) {
-    d.excerpts.foreach { e => layout(e, None) }
+    shown(d.excerpts).foreach { e => layout(e, None) }
     children { layout(d.body) }
   }
 
@@ -174,18 +122,18 @@ trait ColoredMessaging extends EffektMessaging with Style {
   private def spans(block: Block): Boolean = excerpts(block).nonEmpty
 
   private def layout(block: Block)(using Lines): Unit = block match {
-    // an item's text with its places one level deeper
-    case Block.Item(kind, Some(m), excerpts, body) =>
-      item(kind) { text(segments(m)) }
-      deeper { excerpts.foreach { e => layout(e, None) }; layout(body) }
-
-    case Block.Item(kind, None, excerpts, body) =>
-      item(kind) { excerpts.foreach { e => layout(e, None) } }
-      deeper { layout(body) }
+    case Block.Item(kind, m, excerpts, body) => shown(excerpts) match {
+      case declaration :: rest if kind == ItemKind.Candidate =>
+        item(kind) { layout(declaration, None) }
+        deeper { rest.foreach { e => layout(e, None) }; layout(body) }
+      case places =>
+        item(kind) { text(segments(m)) }
+        deeper { places.foreach { e => layout(e, None) }; layout(body) }
+    }
 
     // a nested claim hangs from the mark at its first place
     case Block.Nested(claim, excerpts, body) =>
-      excerpts match {
+      shown(excerpts) match {
         case first :: rest => layout(first, Some(claim)); rest.foreach { e => layout(e, None) }
         case Nil           => text(segments(claim))
       }
@@ -253,9 +201,25 @@ trait ColoredMessaging extends EffektMessaging with Style {
     case Severity.Hint    => "hint"
   }
 
-  def lspSource(d: Diagnostic): String = d.phase match {
-    case Some(phase) => s"effekt [${phase}]"
-    case None => "effekt"
+  def content(d: Diagnostic): String = d.reason.show.map(message).mkString("\n")
+
+  def contentWithSubdiagnostics(d: Diagnostic): String = {
+    val lines = scala.collection.mutable.ListBuffer.empty[String]
+    def body(b: Drawing.Body, depth: Int): Unit = {
+      b.introduction.foreach { m => lines += "  " * depth + message(m) }
+      b.blocks.foreach {
+        case Drawing.Block.Item(kind, m, _, items) =>
+          lines += "  " * depth + "* " + kind.word + message(m)
+          body(items, depth + 1)
+        case Drawing.Block.Nested(claim, _, nested) =>
+          lines += "  " * depth + message(claim)
+          body(nested, depth + 1)
+      }
+    }
+    val drawing = Drawing(d)
+    drawing.header.text.foreach { m => lines += message(m) }
+    body(drawing.body, 0)
+    lines.mkString("\n")
   }
 
   override def formatContent(err: Diagnostic): String = content(err)
@@ -270,7 +234,7 @@ class PlainMessaging extends ColoredMessaging {
   val escape = Style.plain
 
   // Don't show context in plain messaging.
-  override def excerpt(span: source.Span): Option[Drawing.Excerpt] = None
+  override def showsCode = false
 }
 
 class AnsiColoredMessaging extends ColoredMessaging {

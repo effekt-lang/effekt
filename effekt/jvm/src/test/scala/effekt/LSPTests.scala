@@ -367,9 +367,9 @@ class LSPTests extends FunSuite {
       diagnostic.setMessage("Cannot typecheck call.\nThere are multiple overloads, which all fail to check:")
       diagnostic.setRelatedInformation(util.List.of(
         at(range(1, 4, 5), "candidate: test::f of type Int => Int"),
-        at(range(3, 15, 18), "test::f: Expected Int but got String."),
+        at(range(3, 15, 18), "test::f of type Int => Int: Expected Int but got String."),
         at(range(2, 4, 5), "candidate: test::f of type Bool => Bool"),
-        at(range(3, 15, 18), "test::f: Expected Bool but got String.")))
+        at(range(3, 15, 18), "test::f of type Bool => Bool: Expected Bool but got String.")))
 
       val diagnosticsWithError = new util.ArrayList[Diagnostic]()
       diagnosticsWithError.add(diagnostic)
@@ -467,8 +467,8 @@ class LSPTests extends FunSuite {
       diagnostic.setSource("effekt [namer]")
       diagnostic.setMessage(
         """Expected value type, but got a second-class function type (Int, Int) => Bool.
-          |Did you mean to use braces in order to receive a block type `(Int, Int) => Bool`?
-          |Did you mean to use a first-class, boxed function type `(Int, Int) => Bool at {}`?""".stripMargin)
+          |* help: Did you mean to use braces in order to receive a block type `(Int, Int) => Bool`?
+          |* help: Did you mean to use a first-class, boxed function type `(Int, Int) => Bool at {}`?""".stripMargin)
 
       val diagnosticsWithError = new util.ArrayList[Diagnostic]()
       diagnosticsWithError.add(diagnostic)

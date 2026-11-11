@@ -78,44 +78,10 @@ object messages {
     def title(s: String): String = styled(Role.Title, s)
     def code(s: String): String = styled(Role.Code, s)
 
-    def indent(s: String): String = s.linesIterator.map(l => "  " + l).mkString("\n")
-
-    def content(d: Diagnostic): String = d.reason.show.map(message).mkString("\n")
-
-    def subdiagnostic(s: Subdiagnostic): String = message(s.text)
-
-    def message(text: StructuredMessage): String = pieces(text).map {
+    def message(text: StructuredMessage): String = text.pieces.map {
       case Piece.Code(s) => code(s)
       case Piece.Text(s) => s
     }.mkString
-
-    def pieces(text: StructuredMessage): List[Piece] = {
-      val args = text.args.toList.map {
-        case id: source.IdDef          => List(Piece.Code(TypePrinter.show(id)))
-        case id: source.IdRef          => List(Piece.Code(TypePrinter.show(id)))
-        case name: Name                => List(Piece.Code(name.name))
-        case t: symbols.Type           => List(Piece.Code(TypePrinter.show(t)))
-        case t: Capture                => List(Piece.Code(TypePrinter.show(t)))
-        case t: Captures               => List(Piece.Code(TypePrinter.show(t)))
-        case t: Effects                => List(Piece.Code(TypePrinter.show(t)))
-        case n: Int                    => List(Piece.Code(n.toString))
-        case nested: Diagnostic        => List(Piece.Text(contentWithSubdiagnostics(nested)))
-        case nested: StructuredMessage => pieces(nested)
-        case piece: Piece              => List(piece)
-        case other                     => List(Piece.Text(other.toString))
-      }
-      val parts = text.stringContext.parts.toList.map { p => Piece.Text(StringContext.processEscapes(p)) }
-      parts.head :: args.zip(parts.tail).flatMap { (arg, part) => arg :+ part }
-    }
-
-    def contentWithSubdiagnostics(d: Diagnostic): String = {
-      val alternatives = d.reason.alternatives.map { c =>
-        val header = s"* ${message(c.show)}"
-        (header :: c.errors.toList.map { e => indent(contentWithSubdiagnostics(e)) }).mkString("\n")
-      }
-      val causes = d.reason.causes.toList.map { e => indent(contentWithSubdiagnostics(e)) }
-      (content(d) :: d.reason.details.map(message) ++ alternatives ++ causes ++ d.subdiagnostics.map(subdiagnostic)).mkString("\n")
-    }
   }
 
   object Style {
@@ -132,7 +98,30 @@ object messages {
     }
   }
 
-  case class StructuredMessage(stringContext: StringContext, args: Seq[Any])
+  def lspSource(d: Diagnostic): String = d.phase match {
+    case Some(phase) => s"effekt [${phase}]"
+    case None => "effekt"
+  }
+
+  case class StructuredMessage(stringContext: StringContext, args: Seq[Any]) {
+    def pieces: List[Piece] = {
+      val arguments = args.toList.map {
+        case id: source.IdDef          => List(Piece.Code(TypePrinter.show(id)))
+        case id: source.IdRef          => List(Piece.Code(TypePrinter.show(id)))
+        case name: Name                => List(Piece.Code(name.name))
+        case t: symbols.Type           => List(Piece.Code(TypePrinter.show(t)))
+        case t: Capture                => List(Piece.Code(TypePrinter.show(t)))
+        case t: Captures               => List(Piece.Code(TypePrinter.show(t)))
+        case t: Effects                => List(Piece.Code(TypePrinter.show(t)))
+        case n: Int                    => List(Piece.Code(n.toString))
+        case nested: StructuredMessage => nested.pieces
+        case piece: Piece              => List(piece)
+        case other                     => List(Piece.Text(other.toString))
+      }
+      val parts = stringContext.parts.toList.map { p => Piece.Text(StringContext.processEscapes(p)) }
+      parts.head :: arguments.zip(parts.tail).flatMap { (arg, part) => arg :+ part }
+    }
+  }
 
   enum Piece {
     case Code(text: String)

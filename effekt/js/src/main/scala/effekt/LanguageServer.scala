@@ -137,7 +137,7 @@ class LanguageServer extends Intelligence {
     val from = m.range.map { r => toLSPPosition(r.from) }.orNull
     val to = m.range.map { r => toLSPPosition(r.to) }.orNull
     val text = context.messaging.contentWithSubdiagnostics(m)
-    new lsp.Diagnostic(new lsp.Range(from, to), convertSeverity(m.severity), text, context.messaging.lspSource(m))
+    new lsp.Diagnostic(new lsp.Range(from, to), convertSeverity(m.severity), text, effekt.util.messages.lspSource(m))
   }
 
   private def toLSPPosition(p: Position): lsp.Position =
