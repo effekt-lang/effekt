@@ -10,8 +10,8 @@ import effekt.symbols.Binder.{ValBinder, VarBinder}
 import effekt.symbols.BlockTypeConstructor.{ExternInterface, Interface}
 import effekt.symbols.TypeConstructor.{DataType, ExternType}
 import effekt.symbols.{Anon, Binder, Callable, Effects, ErrorMessageInterpolator, Module, Param, Symbol, TypeAlias, TypePrinter, UserFunction, ValueType, isSynthetic}
-import effekt.util.messages.{Diagnostic as EffektDiagnostic, Severity, lspSource}
-import effekt.util.{Drawing, PlainMessaging, PrettyPrinter}
+import effekt.util.messages.{Diagnostic as EffektDiagnostic, Severity, Style, lspSource}
+import effekt.util.{Drawing, PrettyPrinter, contentWithSubdiagnostics}
 import kiama.util.Collections.{mapToJavaMap, seqToJavaList}
 import kiama.util.Convert.*
 import kiama.util.{Collections, Convert, Position, Source}
@@ -53,7 +53,7 @@ class Server(config: EffektConfig, compileOnChange: Boolean=false) extends Drive
   val getDriver: Driver = this
   val getConfig: EffektConfig = config
 
-  object lspMessaging extends PlainMessaging
+  object lspStyle extends Style { val escape = Style.plain }
 
   // Whether the client shows `relatedInformation`, otherwise subdiagnostics stay part of the message.
   private var relatedInformation: Boolean = false
@@ -225,29 +225,29 @@ class Server(config: EffektConfig, compileOnChange: Boolean=false) extends Drive
     val range = diagnostic.range.map(convertRange).getOrElse(emptyRange)
     val related = diagnostic.range.toList.flatMap { r => this.related(drawing.body, r) }
     if (relatedInformation && related.nonEmpty) {
-      val content = lspMessaging.contentWithSubdiagnostics(drawing.copy(body = drawing.body.copy(blocks = Nil)))
+      val content = contentWithSubdiagnostics(drawing.copy(body = drawing.body.copy(blocks = Nil)), lspStyle)
       val lspDiagnostic = new Diagnostic(range, content, toLSP(diagnostic.severity), lspSource(diagnostic))
       lspDiagnostic.setRelatedInformation(Collections.seqToJavaList(related))
       lspDiagnostic
     } else {
-      val content = lspMessaging.contentWithSubdiagnostics(drawing)
+      val content = contentWithSubdiagnostics(drawing, lspStyle)
       new Diagnostic(range, content, toLSP(diagnostic.severity), lspSource(diagnostic))
     }
   }
 
   def related(body: Drawing.Body, range: Range): List[DiagnosticRelatedInformation] = body.blocks.flatMap {
     case Drawing.Block.Item(Drawing.ItemKind.Candidate, m, places, errors) =>
-      val candidate = lspMessaging.message(m)
+      val candidate = lspStyle.message(m)
       val declaration = place(places)
       declaration.map { r => at(r, s"candidate: ${candidate}") }.toList ++ errors.blocks.flatMap {
         case Drawing.Block.Nested(claim, places, _) =>
-          place(places).orElse(declaration).map { r => at(r, s"${candidate}: ${lspMessaging.message(claim)}") }
+          place(places).orElse(declaration).map { r => at(r, s"${candidate}: ${lspStyle.message(claim)}") }
         case _ => None
       }
     case Drawing.Block.Item(kind, m, places, _) =>
-      List(at(place(places).getOrElse(range), kind.word + lspMessaging.message(m)))
+      List(at(place(places).getOrElse(range), kind.word + lspStyle.message(m)))
     case Drawing.Block.Nested(claim, places, _) =>
-      place(places).map { r => at(r, lspMessaging.message(claim)) }.toList
+      place(places).map { r => at(r, lspStyle.message(claim)) }.toList
   }
 
   private def place(excerpts: List[Drawing.Excerpt]): Option[Range] =

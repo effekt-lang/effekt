@@ -75,7 +75,6 @@ object messages {
       case start => start + s + Console.RESET
     }
 
-    def title(s: String): String = styled(Role.Title, s)
     def code(s: String): String = styled(Role.Code, s)
 
     def message(text: StructuredMessage): String = text.pieces.map {
@@ -94,7 +93,12 @@ object messages {
       case Role.Severity(Severity.Warning) => Console.YELLOW
       case Role.Severity(Severity.Info)    => Console.WHITE
       case Role.Severity(Severity.Hint)    => ""
-      case Role.Token(highlight)           => AnsiHighlight.escape(highlight)
+      case Role.Token(Highlight.Number)    => Console.BLUE
+      case Role.Token(Highlight.Str)       => Console.GREEN
+      case Role.Token(Highlight.Comment)   => Console.WHITE
+      case Role.Token(Highlight.Keyword)   => Console.MAGENTA
+      case Role.Token(Highlight.Error)     => Console.RED + Console.UNDERLINED
+      case Role.Token(Highlight.Ident)     => ""
     }
   }
 

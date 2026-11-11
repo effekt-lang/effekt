@@ -29,14 +29,14 @@ trait ColoredMessaging extends EffektMessaging with Style {
   case class Segment(text: String, role: Option[Role])
 
   // the lines drawn so far + where the next one goes
-  private final class Lines(val gutter: Int) {
+  private final class Lines {
     private[ColoredMessaging] val drawn = scala.collection.mutable.ListBuffer.empty[Line]
     private[ColoredMessaging] var depth = 0
     private[ColoredMessaging] var lead: Option[Lead] = None
   }
   private object Lines {
-    def apply(gutter: Int)(block: Lines ?=> Unit): List[Line] = {
-      val L = new Lines(gutter)
+    def apply(block: Lines ?=> Unit): List[Line] = {
+      val L = new Lines
       block(using L)
       L.drawn.toList
     }
@@ -106,7 +106,7 @@ trait ColoredMessaging extends EffektMessaging with Style {
   private def gutter(d: Drawing): Int =
     (shown(d.excerpts) ++ excerpts(d.body)).map { e => e.at.line.toString.length }.maxOption.getOrElse(0)
 
-  def layout(d: Drawing): List[Line] = Lines(gutter(d)) {
+  def layout(d: Drawing): List[Line] = Lines {
     shown(d.excerpts).foreach { e => layout(e, None) }
     children { layout(d.body) }
   }
@@ -201,28 +201,7 @@ trait ColoredMessaging extends EffektMessaging with Style {
     case Severity.Hint    => "hint"
   }
 
-  def content(d: Diagnostic): String = d.reason.show.map(message).mkString("\n")
-
-  def contentWithSubdiagnostics(d: Diagnostic): String = contentWithSubdiagnostics(Drawing(d))
-
-  // the body one level deeper, so that the header stands apart
-  def contentWithSubdiagnostics(drawing: Drawing): String = {
-    val lines = scala.collection.mutable.ListBuffer.empty[String]
-    def body(b: Drawing.Body, depth: Int): Unit = {
-      b.introduction.foreach { m => lines += "  " * depth + message(m) }
-      b.blocks.foreach {
-        case Drawing.Block.Item(kind, m, _, items) =>
-          lines += "  " * depth + "* " + kind.word + message(m)
-          body(items, depth + 1)
-        case Drawing.Block.Nested(claim, _, nested) =>
-          lines += "  " * depth + message(claim)
-          body(nested, depth + 1)
-      }
-    }
-    drawing.header.text.foreach { m => lines += message(m) }
-    body(drawing.body, 1)
-    lines.mkString("\n")
-  }
+  def content(d: Diagnostic): String = Drawing.header(d).text.map(message).mkString("\n")
 
   override def formatContent(err: Diagnostic): String = content(err)
 
