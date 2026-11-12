@@ -55,7 +55,6 @@ class Server(config: EffektConfig, compileOnChange: Boolean=false) extends Drive
 
   object lspStyle extends Style { val escape = Style.plain }
 
-  // Whether the client shows `relatedInformation`, otherwise subdiagnostics stay part of the message.
   private var relatedInformation: Boolean = false
 
   // Whether the client follows definition links, otherwise a definition is the location of its name.
@@ -223,16 +222,12 @@ class Server(config: EffektConfig, compileOnChange: Boolean=false) extends Drive
   def toLSP(diagnostic: EffektDiagnostic): Diagnostic = {
     val drawing = Drawing(diagnostic)
     val range = diagnostic.range.map(convertRange).getOrElse(emptyRange)
+    // related information cannot nest, so the message keeps the whole tree
+    val content = contentWithSubdiagnostics(drawing, lspStyle)
+    val lspDiagnostic = new Diagnostic(range, content, toLSP(diagnostic.severity), lspSource(diagnostic))
     val related = diagnostic.range.toList.flatMap { r => this.related(drawing.body, r) }
-    if (relatedInformation && related.nonEmpty) {
-      val content = contentWithSubdiagnostics(drawing.copy(body = drawing.body.copy(blocks = Nil)), lspStyle)
-      val lspDiagnostic = new Diagnostic(range, content, toLSP(diagnostic.severity), lspSource(diagnostic))
-      lspDiagnostic.setRelatedInformation(Collections.seqToJavaList(related))
-      lspDiagnostic
-    } else {
-      val content = contentWithSubdiagnostics(drawing, lspStyle)
-      new Diagnostic(range, content, toLSP(diagnostic.severity), lspSource(diagnostic))
-    }
+    if (relatedInformation && related.nonEmpty) lspDiagnostic.setRelatedInformation(Collections.seqToJavaList(related))
+    lspDiagnostic
   }
 
   def related(body: Drawing.Body, range: Range): List[DiagnosticRelatedInformation] = body.blocks.flatMap {
