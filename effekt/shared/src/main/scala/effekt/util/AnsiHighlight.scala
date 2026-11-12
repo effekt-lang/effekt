@@ -15,5 +15,7 @@ object AnsiHighlight extends messages.Style {
   val escape = messages.Style.ansi
 
   final def apply(input: String): String =
-    Highlight.tokens(input).map { (text, highlight) => highlight.map { h => styled(messages.Role.Token(h), text) }.getOrElse(text) }.mkString
+    Highlight.tokens(input).map { (text, highlight) =>
+      highlight.map { h => styled(messages.Role.Token(h), text) }.getOrElse(text)
+    }.mkString
 }

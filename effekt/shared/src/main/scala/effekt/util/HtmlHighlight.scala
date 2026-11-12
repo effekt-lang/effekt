@@ -1,6 +1,5 @@
 package effekt.util
 
-
 /**
  * Highlights Effekt code using HTML <span> tags.
  *

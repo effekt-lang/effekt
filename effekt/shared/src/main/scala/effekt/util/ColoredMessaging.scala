@@ -99,8 +99,8 @@ trait ColoredMessaging extends EffektMessaging with Style {
 
   private def excerpts(block: Block): List[Excerpt] = block match {
     case Block.Candidate(_, declaration, errors) => shown(declaration) ++ errors.flatMap(excerpts)
-    case Block.Item(_, _, excerpts, body) => shown(excerpts) ++ this.excerpts(body)
-    case Block.Nested(_, excerpts, body)  => shown(excerpts) ++ this.excerpts(body)
+    case Block.Item(_, _, excerpts, body)        => shown(excerpts) ++ this.excerpts(body)
+    case Block.Nested(_, excerpts, body)         => shown(excerpts) ++ this.excerpts(body)
   }
 
   // as wide as the largest line number
@@ -112,12 +112,12 @@ trait ColoredMessaging extends EffektMessaging with Style {
     children { layout(d.body) }
   }
 
-  // a blank line between consecutive items where either spans several lines
   private def layout(body: Body)(using Lines): Unit = {
     body.introduction.foreach { m => text(segments(m)) }
     layout(body.blocks)
   }
 
+  // a blank line between consecutive items where either spans several lines
   private def layout(blocks: List[Block])(using Lines): Unit = {
     separated(blocks) { (previous, block) => if (spans(previous) || spans(block)) blank() } { block =>
       layout(block)
