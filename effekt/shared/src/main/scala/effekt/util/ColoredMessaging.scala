@@ -16,7 +16,7 @@ trait ColoredMessaging extends EffektMessaging with Style {
 
   // precedes a line's content
   enum Lead {
-    case Bullet(kind: ItemKind)
+    case Bullet(kind: Option[ItemKind])
     case Hang
   }
 
@@ -43,7 +43,7 @@ trait ColoredMessaging extends EffektMessaging with Style {
   }
 
   private def lead(l: Lead): String = l match {
-    case Lead.Bullet(kind) => "* " + kind.word
+    case Lead.Bullet(kind) => "* " + kind.map(_.word).getOrElse("")
     case Lead.Hang         => "  "
   }
 
@@ -66,7 +66,7 @@ trait ColoredMessaging extends EffektMessaging with Style {
   }
 
   // its bullet on its first line
-  private def item(kind: ItemKind)(block: Lines ?=> Unit)(using L: Lines): Unit = {
+  private def item(kind: Option[ItemKind])(block: Lines ?=> Unit)(using L: Lines): Unit = {
     L.lead = Some(Lead.Bullet(kind))
     block
     L.lead = None
@@ -98,6 +98,7 @@ trait ColoredMessaging extends EffektMessaging with Style {
   private def excerpts(body: Body): List[Excerpt] = body.blocks.flatMap(excerpts)
 
   private def excerpts(block: Block): List[Excerpt] = block match {
+    case Block.Candidate(_, declaration, errors) => shown(declaration) ++ errors.flatMap(excerpts)
     case Block.Item(_, _, excerpts, body) => shown(excerpts) ++ this.excerpts(body)
     case Block.Nested(_, excerpts, body)  => shown(excerpts) ++ this.excerpts(body)
   }
@@ -114,7 +115,11 @@ trait ColoredMessaging extends EffektMessaging with Style {
   // a blank line between consecutive items where either spans several lines
   private def layout(body: Body)(using Lines): Unit = {
     body.introduction.foreach { m => text(segments(m)) }
-    separated(body.blocks) { (previous, block) => if (spans(previous) || spans(block)) blank() } { block =>
+    layout(body.blocks)
+  }
+
+  private def layout(blocks: List[Block])(using Lines): Unit = {
+    separated(blocks) { (previous, block) => if (spans(previous) || spans(block)) blank() } { block =>
       layout(block)
     }
   }
@@ -122,14 +127,18 @@ trait ColoredMessaging extends EffektMessaging with Style {
   private def spans(block: Block): Boolean = excerpts(block).nonEmpty
 
   private def layout(block: Block)(using Lines): Unit = block match {
-    case Block.Item(kind, m, excerpts, body) => shown(excerpts) match {
-      case declaration :: rest if kind == ItemKind.Candidate =>
-        item(kind) { layout(declaration, None) }
-        deeper { rest.foreach { e => layout(e, None) }; layout(body) }
-      case places =>
-        item(kind) { text(segments(m)) }
-        deeper { places.foreach { e => layout(e, None) }; layout(body) }
+    case Block.Candidate(m, declaration, errors) => shown(declaration) match {
+      case first :: rest =>
+        item(None) { layout(first, None) }
+        deeper { rest.foreach { e => layout(e, None) }; layout(errors) }
+      case Nil =>
+        item(None) { text(segments(m)) }
+        deeper { layout(errors) }
     }
+
+    case Block.Item(kind, m, excerpts, body) =>
+      item(Some(kind)) { text(segments(m)) }
+      deeper { shown(excerpts).foreach { e => layout(e, None) }; layout(body) }
 
     // a nested claim hangs from the mark at its first place
     case Block.Nested(claim, excerpts, body) =>
@@ -201,9 +210,7 @@ trait ColoredMessaging extends EffektMessaging with Style {
     case Severity.Hint    => "hint"
   }
 
-  def content(d: Diagnostic): String = Drawing.header(d).text.map(message).mkString("\n")
-
-  override def formatContent(err: Diagnostic): String = content(err)
+  override def formatContent(err: Diagnostic): String = Drawing.header(err).text.map(message).mkString("\n")
 
   def place(p: Position): String = {
     val name = shownName(p.source)

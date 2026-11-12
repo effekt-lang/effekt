@@ -13,6 +13,7 @@ object Drawing {
   object Body { val empty = Body(Nil, Nil) }
 
   enum Block {
+    case Candidate(text: StructuredMessage, declaration: List[Excerpt], errors: List[Block.Nested])
     case Item(kind: ItemKind, text: StructuredMessage, excerpts: List[Excerpt], body: Body)
     case Nested(claim: StructuredMessage, excerpts: List[Excerpt], body: Body)
   }
@@ -20,10 +21,9 @@ object Drawing {
   case class Excerpt(at: Position, labels: List[Label])
 
   enum ItemKind {
-    case Candidate, Note, Help
+    case Note, Help
 
     def word: String = this match {
-      case Candidate => ""
       case Note      => "note: "
       case Help      => "help: "
     }
@@ -43,10 +43,10 @@ object Drawing {
 
   private def block(c: Candidate): Block = {
     val declaration = c.definitionTree.toList.flatMap { name => excerpt(name.span) }
-    Block.Item(ItemKind.Candidate, c.show, declaration, Body(Nil, c.errors.toList.map(block)))
+    Block.Candidate(c.show, declaration, c.errors.toList.map(block))
   }
 
-  private def block(d: Diagnostic): Block =
+  private def block(d: Diagnostic): Block.Nested =
     Block.Nested(d.reason.claim, places(d), body(d))
 
   private def block(s: Subdiagnostic): Block = s match {
@@ -67,14 +67,18 @@ def contentWithSubdiagnostics(drawing: Drawing, style: Style): String = {
   val lines = scala.collection.mutable.ListBuffer.empty[String]
   def body(b: Drawing.Body, depth: Int): Unit = {
     b.introduction.foreach { m => lines += "  " * depth + style.message(m) }
-    b.blocks.foreach {
-      case Drawing.Block.Item(kind, m, _, items) =>
-        lines += "  " * depth + "* " + kind.word + style.message(m)
-        body(items, depth + 1)
-      case Drawing.Block.Nested(claim, _, nested) =>
-        lines += "  " * depth + style.message(claim)
-        body(nested, depth + 1)
-    }
+    b.blocks.foreach { block(_, depth) }
+  }
+  def block(b: Drawing.Block, depth: Int): Unit = b match {
+    case Drawing.Block.Candidate(m, _, errors) =>
+      lines += "  " * depth + "* " + style.message(m)
+      errors.foreach { block(_, depth + 1) }
+    case Drawing.Block.Item(kind, m, _, items) =>
+      lines += "  " * depth + "* " + kind.word + style.message(m)
+      body(items, depth + 1)
+    case Drawing.Block.Nested(claim, _, nested) =>
+      lines += "  " * depth + style.message(claim)
+      body(nested, depth + 1)
   }
   drawing.header.text.foreach { m => lines += style.message(m) }
   body(drawing.body, 1)

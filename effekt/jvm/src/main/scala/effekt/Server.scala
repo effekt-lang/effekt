@@ -236,13 +236,11 @@ class Server(config: EffektConfig, compileOnChange: Boolean=false) extends Drive
   }
 
   def related(body: Drawing.Body, range: Range): List[DiagnosticRelatedInformation] = body.blocks.flatMap {
-    case Drawing.Block.Item(Drawing.ItemKind.Candidate, m, places, errors) =>
+    case Drawing.Block.Candidate(m, places, errors) =>
       val candidate = lspStyle.message(m)
       val declaration = place(places)
-      declaration.map { r => at(r, s"candidate: ${candidate}") }.toList ++ errors.blocks.flatMap {
-        case Drawing.Block.Nested(claim, places, _) =>
-          place(places).orElse(declaration).map { r => at(r, s"${candidate}: ${lspStyle.message(claim)}") }
-        case _ => None
+      declaration.map { r => at(r, s"candidate: ${candidate}") }.toList ++ errors.flatMap { error =>
+        place(error.excerpts).orElse(declaration).map { r => at(r, s"${candidate}: ${lspStyle.message(error.claim)}") }
       }
     case Drawing.Block.Item(kind, m, places, _) =>
       List(at(place(places).getOrElse(range), kind.word + lspStyle.message(m)))
