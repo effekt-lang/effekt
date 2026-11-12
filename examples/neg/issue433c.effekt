@@ -1,0 +1,8 @@
+def run(n: Int)    { action: Int => Unit }: Unit = action(n)
+def run(s: String) { action: String => Unit }: Unit = action(s)
+
+def main() = {
+  run("hi") { x => 
+    val s: Int = x + 1
+  }
+}
