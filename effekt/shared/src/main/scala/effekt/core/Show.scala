@@ -303,7 +303,7 @@ object Show extends Phase[CoreTransformed, CoreTransformed] {
         Block.BlockVar(id, BlockType.Function(tparams, cparams, vparams map (_.tpe), bparams map (_.tpe), List(ret)), annotatedCapture)
 
   def generateShowInstance(decl: Declaration, targs: List[ValueType])(using ctx: ShowContext, dctx: DeclarationContext)(using Context): Option[Toplevel.Def] = decl match {
-    case dataDecl: Declaration.Data if dataDecl.constructors.nonEmpty =>
+    case dataDecl: Declaration.Data =>
       val freshId = freshShowId
       val dataType = ValueType.Data(decl.id, targs)
       ctx.showNames += (dataType -> freshId)
