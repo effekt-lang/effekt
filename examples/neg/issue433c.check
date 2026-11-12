@@ -1,11 +1,11 @@
 [error] examples/neg/issue433c.effekt:5:3: Cannot typecheck call. [typer]
-  5    run("hi") { x => 
+  5    run("hi") { x =>
        ^
 
      There are multiple overloads, which all fail to check:
   1  * def run(n: Int)    { action: Int => Unit }: Unit = action(n)
            ^^^
-  5  |    run("hi") { x => 
+  5  |    run("hi") { x =>
      |        ^^^^ Expected Int but got String.
 
   2  * def run(s: String) { action: String => Unit }: Unit = action(s)
