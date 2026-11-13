@@ -1,0 +1,42 @@
+import probs
+import pile
+
+// medical example of breast cancer
+def cancerDiagnosis(): Bool / {fork, fail, loss} = {
+  val breastCancer = flip(0.01)
+  val benignCyst = flip(0.2)
+  val positiveMammogram = (breastCancer && flip(0.8)) || (benignCyst && flip(0.5))
+
+  where(positiveMammogram) 
+  return breastCancer
+}
+
+// pseudo random nuber generator
+def linearCongruentialGenerator[R](seed: Int) { prog: => R / random } : R = {
+  // parameters from Numerical Recipes (https://en.wikipedia.org/wiki/Linear_congruential_generator)
+  val a = 1664525
+  val c = 1013904223
+  val m = 1073741824
+  var x: Int = seed;
+  def next() = { x = mod((a * x + c), m); x }
+  try { prog() }
+  with random {
+    resume(next().toDouble / m.toDouble)
+  }
+}
+
+def main() = {
+  with linearCongruentialGenerator(1)
+
+  println("cancer diagnosis")
+  for[Weighted[Bool]]{minimize{cancerDiagnosis()}}{
+    result => println(genericShow(result))
+  }
+
+  println("\n")
+
+  println("cancer diagn with sampler")
+  for[Bool]{ do emit(lazySampling[Bool]{handleRandom { cancerDiagnosis() }}) }{
+    result => println(genericShow(result))
+  }
+}
