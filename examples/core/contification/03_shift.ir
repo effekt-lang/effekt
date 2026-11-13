@@ -1,0 +1,113 @@
+// The frame of a shift moves into its resumption, which returns where the shift returns:
+// what it is resumed with jumps to the continuation of the shift, and that one to the continuation of the call.
+
+def main = { (c: Int) =>
+  reset { (){p: Prompt[Int]} =>
+    def f(x: Bool) = {
+      val y: Bool = shift (p: Prompt[Int] @ {p}) { {r: (Bool) ~> Int} =>
+        resume (r: (Bool) ~> Int @ {r}) { return x: Bool }
+      };
+      if (y: Bool) {
+        return false
+      } else {
+        return true
+      }
+    }
+    val a: Bool = (f : (Bool) => Bool @ {p})(true);
+    if (a: Bool) {
+      return 1
+    } else {
+      return c: Int
+    }
+  }
+}
+
+/// IDENTIFY
+
+def main(c: Int) = {
+  reset { (){p @ p: Prompt[Int]} =>
+    def f(x: Bool) = {
+      def k1(y: Bool) = {
+        if (y: Bool) {
+          return false
+        } else {
+          return true
+        }
+      }
+      shift(p: Prompt[Int] @ {p}) {{r: (Bool) ~> Int} =>
+        resume(r: (Bool) ~> Int @ {r}) {
+          k1: (Bool) => Bool @ {}(x: Bool)
+        }
+      }
+    }
+    def k2(a: Bool) = {
+      if (a: Bool) {
+        return 1
+      } else {
+        return c: Int
+      }
+    }
+    val z = f: (Bool) => Bool @ {p}(true);
+    k2: (Bool) => Int @ {}(z: Bool)
+  }
+}
+
+/// RETURNS_TO
+
+f ↦ k2
+k1 ↦ k2
+k2 ↦ ?
+r ↦ k2
+
+/// CONTIFY
+
+def main(c: Int) = {
+  reset { (){p @ p: Prompt[Int]} =>
+    def k2(a: Bool) = {
+      if (a: Bool) {
+        return 1
+      } else {
+        return c: Int
+      }
+    }
+    def f(x: Bool) = {
+      def k1(y: Bool) = {
+        if (y: Bool) {
+          k2: (Bool) => Int @ {}(false)
+        } else {
+          k2: (Bool) => Int @ {}(true)
+        }
+      }
+      shift(p: Prompt[Int] @ {p}) {{r: (Int) ~> Int} =>
+        resume(r: (Int) ~> Int @ {r}) {
+          k1: (Bool) => Int @ {}(x: Bool)
+        }
+      }
+    }
+    f: (Bool) => Int @ {p}(true)
+  }
+}
+
+/// CLEANUP
+
+def main(c: Int) = {
+  reset { (){p @ p: Prompt[Int]} =>
+    def k2(a: Bool) = {
+      if (a: Bool) {
+        return 1
+      } else {
+        return c: Int
+      }
+    }
+    let x = true
+    shift(p: Prompt[Int] @ {p}) {{r: (Int) ~> Int} =>
+      resume(r: (Int) ~> Int @ {r}) {
+        if (x: Bool) {
+          k2: (Bool) => Int @ {}(false)
+        } else {
+          k2: (Bool) => Int @ {}(true)
+        }
+      }
+    }
+  }
+}

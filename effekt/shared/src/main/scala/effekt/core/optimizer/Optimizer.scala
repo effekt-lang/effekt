@@ -48,9 +48,9 @@ object Optimizer extends Phase[CoreTransformed, CoreTransformed] {
       val normalized = Normalizer.normalize(Set(mainSymbol), anfed, policy)
       val live = Deadcode.remove(mainSymbol, normalized)
       val tailRemoved = StaticResumptions(live)
-      val contified = DirectStyle.rewrite(tailRemoved)
-      val parameterized = ReferencesToParameters.transform(contified)
-      parameterized
+      val parameterized = ReferencesToParameters.transform(tailRemoved)
+      val contified = contification(parameterized)
+      contified
     }
 
     // (3) normalize a few times (since tail resumptions might only surface after normalization and leave dead Resets)
