@@ -5,13 +5,13 @@ import effekt.Intelligence.CaptureInfo
 import effekt.context.Context
 import effekt.source.Def.FunDef
 import effekt.source.Term.Hole
-import effekt.source.{Origin, Span, Tree}
+import effekt.source.{Span, Tree}
 import effekt.symbols.Binder.{ValBinder, VarBinder}
 import effekt.symbols.BlockTypeConstructor.{ExternInterface, Interface}
 import effekt.symbols.TypeConstructor.{DataType, ExternType}
 import effekt.symbols.{Anon, Binder, Callable, Effects, ErrorMessageInterpolator, Module, Param, Symbol, TypeAlias, TypePrinter, UserFunction, ValueType, isSynthetic}
-import effekt.util.messages.{Diagnostic as EffektDiagnostic, Severity, Subdiagnostic}
-import effekt.util.{PlainMessaging, PrettyPrinter}
+import effekt.util.messages.{Diagnostic as EffektDiagnostic, Severity, Style, lspSource}
+import effekt.util.{Drawing, PrettyPrinter, contentWithSubdiagnostics}
 import kiama.util.Collections.{mapToJavaMap, seqToJavaList}
 import kiama.util.Convert.*
 import kiama.util.{Collections, Convert, Position, Source}
@@ -53,9 +53,8 @@ class Server(config: EffektConfig, compileOnChange: Boolean=false) extends Drive
   val getDriver: Driver = this
   val getConfig: EffektConfig = config
 
-  object lspMessaging extends PlainMessaging
+  object lspStyle extends Style { val escape = Style.plain }
 
-  // Whether the client shows `relatedInformation`, otherwise subdiagnostics stay part of the message.
   private var relatedInformation: Boolean = false
 
   // Whether the client follows definition links, otherwise a definition is the location of its name.
@@ -220,24 +219,35 @@ class Server(config: EffektConfig, compileOnChange: Boolean=false) extends Drive
   //
   //
 
-  def toLSP(diagnostic: EffektDiagnostic): Diagnostic = diagnostic.range match {
-    case Some(range) if relatedInformation && diagnostic.subdiagnostics.nonEmpty =>
-      val lspDiagnostic = new Diagnostic(convertRange(range), lspMessaging.content(diagnostic), toLSP(diagnostic.severity), lspMessaging.lspSource(diagnostic))
-      lspDiagnostic.setRelatedInformation(Collections.seqToJavaList(diagnostic.subdiagnostics.map { s => toLSP(s, range) }))
-      lspDiagnostic
-    case range =>
-      new Diagnostic(range.map(convertRange).getOrElse(emptyRange), lspMessaging.contentWithSubdiagnostics(diagnostic), toLSP(diagnostic.severity), lspMessaging.lspSource(diagnostic))
+  def toLSP(diagnostic: EffektDiagnostic): Diagnostic = {
+    val drawing = Drawing(diagnostic)
+    val range = diagnostic.range.map(convertRange).getOrElse(emptyRange)
+    // related information cannot nest, so the message keeps the whole tree
+    val content = contentWithSubdiagnostics(drawing, lspStyle)
+    val lspDiagnostic = new Diagnostic(range, content, toLSP(diagnostic.severity), lspSource(diagnostic))
+    val related = diagnostic.range.toList.flatMap { r => this.related(drawing.body, r) }
+    if (relatedInformation && related.nonEmpty) lspDiagnostic.setRelatedInformation(Collections.seqToJavaList(related))
+    lspDiagnostic
   }
 
-  def toLSP(subdiagnostic: Subdiagnostic, diagnosticRange: Range): DiagnosticRelatedInformation = {
-    val (kind, range) = subdiagnostic match {
-      case Subdiagnostic.Note(_, at) => ("note", at.map(_.range).getOrElse(diagnosticRange))
-      case Subdiagnostic.Help(_)     => ("help", diagnosticRange)
-    }
-    new DiagnosticRelatedInformation(
-      new Location(Convert.toURI(range.from.source.name), convertRange(range)),
-      s"$kind: ${lspMessaging.subdiagnostic(subdiagnostic)}")
+  def related(body: Drawing.Body, range: Range): List[DiagnosticRelatedInformation] = body.blocks.flatMap {
+    case Drawing.Block.Candidate(m, places, errors) =>
+      val candidate = lspStyle.message(m)
+      val declaration = place(places)
+      declaration.map { r => at(r, s"candidate: ${candidate}") }.toList ++ errors.flatMap { error =>
+        place(error.excerpts).orElse(declaration).map { r => at(r, s"${candidate}: ${lspStyle.message(error.claim)}") }
+      }
+    case Drawing.Block.Item(kind, m, places, _) =>
+      List(at(place(places).getOrElse(range), kind.word + lspStyle.message(m)))
+    case Drawing.Block.Nested(claim, places, _) =>
+      place(places).map { r => at(r, lspStyle.message(claim)) }.toList
   }
+
+  private def place(excerpts: List[Drawing.Excerpt]): Option[Range] =
+    excerpts.flatMap(_.labels).headOption.map(_.span.range)
+
+  private def at(range: Range, text: String) =
+    new DiagnosticRelatedInformation(new Location(Convert.toURI(range.from.source.name), convertRange(range)), text)
 
   def toLSP(severity: Severity): DiagnosticSeverity = severity match {
     case Severity.Error   => DiagnosticSeverity.Error
@@ -355,7 +365,7 @@ class Server(config: EffektConfig, compileOnChange: Boolean=false) extends Drive
       decl <- getSourceTreeFor(sym)
       kind <- getSymbolKind(sym)
       detail <- getInfoOf(sym)(using context)
-      if decl.span.origin != Origin.Missing
+      if !decl.span.isMissing
       declRange = convertRange(decl.span.range)
       idRange = convertRange(id.span.range)
     } yield new DocumentSymbol(sym.name.name, kind, declRange, idRange, detail.header)

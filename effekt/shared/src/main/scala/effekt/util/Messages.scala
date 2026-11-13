@@ -1,7 +1,7 @@
 package effekt
 package util
 
-import effekt.source.{Origin, Span, Tree}
+import effekt.source.{Span, Tree}
 import effekt.symbols.{Capture, Captures, Effects, ErrorMessageInterpolator, Name, QualifiedName, TypePrinter}
 import kiama.util.Range
 
@@ -45,40 +45,92 @@ object messages {
   trait Reason {
     def claim: StructuredMessage
 
-    def show(using S: Style): List[String] = List(S.message(claim)) // claim only by default
+    // how the claim reads in an output with lines
+    def show: List[StructuredMessage] = List(claim) // claim only by default
+
+    // prose about the claim, e.g. a list's introduction
+    def details: List[StructuredMessage] = Nil
+
+    // the candidates of a search, each with the errors that rejected it
+    def alternatives: List[Candidate] = Nil
+
+    // the causes for this diagnostic
+    def causes: EffektMessages = Vector.empty
+  }
+
+  // what a part of a diagnostic is, so each output can style it
+  enum Role {
+    case Title, Code, Dim
+    case Severity(severity: messages.Severity)
+    case Token(highlight: Highlight)
   }
 
   /** Semantic style for parts of error messages, leaving the styling to each output. */
   trait Style {
-    def title(s: String): String
-    def code(s: String): String
-    def candidate(s: String): String
+    // how this output starts each role, "" for none
+    def escape: Role => String
 
-    def indent(s: String): String = s.linesIterator.map(l => "  " + l).mkString("\n")
+    def styled(role: Role, s: String): String = escape(role) match {
+      case ""    => s
+      case start => start + s + Console.RESET
+    }
 
-    def content(d: Diagnostic): String = d.reason.show(using this).mkString("\n")
+    def code(s: String): String = styled(Role.Code, s)
 
-    def subdiagnostic(s: Subdiagnostic): String = message(s.text)
-
-    def message(text: StructuredMessage): String = text.stringContext.s(text.args.map {
-      case id: source.IdDef          => code(TypePrinter.show(id))
-      case id: source.IdRef          => code(TypePrinter.show(id))
-      case name: Name                => code(name.name)
-      case t: symbols.Type           => code(TypePrinter.show(t))
-      case t: Capture                => code(TypePrinter.show(t))
-      case t: Captures               => code(TypePrinter.show(t))
-      case t: Effects                => code(TypePrinter.show(t))
-      case n: Int                    => code(n.toString)
-      case nested: Diagnostic        => contentWithSubdiagnostics(nested)
-      case nested: StructuredMessage => message(nested)
-      case other                     => other.toString
-    }*)
-
-    def contentWithSubdiagnostics(d: Diagnostic): String =
-      (content(d) :: d.subdiagnostics.map(subdiagnostic)).mkString("\n")
+    def message(text: StructuredMessage): String = text.pieces.map {
+      case Piece.Code(s) => code(s)
+      case Piece.Text(s) => s
+    }.mkString
   }
 
-  case class StructuredMessage(stringContext: StringContext, args: Seq[Any])
+  object Style {
+    val plain: Role => String = _ => ""
+    val ansi: Role => String = {
+      case Role.Title                      => Console.BOLD
+      case Role.Code                       => Console.BLACK + Console.WHITE_B
+      case Role.Dim                        => "\u001b[2m"
+      case Role.Severity(Severity.Error)   => Console.RED
+      case Role.Severity(Severity.Warning) => Console.YELLOW
+      case Role.Severity(Severity.Info)    => Console.WHITE
+      case Role.Severity(Severity.Hint)    => ""
+      case Role.Token(Highlight.Number)    => Console.BLUE
+      case Role.Token(Highlight.Str)       => Console.GREEN
+      case Role.Token(Highlight.Comment)   => Console.WHITE
+      case Role.Token(Highlight.Keyword)   => Console.MAGENTA
+      case Role.Token(Highlight.Error)     => Console.RED + Console.UNDERLINED
+      case Role.Token(Highlight.Ident)     => ""
+    }
+  }
+
+  def lspSource(d: Diagnostic): String = d.phase match {
+    case Some(phase) => s"effekt [${phase}]"
+    case None => "effekt"
+  }
+
+  case class StructuredMessage(stringContext: StringContext, args: Seq[Any]) {
+    def pieces: List[Piece] = {
+      val arguments = args.toList.map {
+        case id: source.IdDef          => List(Piece.Code(TypePrinter.show(id)))
+        case id: source.IdRef          => List(Piece.Code(TypePrinter.show(id)))
+        case name: Name                => List(Piece.Code(name.name))
+        case t: symbols.Type           => List(Piece.Code(TypePrinter.show(t)))
+        case t: Capture                => List(Piece.Code(TypePrinter.show(t)))
+        case t: Captures               => List(Piece.Code(TypePrinter.show(t)))
+        case t: Effects                => List(Piece.Code(TypePrinter.show(t)))
+        case n: Int                    => List(Piece.Code(n.toString))
+        case nested: StructuredMessage => nested.pieces
+        case piece: Piece              => List(piece)
+        case other                     => List(Piece.Text(other.toString))
+      }
+      val parts = stringContext.parts.toList.map { p => Piece.Text(StringContext.processEscapes(p)) }
+      parts.head :: arguments.zip(parts.tail).flatMap { (arg, part) => arg :+ part }
+    }
+  }
+
+  enum Piece {
+    case Code(text: String)
+    case Text(text: String)
+  }
 
   implicit class ErrorMessageReifier(private val sc: StringContext) extends AnyVal {
     def pretty(args: Any*): StructuredMessage = StructuredMessage(sc, args)
@@ -98,11 +150,11 @@ object messages {
     def claim = pretty"Expected ${expected} but got ${got}."
 
     // long types are shown aligned, one above the other
-    override def show(using S: Style): List[String] = {
+    override def show: List[StructuredMessage] = {
       val expectedShown = TypePrinter.show(expected)
       val gotShown = TypePrinter.show(got)
-      if ((expectedShown.size + gotShown.size) < 25) List(S.message(claim)) // TODO: think of a better way to do this...
-      else List("Expected type", s"  ${S.code(expectedShown)}", "but got type", s"  ${S.code(gotShown)}")
+      if ((expectedShown.size + gotShown.size) < 25) List(claim) // TODO: think of a better way to do this...
+      else List(pretty"Expected type", pretty"  ${expected}", pretty"but got type", pretty"  ${got}")
     }
   }
 
@@ -117,27 +169,17 @@ object messages {
 
     def claim = if ambiguous then pretty"Ambiguous overload." else pretty"Cannot typecheck call."
 
-    override def show(using S: Style): List[String] =
-      if ambiguous then {
-        val longestNameLength = candidates.map { c => fullname(c.symbol.name).size }.max
-        val explanations = candidates.map { c =>
-          val name = fullname(c.symbol.name)
-          val padding = " " * (longestNameLength - name.size)
-          pp"- ${S.code(name)}: ${padding}${c.tpe}"
-        }
-        S.title(S.message(claim)) :: "There are multiple overloads, which all would type check:" :: explanations
-      } else {
-        val explanations = candidates.map { c =>
-          val nestedErrors = c.errors.map(S.contentWithSubdiagnostics).mkString("\n")
-          val header = S.candidate(pp"Possible overload: ${S.code(fullname(c.symbol.name))}") + S.candidate(pp" of type ${c.tpe}")
-          s"$header\n${S.indent(nestedErrors)}"
-        }
-        S.title(S.message(claim)) :: "There are multiple overloads, which all fail to check:" ::
-          "" :: explanations.flatMap { e => List(e, "") }
-      }
+    override def details =
+      if ambiguous then List(pretty"There are multiple overloads, which all would type check:")
+      else List(pretty"There are multiple overloads, which all fail to check:")
+
+    override def alternatives = candidates
   }
 
-  case class Candidate(symbol: symbols.BlockSymbol, tpe: symbols.FunctionType, errors: EffektMessages)
+  case class Candidate(symbol: symbols.BlockSymbol, tpe: symbols.FunctionType, errors: EffektMessages, definitionTree: Option[source.IdDef]) {
+    // without its declaration
+    def show: StructuredMessage = pretty"${Piece.Code(fullname(symbol.name))} of type ${tpe}"
+  }
 
   // Iterative deepening of the implicit search matches on this class.
   case class ImplicitMaxRecursion(text: String) extends Reason {
@@ -147,24 +189,17 @@ object messages {
   case class ImplicitInstantiation(stencil: source.GenerateImplicitArgs.Error, tpe: symbols.Type) extends Reason {
     def claim = pretty"Cannot instantiate implicit argument."
 
-    override def show(using S: Style): List[String] = {
-      def formatIndex(i: Int): String = i match {
+    override def details = {
+      val index = stencil.index match {
         case 0 => "1st"
         case 1 => "2nd"
         case 2 => "3rd"
         case n => s"${n + 1}th"
       }
-      val prettyIndex = formatIndex(stencil.index)
-      val prettyTpe = TypePrinter.show(tpe)
-      val mainMessage = S.candidate(s"Cannot instantiate ${prettyIndex} ${stencil.kind} ${stencil.name} of type ${prettyTpe}.")
-      val info = stencil.explanation match {
-        case Some(e) => S.indent(e) + "\n"
-        case None => ""
-      }
-      val nestedErrors = S.indent(stencil.msgs.map(S.contentWithSubdiagnostics).mkString("\n"))
-
-      List(S.title(S.message(claim)), mainMessage + "\n" + info + nestedErrors + "\n")
+      pretty"Cannot instantiate ${index} ${stencil.kind} ${stencil.name} of type ${tpe}." :: stencil.explanation
     }
+
+    override def causes = stencil.msgs
   }
 
   /**
@@ -269,7 +304,7 @@ object messages {
 
     def diagnostic(reason: Reason, severity: Severity, at: Option[Span]): Diagnostic =
       // spans with a missing origin give no position
-      Diagnostic(severity, at.filter { s => s.origin != Origin.Missing }.map(Label(_)), Nil, reason, phase)
+      Diagnostic(severity, at.filterNot(_.isMissing).map(Label(_)), Nil, reason, phase)
 
     def diagnostic(reason: Reason, severity: Severity): Diagnostic =
       diagnostic(reason, severity, spanOf(focus))

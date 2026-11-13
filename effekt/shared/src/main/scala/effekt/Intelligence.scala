@@ -1,7 +1,6 @@
 package effekt
 
 import effekt.context.{Annotations, Context}
-import effekt.source.Origin.Missing
 import effekt.source.{Doc, FunDef, Include, Maybe, ModuleDecl, Span, Tree}
 import effekt.symbols.{CaptureSet, Hole}
 import kiama.util.{Position, Source}
@@ -313,17 +312,17 @@ trait Intelligence {
     val src = range.from.source
     allCaptures(src).filter {
       // keep only captures in the current range
-      case (t, c) => t.span.origin != Missing && t.span.range.from.between(range.from, range.to)
+      case (t, c) => !t.span.isMissing && t.span.range.from.between(range.from, range.to)
     }.collect {
       case (t: source.FunDef, c) if t.captures.isEmpty => for {
-        pos <- if t.span.origin != Missing then Some(t.ret.span.range.from) else None
+        pos <- if !t.span.isMissing then Some(t.ret.span.range.from) else None
       } yield CaptureInfo(pos, c)
       case (t: source.DefDef, c) => for {
-        pos <- if t.span.origin != Missing then Some(t.annot.span.range.from) else None
+        pos <- if !t.span.isMissing then Some(t.annot.span.range.from) else None
       } yield CaptureInfo(pos, c)
       // only show it if it is the default capture inserted by the parser
       case (t @ source.ExternDef(_, _, _, _, source.CaptureSet(_, Span(_, _, _, source.Origin.Synthesized)), _, _, _, _), c) => for {
-        pos <- if t.span.origin != Missing then Some(t.captures.span.range.from) else None
+        pos <- if !t.span.isMissing then Some(t.captures.span.range.from) else None
       } yield CaptureInfo(pos, c)
       case (source.Box(Maybe(None, span), block, _), _) if C.inferredCaptureOption(block).isDefined => for {
         capt <- C.inferredCaptureOption(block)

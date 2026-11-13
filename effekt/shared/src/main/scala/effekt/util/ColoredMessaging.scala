@@ -2,104 +2,215 @@ package effekt
 package util
 
 import effekt.util.messages.*
-import kiama.util.{ Position, Range }
+import kiama.util.{ Position, Source }
 
 trait ColoredMessaging extends EffektMessaging with Style {
+  import Drawing.*
 
-  // Colors
-  // ------
+  override def formatMessage(message: Diagnostic): String = render(Drawing(message))
 
-  def yellow(s: String): String
-  def red(s: String): String
-  def white(s: String): String
-  def bold(s: String): String
-  def highlight(s: String): String
-  def underlined(s: String): String
-  def dim(s: String): String
+  def showsCode: Boolean = true
 
-  def title(s: String): String = bold(s)
-  def code(s: String): String = highlight(s)
-  def candidate(s: String): String = underlined(s)
+  // Where it is drawn
+  // -----------------
 
-  def severityToWord(severity: Severity): String =
-    severity match {
-      case Severity.Error   => red("error")
-      case Severity.Warning => yellow("warning")
-      case Severity.Info    => white("info")
-      case Severity.Hint    => "hint"
-    }
-
-  override def formatMessage(message: Diagnostic): String = {
-    val formatted = formatOne(message, contentWithPhase(message))
-    val items = message.subdiagnostics.map(item)
-    // one gutter for the whole diagnostic, as wide as its largest line number
-    val width = (formatted.excerpt ++ items.flatMap(_.excerpt)).map { e => e.line.toString.length }.maxOption.getOrElse(0)
-    // a blank line between the diagnostic and its items, and between items that span several lines
-    val rendered = items.zipWithIndex.map { case (it, i) =>
-      val gap = i == 0 || it.excerpt.nonEmpty || items(i - 1).excerpt.nonEmpty
-      (if gap then "\n" else "") + it.render(width)
-    }
-    formatted.render(width) + rendered.mkString("")
+  // precedes a line's content
+  enum Lead {
+    case Bullet(kind: Option[ItemKind])
+    case Hang
   }
 
-  case class Excerpt(line: Int, code: String, marker: String)
+  enum Line {
+    case Code(at: Position, depth: Int, lead: Option[Lead], segments: List[Segment])
+    case Text(depth: Int, lead: Option[Lead], segments: List[Segment])
+    case Blank(depth: Int)
+  }
 
-  case class Formatted(header: String, excerpt: Option[Excerpt]) {
-    def render(width: Int): String = excerpt match {
-      case Some(Excerpt(line, code, marker)) =>
-        s"${header}\n${dim(" " * (width - line.toString.length) + line)}  ${code}\n${" " * width}  ${marker}\n"
-      case None => s"${header}\n"
+  case class Segment(text: String, role: Option[Role])
+
+  // the lines drawn so far + where the next one goes
+  private final class Lines {
+    private[ColoredMessaging] val drawn = scala.collection.mutable.ListBuffer.empty[Line]
+    private[ColoredMessaging] var depth = 0
+    private[ColoredMessaging] var lead: Option[Lead] = None
+  }
+  private object Lines {
+    def apply(block: Lines ?=> Unit): List[Line] = {
+      val L = new Lines
+      block(using L)
+      L.drawn.toList
     }
   }
 
-  // a note or a help, under the diagnostic it belongs to
-  case class Item(kind: String, text: String, excerpt: Option[Excerpt]) {
-    def render(width: Int): String = {
-      val column = " " * (width + 2)
-      s"${column}* ${kind}: ${text}\n" + (excerpt match {
-        case Some(Excerpt(line, code, marker)) =>
-          s"${dim(" " * (width - line.toString.length) + line)}  ${dim("|")}  ${code}\n${column}${dim("|")}  ${marker}\n"
-        case None => ""
-      })
+  private def lead(l: Lead): String = l match {
+    case Lead.Bullet(kind) => "* " + kind.map(_.word).getOrElse("")
+    case Lead.Hang         => "  "
+  }
+
+  private def emit(line: Option[Lead] => Line)(using L: Lines): Unit = {
+    L.drawn += line(L.lead)
+    L.lead = L.lead.map { _ => Lead.Hang }
+  }
+
+  private def text(segments: List[Segment])(using L: Lines): Unit =
+    emit { lead => Line.Text(L.depth, lead, segments) }
+  private def code(at: Position, segments: List[Segment])(using L: Lines): Unit =
+    emit { lead => Line.Code(at, L.depth, lead, segments) }
+  private def blank()(using L: Lines): Unit = L.drawn += Line.Blank(L.depth)
+
+  private def deeper(block: Lines ?=> Unit)(using L: Lines): Unit = {
+    val (depth, lead) = (L.depth, L.lead)
+    L.depth = depth + 1; L.lead = None
+    block
+    L.depth = depth; L.lead = lead
+  }
+
+  // its bullet on its first line
+  private def item(kind: Option[ItemKind])(block: Lines ?=> Unit)(using L: Lines): Unit = {
+    L.lead = Some(Lead.Bullet(kind))
+    block
+    L.lead = None
+  }
+
+  // a blank line between a node's place and its children, if it has any
+  private def children(block: Lines ?=> Unit)(using L: Lines): Unit = {
+    val (before, depth) = (L.drawn.size, L.depth)
+    block
+    if (L.drawn.size > before) L.drawn.insert(before, Line.Blank(depth))
+  }
+
+  private def plain(s: String): List[Segment] = if (s.isEmpty) Nil else List(Segment(s, None))
+  private def as(role: Role, s: String): List[Segment] = if (s.isEmpty) Nil else List(Segment(s, Some(role)))
+
+  private def segments(m: StructuredMessage): List[Segment] = m.pieces.flatMap {
+    case Piece.Code(s) => as(Role.Code, s)
+    case Piece.Text(s) => plain(s)
+  }
+
+  private def highlighted(code: String): List[Segment] = Highlight.tokens(code).flatMap {
+    case (s, Some(highlight)) => as(Role.Token(highlight), s)
+    case (s, None)            => plain(s)
+  }
+
+  // the places whose code this output shows
+  private def shown(excerpts: List[Excerpt]): List[Excerpt] = if (showsCode) excerpts else Nil
+
+  private def excerpts(body: Body): List[Excerpt] = body.blocks.flatMap(excerpts)
+
+  private def excerpts(block: Block): List[Excerpt] = block match {
+    case Block.Candidate(_, declaration, errors) => shown(declaration) ++ errors.flatMap(excerpts)
+    case Block.Item(_, _, excerpts, body)        => shown(excerpts) ++ this.excerpts(body)
+    case Block.Nested(_, excerpts, body)         => shown(excerpts) ++ this.excerpts(body)
+  }
+
+  // as wide as the largest line number
+  private def gutter(d: Drawing): Int =
+    (shown(d.excerpts) ++ excerpts(d.body)).map { e => e.at.line.toString.length }.maxOption.getOrElse(0)
+
+  def layout(d: Drawing): List[Line] = Lines {
+    shown(d.excerpts).foreach { e => layout(e, None) }
+    children { layout(d.body) }
+  }
+
+  private def layout(body: Body)(using Lines): Unit = {
+    body.introduction.foreach { m => text(segments(m)) }
+    layout(body.blocks)
+  }
+
+  // a blank line between consecutive items where either spans several lines
+  private def layout(blocks: List[Block])(using Lines): Unit = {
+    separated(blocks) { (previous, block) => if (spans(previous) || spans(block)) blank() } { block =>
+      layout(block)
     }
   }
 
-  private def item(s: Subdiagnostic): Item = s match {
-    case Subdiagnostic.Note(text, at) => Item("note", message(text), at.flatMap { span => excerpt(span.range) })
-    case Subdiagnostic.Help(text)     => Item("help", message(text), None)
+  private def spans(block: Block): Boolean = excerpts(block).nonEmpty
+
+  private def layout(block: Block)(using Lines): Unit = block match {
+    case Block.Candidate(m, declaration, errors) => shown(declaration) match {
+      case first :: rest =>
+        item(None) { layout(first, None) }
+        deeper { rest.foreach { e => layout(e, None) }; layout(errors) }
+      case Nil =>
+        item(None) { text(segments(m)) }
+        deeper { layout(errors) }
+    }
+
+    case Block.Item(kind, m, excerpts, body) =>
+      item(Some(kind)) { text(segments(m)) }
+      deeper { shown(excerpts).foreach { e => layout(e, None) }; layout(body) }
+
+    // a nested claim hangs from the mark at its first place
+    case Block.Nested(claim, excerpts, body) =>
+      shown(excerpts) match {
+        case first :: rest => layout(first, Some(claim)); rest.foreach { e => layout(e, None) }
+        case Nil           => text(segments(claim))
+      }
+      children { deeper { layout(body) } }
   }
 
-  def contentWithPhase(d: Diagnostic): String = {
-    val phase = d.phase.map { p => s" ${dim(s"[${p}]")}" }.getOrElse("")
-    d.reason.show(using this) match {
-      case first :: rest => (first + phase :: rest).mkString("\n")
+  private def layout(e: Excerpt, claim: Option[StructuredMessage])(using Lines): Unit =
+    e.at.source.optLineContents(e.at.line).foreach { line =>
+      code(e.at, highlighted(line))
+      e.labels.foreach { l => marker(l.span, claim) }
+    }
+
+  private def marker(span: source.Span, label: Option[StructuredMessage])(using Lines): Unit = {
+    val from = span.range.from
+    val to = if (from.line == span.range.to.line) span.range.to else from.copy(column = from.column + 1)
+    val carets = plain(" " * (from.column - 1) + "^" * (to.column - from.column).max(1))
+    text(carets ++ label.toList.flatMap { m => plain(" ") ++ segments(m) })
+  }
+
+  // What it looks like
+  // ------------------
+
+  private def show(segments: List[Segment]): String =
+    segments.map { case Segment(s, role) => role.map { r => styled(r, s) }.getOrElse(s) }.mkString
+
+  def render(d: Drawing): String = {
+    val gutter = this.gutter(d)
+    def dim(s: String) = styled(Role.Dim, s)
+    def guides(depth: Int) = s"${dim("|")}  " * depth
+    def leading(l: Option[Lead]) = l.map(lead).getOrElse("")
+
+    def rendered(lines: List[Line], previous: Option[Source]): List[String] = lines match {
+      case Nil => Nil
+      case Line.Code(at, depth, l, segments) :: rest =>
+        val location = if (previous.contains(at.source)) "" else s"   ${dim(homogenizePath(place(at)).stripSuffix(":"))}"
+        val number = dim(" " * (gutter - at.line.toString.length) + at.line)
+        s"${number}  ${guides(depth)}${leading(l)}${show(segments)}${location}" :: rendered(rest, Some(at.source))
+      case Line.Text(depth, l, segments) :: rest =>
+        s"${" " * gutter}  ${guides(depth)}${leading(l)}${show(segments)}" :: rendered(rest, previous)
+      case Line.Blank(0) :: rest =>
+        "" :: rendered(rest, previous)
+      case Line.Blank(depth) :: rest =>
+        s"${" " * gutter}  ${List.fill(depth)(dim("|")).mkString("  ")}" :: rendered(rest, previous)
+    }
+    show(heading(d.header)) + "\n" + rendered(layout(d), d.header.at.map(_.source)).map(_ + "\n").mkString
+  }
+
+  private def heading(h: Header): List[Segment] = {
+    val severity = plain("[") ++ as(Role.Severity(h.severity), severityWord(h.severity)) ++ plain("] ")
+    val place = h.at.toList.flatMap { at => plain(homogenizePath(this.place(at)) + " ") }
+    val phase = h.phase.toList.flatMap { p => plain(" ") ++ as(Role.Dim, s"[${p}]") }
+    val text = h.text match {
+      case first :: rest =>
+        val title = segments(first).map { s => Segment(s.text, s.role.orElse(Some(Role.Title))) }
+        title ++ phase ++ rest.flatMap { m => plain("\n") ++ segments(m) }
       case Nil => phase
     }
+    severity ++ place ++ text
   }
 
-  def lspSource(d: Diagnostic): String = d.phase match {
-    case Some(phase) => s"effekt [${phase}]"
-    case None => "effekt"
+  private def severityWord(severity: Severity): String = severity match {
+    case Severity.Error   => "error"
+    case Severity.Warning => "warning"
+    case Severity.Info    => "info"
+    case Severity.Hint    => "hint"
   }
 
-  private def formatOne(message: Diagnostic, text: String): Formatted = {
-    val severity = severityToWord(message.severity)
-    message.range match {
-      case Some(range) => Formatted(s"[$severity] ${homogenizePath(place(range.from))} ${text}", excerpt(range))
-      case None        => Formatted(s"[$severity] ${text}", None)
-    }
-  }
-
-  // the line where `range` starts, marked to its end on that line
-  def excerpt(range: Range): Option[Excerpt] = {
-    val from = range.from
-    val to = if (range.from.line == range.to.line) range.to else from.copy(column = from.column + 1)
-    from.source.optLineContents(from.line).map { src =>
-      Excerpt(from.line, util.AnsiHighlight(src), (" " * (from.column - 1)) + ("^" * (to.column - from.column).max(1)))
-    }
-  }
-
-  override def formatContent(err: Diagnostic): String = content(err)
+  override def formatContent(err: Diagnostic): String = Drawing.header(err).text.map(message).mkString("\n")
 
   def place(p: Position): String = {
     val name = shownName(p.source)
@@ -108,25 +219,12 @@ trait ColoredMessaging extends EffektMessaging with Style {
 }
 
 class PlainMessaging extends ColoredMessaging {
-  def yellow(s: String): String = s
-  def red(s: String): String = s
-  def white(s: String): String = s
-  def bold(s: String): String = s
-  def highlight(s: String): String = s
-  def underlined(s: String): String = s
-  def dim(s: String): String = s
+  val escape = Style.plain
 
   // Don't show context in plain messaging.
-  override def excerpt(range: Range): Option[Excerpt] = None
+  override def showsCode = false
 }
 
 class AnsiColoredMessaging extends ColoredMessaging {
-  def yellow(s: String): String = Console.YELLOW + s + Console.RESET
-  def red(s: String): String = Console.RED + s + Console.RESET
-  def white(s: String): String = Console.WHITE + s + Console.RESET
-  def bold(s: String): String = Console.BOLD + s + Console.RESET
-  def highlight(s: String): String = Console.BLACK + Console.WHITE_B + s + Console.RESET
-  def underlined(s: String): String = Console.UNDERLINED + s + Console.RESET
-  def dim(s: String): String = "\u001b[2m" + s + Console.RESET
+  val escape = Style.ansi
 }
-

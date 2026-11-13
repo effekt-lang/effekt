@@ -2,7 +2,7 @@ package effekt
 
 import effekt.Intelligence.CaptureInfo
 import effekt.context.{Context, VirtualFileSource, VirtualModuleDB}
-import effekt.util.{PlainMessaging, getOrElseAborting}
+import effekt.util.{Drawing, PlainMessaging, contentWithSubdiagnostics, getOrElseAborting}
 import effekt.util.messages.{BufferedMessaging, Diagnostic, EffektMessaging, FatalPhaseError, Severity}
 import effekt.util.paths.*
 import effekt.generator.js.JavaScriptWeb
@@ -136,8 +136,8 @@ class LanguageServer extends Intelligence {
   private def messageToDiagnostic(m: Diagnostic) = {
     val from = m.range.map { r => toLSPPosition(r.from) }.orNull
     val to = m.range.map { r => toLSPPosition(r.to) }.orNull
-    val text = context.messaging.contentWithSubdiagnostics(m)
-    new lsp.Diagnostic(new lsp.Range(from, to), convertSeverity(m.severity), text, context.messaging.lspSource(m))
+    val text = contentWithSubdiagnostics(Drawing(m), context.messaging)
+    new lsp.Diagnostic(new lsp.Range(from, to), convertSeverity(m.severity), text, effekt.util.messages.lspSource(m))
   }
 
   private def toLSPPosition(p: Position): lsp.Position =

@@ -1,9 +1,14 @@
 [error] examples/neg/name-based-implicits/qualified-error.effekt:8:43: Cannot instantiate implicit argument. [typer]
-Cannot instantiate 1st block argument compare of type (A, A) => Ordering.
-  Ambiguous overload.
-  There are multiple overloads, which all would type check:
-  - qualified-error::any::compare: [A](A, A) => Ordering
-  - qualified-error::int::compare: (Int, Int) => Ordering
-
 8    val sorted: List[Int] = [3, 1, 2].mySort
                                              ^
+
+   Cannot instantiate 1st block argument compare of type (A, A) => Ordering.
+8    val sorted: List[Int] = [3, 1, 2].mySort
+                                             ^ Ambiguous overload.
+
+   |  There are multiple overloads, which all would type check:
+2  |  * def any::compare[A](l: A, r: A): Ordering = <"kaboom">
+   |        ^^^^^^^^^^^^
+   |
+1  |  * def int::compare(l: Int, r: Int): Ordering = compareInt(l, r)
+   |        ^^^^^^^^^^^^

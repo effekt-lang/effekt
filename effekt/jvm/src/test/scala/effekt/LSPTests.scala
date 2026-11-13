@@ -308,7 +308,88 @@ class LSPTests extends FunSuite {
     server.initialize(initializeParams).get()
   }
 
-  test("a diagnostic's helps are its related information in LSP, if the client shows it") {
+  test("an overload search's candidates are part of its message in LSP") {
+    withClientAndServer { (client, server) =>
+      val textDoc = raw"""
+                       |def f(x: Int): Int = x
+                       |def f(x: Bool): Bool = x
+                       |def main() = f("a")
+                       |""".textDocument
+
+      val didOpenParams = new DidOpenTextDocumentParams()
+      didOpenParams.setTextDocument(textDoc)
+      server.didOpen(didOpenParams)
+
+      val diagnostic = new Diagnostic()
+      diagnostic.setRange(new Range(new Position(3, 13), new Position(3, 19)))
+      diagnostic.setSeverity(DiagnosticSeverity.Error)
+      diagnostic.setSource("effekt [typer]")
+      diagnostic.setMessage(
+        """Cannot typecheck call.
+          |  There are multiple overloads, which all fail to check:
+          |  * test::f of type Int => Int
+          |    Expected Int but got String.
+          |  * test::f of type Bool => Bool
+          |    Expected Bool but got String.""".stripMargin)
+
+      val diagnosticsWithError = new util.ArrayList[Diagnostic]()
+      diagnosticsWithError.add(diagnostic)
+
+      val expected = List(
+        new PublishDiagnosticsParams("file://test.effekt", new util.ArrayList[Diagnostic]()),
+        new PublishDiagnosticsParams("file://test.effekt", diagnosticsWithError)
+      )
+
+      assertEquals(client.receivedDiagnostics(), expected)
+    }
+  }
+
+  test("an overload search's candidates are also its related information in LSP, if the client shows it") {
+    withClientAndServer { (client, server) =>
+      initializeWithRelatedInformation(server)
+
+      val textDoc = raw"""
+                       |def f(x: Int): Int = x
+                       |def f(x: Bool): Bool = x
+                       |def main() = f("a")
+                       |""".textDocument
+      def range(line: Int, from: Int, to: Int) = new Range(new Position(line, from), new Position(line, to))
+      def at(r: Range, text: String) = new DiagnosticRelatedInformation(new Location("file://test.effekt", r), text)
+
+      val didOpenParams = new DidOpenTextDocumentParams()
+      didOpenParams.setTextDocument(textDoc)
+      server.didOpen(didOpenParams)
+
+      val diagnostic = new Diagnostic()
+      diagnostic.setRange(range(3, 13, 19))
+      diagnostic.setSeverity(DiagnosticSeverity.Error)
+      diagnostic.setSource("effekt [typer]")
+      diagnostic.setMessage(
+        """Cannot typecheck call.
+          |  There are multiple overloads, which all fail to check:
+          |  * test::f of type Int => Int
+          |    Expected Int but got String.
+          |  * test::f of type Bool => Bool
+          |    Expected Bool but got String.""".stripMargin)
+      diagnostic.setRelatedInformation(util.List.of(
+        at(range(1, 4, 5), "candidate: test::f of type Int => Int"),
+        at(range(3, 15, 18), "test::f of type Int => Int: Expected Int but got String."),
+        at(range(2, 4, 5), "candidate: test::f of type Bool => Bool"),
+        at(range(3, 15, 18), "test::f of type Bool => Bool: Expected Bool but got String.")))
+
+      val diagnosticsWithError = new util.ArrayList[Diagnostic]()
+      diagnosticsWithError.add(diagnostic)
+
+      val expected = List(
+        new PublishDiagnosticsParams("file://test.effekt", new util.ArrayList[Diagnostic]()),
+        new PublishDiagnosticsParams("file://test.effekt", diagnosticsWithError)
+      )
+
+      assertEquals(client.receivedDiagnostics(), expected)
+    }
+  }
+
+  test("a diagnostic's helps are also its related information in LSP, if the client shows it") {
     withClientAndServer { (client, server) =>
       initializeWithRelatedInformation(server)
 
@@ -325,7 +406,10 @@ class LSPTests extends FunSuite {
       diagnostic.setRange(range)
       diagnostic.setSeverity(DiagnosticSeverity.Error)
       diagnostic.setSource("effekt [namer]")
-      diagnostic.setMessage("Expected value type, but got a second-class function type (Int, Int) => Bool.")
+      diagnostic.setMessage(
+        """Expected value type, but got a second-class function type (Int, Int) => Bool.
+          |  * help: Did you mean to use braces in order to receive a block type `(Int, Int) => Bool`?
+          |  * help: Did you mean to use a first-class, boxed function type `(Int, Int) => Bool at {}`?""".stripMargin)
       diagnostic.setRelatedInformation(util.List.of(
         new DiagnosticRelatedInformation(new Location("file://test.effekt", range),
           "help: Did you mean to use braces in order to receive a block type `(Int, Int) => Bool`?"),
@@ -392,8 +476,8 @@ class LSPTests extends FunSuite {
       diagnostic.setSource("effekt [namer]")
       diagnostic.setMessage(
         """Expected value type, but got a second-class function type (Int, Int) => Bool.
-          |Did you mean to use braces in order to receive a block type `(Int, Int) => Bool`?
-          |Did you mean to use a first-class, boxed function type `(Int, Int) => Bool at {}`?""".stripMargin)
+          |  * help: Did you mean to use braces in order to receive a block type `(Int, Int) => Bool`?
+          |  * help: Did you mean to use a first-class, boxed function type `(Int, Int) => Bool at {}`?""".stripMargin)
 
       val diagnosticsWithError = new util.ArrayList[Diagnostic]()
       diagnosticsWithError.add(diagnostic)

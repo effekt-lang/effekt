@@ -6,6 +6,12 @@ def intercalate[A](a : List[A], b : List[A]): List[A] = a match {
   case _             => b
 }
 
+// `each` for every element, and `between` for every two consecutive ones, in order
+def separated[A](as: List[A])(between: (A, A) => Unit)(each: A => Unit): Unit = {
+  as.headOption.foreach(each)
+  as.zip(as.drop(1)).foreach { (previous, next) => between(previous, next); each(next) }
+}
+
 extension(s: String) def escape: String = s.flatMap(_.escape)
 extension(ch: Char) def escape: String = ch match {
   case '\b' => "\\b"
