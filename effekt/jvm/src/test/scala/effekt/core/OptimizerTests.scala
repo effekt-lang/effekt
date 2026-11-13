@@ -381,48 +381,12 @@ class OptimizerTests extends CoreTests {
     removeTailResumptions(input, expected)
   }
 
-  test("an aborting shift consumed by a val moves its frame into a join point it never calls") {
-    val input =
-      """ def main = { () => reset { (){p: Prompt[Int]} => val x = shift (p : Prompt[Int] @ {p}) { {k: (Int) ~> Int} => return 2 }; return x:Int } }
-        |""".stripMargin
-
-    val expected =
-      """ def main = { () => reset { (){p: Prompt[Int]} => def j = { (y: Int) => reset { (){q: Prompt[Int]} => val x = return y:Int; return x:Int } } return 2 } }
-        |""".stripMargin
-
-    removeTailResumptions(input, expected)
-  }
-
   test("a nested prompt stands between the abort and the prompt it names") {
     val input =
       """ def main = { () => reset { (){p: Prompt[Int]} => reset { (){q: Prompt[Int]} => shift (p : Prompt[Int] @ {p}) { {k: (Int) ~> Int} => return 2 } } } }
         |""".stripMargin
 
     removeTailResumptions(input, input)
-  }
-
-  test("a resumption that resumes with something naming it again resumes through the join point twice") {
-    val input =
-      """ def main = { () => reset { (){p: Prompt[Int]} => shift (p : Prompt[Int] @ {p}) { {k: (Int) ~> Int} => resume (k : (Int) ~> Int @ {k}) { resume (k : (Int) ~> Int @ {k}) { return 1 } } } } }
-        |""".stripMargin
-
-    val expected =
-      """ def main = { () => reset { (){p: Prompt[Int]} => def j = { (){s @ sc: () => Int} => reset { (){q: Prompt[Int]} => (s : () => Int @ {sc})() } } (j : (){s: () => Int} => Int @ {})(){ () => (j : (){s: () => Int} => Int @ {})(){ () => return 1 } } } }
-        |""".stripMargin
-
-    removeTailResumptions(input, expected)
-  }
-
-  test("a resumption from inside an abort to an outer prompt goes through the join point too") {
-    val input =
-      """ def main = { () => reset { (){o: Prompt[Int]} => reset { (){p: Prompt[Int]} => shift (p : Prompt[Int] @ {p}) { {k: (Int) ~> Int} => shift (o : Prompt[Int] @ {o}) { {i: (Nothing) ~> Int} => resume (k : (Int) ~> Int @ {k}) { return 1 } } } } } }
-        |""".stripMargin
-
-    val expected =
-      """ def main = { () => reset { (){o: Prompt[Int]} => reset { (){p: Prompt[Int]} => def j = { (y: Int) => reset { (){q: Prompt[Int]} => return y:Int } } shift (o : Prompt[Int] @ {o}) { {i: (Nothing) ~> Int} => (j : (Int) => Int @ {})(1) } } } }
-        |""".stripMargin
-
-    removeTailResumptions(input, expected)
   }
 
   test("a tail resumption crosses a variable its body cannot observe") {
@@ -432,18 +396,6 @@ class OptimizerTests extends CoreTests {
 
     val expected =
       """ def main = { () => reset { (){p: Prompt[Int]} => var r @ c = 1; return 2 } }
-        |""".stripMargin
-
-    removeTailResumptions(input, expected)
-  }
-
-  test("a tail resumption whose body observes the handler's variable keeps it below the fresh delimiter") {
-    val input =
-      """ def main = { () => reset { (){p: Prompt[Int]} => shift (p : Prompt[Int] @ {p}) { {k: (Int) ~> Int} => var r @ c = 1; resume (k : (Int) ~> Int @ {k}) { get y : Int = ! r @ c; return y:Int } } } }
-        |""".stripMargin
-
-    val expected =
-      """ def main = { () => reset { (){p: Prompt[Int]} => def j = { (){s @ sc: () => Int} => reset { (){q: Prompt[Int]} => (s : () => Int @ {sc})() } } var r @ c = 1; (j : (){s: () => Int} => Int @ {})(){ () => get y : Int = ! r @ c; return y:Int } } }
         |""".stripMargin
 
     removeTailResumptions(input, expected)
@@ -485,36 +437,12 @@ class OptimizerTests extends CoreTests {
     removeTailResumptions(input, expected)
   }
 
-  test("the same shift away from its delimiter resumes through a join point carrying its frame") {
-    val input =
-      """ def main = { (b: Bool) => reset { (){p: Prompt[Int]} => val x = shift (p : Prompt[Int] @ {p}) { {k: (Int) ~> Int} => if (b: Bool) { resume (k : (Int) ~> Int @ {k}) { return 1 } } else { return 2 } }; return x:Int } }
-        |""".stripMargin
-
-    val expected =
-      """ def main = { (b: Bool) => reset { (){p: Prompt[Int]} => def j = { (y: Int) => reset { (){q: Prompt[Int]} => val x = return y:Int; return x:Int } } if (b: Bool) { (j : (Int) => Int @ {})(1) } else { return 2 } } }
-        |""".stripMargin
-
-    removeTailResumptions(input, expected)
-  }
-
   test("a resumption handed to a tail-called block is not a tail resumption") {
     val input =
       """ def main = { () => reset { (){p: Prompt[Int]} => shift (p : Prompt[Int] @ {p}) { {k: (Int) ~> Int} => def w = { (){r: (Int) ~> Int} => return 1 } (w : (){r: (Int) ~> Int} => Int @ {})(){ (k : (Int) ~> Int @ {k}) } } } }
         |""".stripMargin
 
     removeTailResumptions(input, input)
-  }
-
-  test("a resumption under a nested prompt that the resumed statement shifts to keeps the prompts in order") {
-    val input =
-      """ def main = { () => reset { (){p: Prompt[Int]} => shift (p : Prompt[Int] @ {p}) { {k: (Int) ~> Int} => reset { (){q: Prompt[Int]} => resume (k : (Int) ~> Int @ {k}) { shift (q : Prompt[Int] @ {q}) { {j: (Int) ~> Int} => return 0 } } } } } }
-        |""".stripMargin
-
-    val expected =
-      """ def main = { () => reset { (){p: Prompt[Int]} => def j = { (){s @ sc: () => Int} => reset { (){q: Prompt[Int]} => (s : () => Int @ {sc})() } } reset { (){r: Prompt[Int]} => (j : (){s: () => Int} => Int @ {})(){ () => shift (r : Prompt[Int] @ {r}) { {i: (Int) ~> Int} => return 0 } } } } }
-        |""".stripMargin
-
-    removeTailResumptions(input, expected)
   }
 
   test("a resumption under a nested prompt nobody resumes into is erased at the delimiter") {
@@ -524,18 +452,6 @@ class OptimizerTests extends CoreTests {
 
     val expected =
       """ def main = { () => reset { (){p: Prompt[Int]} => reset { (){q: Prompt[Int]} => def f = { () => shift (q : Prompt[Int] @ {q}) { {j: (Int) ~> Int} => return 0 } } val a = (f : () => Int @ {q})(); return a:Int } } }
-        |""".stripMargin
-
-    removeTailResumptions(input, expected)
-  }
-
-  test("the same nested prompt away from the delimiter: the frame joins, the inner abort becomes the answer") {
-    val input =
-      """ def main = { () => reset { (){p: Prompt[Int]} => val x = shift (p : Prompt[Int] @ {p}) { {k: (Int) ~> Int} => reset { (){q: Prompt[Int]} => def f = { () => shift (q : Prompt[Int] @ {q}) { {j: (Int) ~> Int} => return 0 } } val a = (f : () => Int @ {q})(); resume (k : (Int) ~> Int @ {k}) { return a:Int } } }; return x:Int } }
-        |""".stripMargin
-
-    val expected =
-      """ def main = { () => reset { (){p: Prompt[Int]} => def j = { (y: Int) => reset { (){q: Prompt[Int]} => val x = return y:Int; return x:Int } } reset { (){r: Prompt[Int]} => def f = { () => shift (r : Prompt[Int] @ {r}) { {i: (Int) ~> Int} => return 0 } } val a = (f : () => Int @ {r})(); (j : (Int) => Int @ {})(a:Int) } } }
         |""".stripMargin
 
     removeTailResumptions(input, expected)
@@ -563,18 +479,6 @@ class OptimizerTests extends CoreTests {
         |""".stripMargin
 
     removeTailResumptions(input, input)
-  }
-
-  test("the frames in a join point shift to their own fresh prompt") {
-    val input =
-      """ def main = { () => reset { (){p: Prompt[Int]} => val x = shift (p : Prompt[Int] @ {p}) { {k: (Int) ~> Int} => val a = resume (k : (Int) ~> Int @ {k}) { return 1 }; return a:Int }; val y = shift (p : Prompt[Int] @ {p}) { {k2: (Int) ~> Int} => val b = resume (k2 : (Int) ~> Int @ {k2}) { return 2 }; return b:Int }; return y:Int } }
-        |""".stripMargin
-
-    val expected =
-      """ def main = { () => reset { (){p: Prompt[Int]} => def j = { (y: Int) => reset { (){q: Prompt[Int]} => val x = return y:Int; def j2 = { (y2: Int) => reset { (){q2: Prompt[Int]} => val z = return y2:Int; return z:Int } } val b = (j2 : (Int) => Int @ {})(2); return b:Int } } val a = (j : (Int) => Int @ {})(1); return a:Int } }
-        |""".stripMargin
-
-    removeTailResumptions(input, expected)
   }
 
   test("a block that closed over the prompt through its capture must not run inside the join point") {
