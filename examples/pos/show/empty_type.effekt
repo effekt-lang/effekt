@@ -1,0 +1,8 @@
+type Void {}
+
+def describe(v: Void): String = show(v)
+
+def main() = {
+  val f = box describe
+  println("ok")
+}
