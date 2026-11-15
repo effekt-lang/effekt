@@ -33,6 +33,82 @@ private[typer]
 type CaptureConstraints = Map[CNode, CaptureNodeData]
 
 /**
+ * The type constraints as unification variables in equivalence classes ([[Node]]),
+ * together with the types we know for the classes.
+ *
+ * Every operation keeps the substitution ([[values]]) in lockstep with the classes and their types,
+ * so that it never needs to be recomputed.
+ */
+private[typer]
+class TypeConstraints private (
+  /** A map from a member in the equivalence class to the class' representative */
+  classes: Map[UnificationVar, Node],
+
+  /** The members of each equivalence class (the inverse of [[classes]]) */
+  members: Map[Node, Set[UnificationVar]],
+
+  /**
+   * Everything we know so far: right hand sides of substitutions are *always* concrete types.
+   * They can, however, mention unification variables. e.g. `?U !-> List[?S]` is allowed.
+   * The mentioned unification variables (`?S` in the example) must not have a substitution.
+   * They can be part of an equivalence class.
+   */
+  types: Map[Node, ValueType],
+
+  /** The classes whose type mentions unknowns: substituting can only change their types */
+  withUnknowns: Set[Node],
+
+  /** The type of each unification variable whose class has one */
+  val values: Map[UnificationVar, ValueType]
+) {
+  def typeOf(n: Node): Option[ValueType] = types.get(n)
+
+  /** The class of [[x]], which is new if [[x]] is not a member of one, yet */
+  def getNode(x: UnificationVar): (Node, TypeConstraints) = classes.get(x) match {
+    case Some(n) => (n, this)
+    case None =>
+      val n = new Node
+      (n, new TypeConstraints(classes.updated(x, n), members.updated(n, Set(x)), types, withUnknowns, values))
+  }
+
+  /** Learn that class [[n]] has type [[tpe]] */
+  def learn(n: Node, tpe: ValueType): TypeConstraints =
+    new TypeConstraints(classes, members, types.updated(n, tpe),
+      if unknowns(tpe).nonEmpty then withUnknowns + n else withUnknowns - n,
+      values ++ members.getOrElse(n, Set.empty).map { _ -> tpe })
+
+  /** The members of class [[x]] join class [[y]] */
+  def connect(x: Node, y: Node): TypeConstraints =
+    val moved = members.getOrElse(x, Set.empty)
+    new TypeConstraints(classes ++ moved.map { _ -> y }, (members - x).updated(y, members.getOrElse(y, Set.empty) ++ moved),
+      types, withUnknowns,
+      typeOf(y) match {
+        case Some(tpe) => values ++ moved.map { _ -> tpe }
+        case None => values -- moved
+      })
+
+  /** The currently known substitutions, given the solved capture unification variables */
+  def substitution(captures: Map[CNode, CaptureSet]): Substitutions =
+    Substitutions(values.asInstanceOf[Map[TypeVar, ValueType]], captures.asInstanceOf[Map[CaptVar, Captures]])
+
+  /** Applies the substitution to all types once */
+  def substitute(captures: Map[CNode, CaptureSet]): TypeConstraints =
+    val subst = substitution(captures)
+    withUnknowns.foldLeft(this) { case (constraints, n) => constraints.learn(n, subst.substitute(types(n))) }
+
+  def dump(): Unit = members.foreach {
+    case (n, vars) => types.get(n) match {
+      case None => println(s"{${vars.mkString(", ")}}")
+      case Some(tpe) => println(s"{${vars.mkString(", ")}} --> ${tpe}")
+    }
+  }
+}
+
+object TypeConstraints {
+  val empty = new TypeConstraints(Map.empty, Map.empty, Map.empty, Set.empty, Map.empty)
+}
+
+/**
  * A network of constraints.
  *
  * We distinguish between type constraints and capture constraints.
@@ -45,10 +121,10 @@ type CaptureConstraints = Map[CNode, CaptureNodeData]
  *
  * Whenever we learn something about a variable (such as the upper type bound), we immediately
  * solve the variable and all of the other variables in the same class and compute a
- * substitution ([[typeSubstitution]]).
+ * substitution ([[TypeConstraints]]).
  *
  * To record that two variables are equal, we associate them with the same [[Node]]
- * and store them in an equivalence class [[classes]].
+ * and store them in an equivalence class ([[TypeConstraints]]).
  *
  * Invariants:
  * - substitutions should never refer to variables that we already solved.
@@ -90,20 +166,12 @@ type CaptureConstraints = Map[CNode, CaptureNodeData]
  */
 class Constraints(
   /**
-   * Everything we know so far -- right hand sides of substitutions are *always* concrete types.
-   * They can, however, mention unification variables. e.g. `?U !-> List[?S]` is allowed.
-   * The mentioned unification variables (`?S` in the example) must not have a substitution.
-   * They can be part of an equivalence class.
+   * Everything we know so far about types.
    *
    * Once one member of the equivalence class becomes concrete, all members are assigned the same type
    * in the substitution.
    */
-  private var typeSubstitution: Map[Node, ValueType] = Map.empty,
-
-  /**
-   * A map from a member in the equivalence class to the class' representative
-   */
-  private var classes: Map[UnificationVar, Node] = Map.empty,
+  private var typeConstraints: TypeConstraints = TypeConstraints.empty,
 
   /**
    * Concrete bounds for each unification variable
@@ -124,22 +192,10 @@ class Constraints(
 )(using C: ErrorReporter) {
 
   /**
-   * Caches type substitutions, which are only invalidated if the mapping from node to typevar changes.
-   *
-   * This significantly improves the performance of Typer (see https://github.com/effekt-lang/effekt/pull/954)
-   */
-  private var _typeSubstitution:  Map[TypeVar, ValueType] = scala.compiletime.uninitialized
-  private def invalidate(): Unit = _typeSubstitution = null
-
-  /**
    * The currently known substitutions
    */
   def subst: Substitutions =
-    if _typeSubstitution == null then {
-      _typeSubstitution = classes.flatMap[TypeVar, ValueType] { case (k, v) => typeSubstitution.get(v).map { k -> _ } }
-    }
-    val captures = captSubstitution.asInstanceOf[Map[CaptVar, Captures]]
-    Substitutions(_typeSubstitution, captures)
+    typeConstraints.substitution(captSubstitution)
 
   /**
    * Should only be called on unification variables where we do not know any types, yet
@@ -184,7 +240,7 @@ class Constraints(
     def learnType(x: Node, tpe: ValueType): Unit = {
       // tpe should not be a reference to a unification variable
       typeOf(x) foreach { otherTpe => merge(tpe, otherTpe) }
-      typeSubstitution = typeSubstitution.updated(x, tpe)
+      typeConstraints = typeConstraints.learn(x, tpe)
       updateSubstitution()
     }
 
@@ -200,8 +256,7 @@ class Constraints(
       }
 
       // create mapping to representative
-      classes = classes.view.mapValues { node => if (node == x) y else node }.toMap
-      invalidate()
+      typeConstraints = typeConstraints.connect(x, y)
     }
 
     y match {
@@ -217,7 +272,7 @@ class Constraints(
     // Check that we could infer all types of type variable instantiations.
     types.foreach {
       case x @ UnificationVar(underlying, callTree) =>
-        if (!typeSubstitution.isDefinedAt(getNode(x))) C.at(callTree) {
+        if (typeOf(getNode(x)).isEmpty) C.at(callTree) {
           C.error(s"Cannot infer type argument ${underlying}, maybe consider annotating it?")
         }
     }
@@ -263,17 +318,11 @@ class Constraints(
     })
 
 
-  override def clone(): Constraints = new Constraints(typeSubstitution, classes, captureConstraints, captSubstitution, pendingInactive)
+  override def clone(): Constraints = new Constraints(typeConstraints, captureConstraints, captSubstitution, pendingInactive)
 
   def dumpTypeConstraints() =
     println("\n--- Type Constraints ---")
-    val cl = classes.groupMap { case (el, repr) => repr } { case (el, repr) => el }
-    cl foreach {
-      case (n, vars) => typeSubstitution.get(n) match {
-        case None => println(s"{${vars.mkString(", ")}}")
-        case Some(tpe) => println(s"{${vars.mkString(", ")}} --> ${tpe}")
-      }
-    }
+    typeConstraints.dump()
     println("------------------\n")
 
   def dumpCaptureConstraints() =
@@ -473,15 +522,15 @@ class Constraints(
    * This way we replace {?B} -> Box[?R] with {?B} -> Box[Int] when learning ?B =:= Int
    */
   private def updateSubstitution(): Unit =
-    val substitution = subst
-    invalidate()
-    typeSubstitution = typeSubstitution.map { case (node, tpe) => node -> substitution.substitute(tpe) }
+    typeConstraints = typeConstraints.substitute(captSubstitution)
 
   private def getNode(x: UnificationVar): Node =
-    classes.getOrElse(x, { val rep = new Node; classes += (x -> rep); rep })
+    val (node, updated) = typeConstraints.getNode(x)
+    typeConstraints = updated
+    node
 
   private def typeOf(n: Node): Option[ValueType] =
-    typeSubstitution.get(n)
+    typeConstraints.typeOf(n)
 
   //</editor-fold>
 }

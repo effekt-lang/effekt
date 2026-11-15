@@ -101,9 +101,9 @@ private[typer] def assertConcreteFunction(id: source.Id, tpe: BlockType)(using C
     case _ => ()
   }
 
-private type Unknown = CaptUnificationVar | UnificationVar
+private[typer] type Unknown = CaptUnificationVar | UnificationVar
 
-private def unknowns(tpe: ValueType): Set[Unknown] = tpe match {
+private[typer] def unknowns(tpe: ValueType): Set[Unknown] = tpe match {
   case ValueTypeRef(x) => unknowns(x)
   case ValueTypeApp(tpe, args) => args.flatMap(unknowns).toSet
   case BoxedType(tpe, capture) => unknowns(tpe) ++ unknowns(capture)
