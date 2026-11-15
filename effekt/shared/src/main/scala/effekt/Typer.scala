@@ -1304,7 +1304,7 @@ object Typer extends Phase[NameResolved, Typechecked] {
 
       // Ambiguous reference
       case results =>
-        val candidates = results.map { case (sym, res, st) => Candidate(sym, findFunctionTypeFor(sym)._1, Vector.empty) }
+        val candidates = results.map { case (sym, res, st) => Candidate(sym, findFunctionTypeFor(sym)._1, Vector.empty, Context.definitionTreeOption(sym)) }
         Context.abort(Context.diagnostic(OverloadResolution(candidates), Severity.Error, Context.spanOf(id)))
     }
 
@@ -1318,7 +1318,7 @@ object Typer extends Phase[NameResolved, Typechecked] {
 
       case failed =>
         // reraise all and abort
-        val candidates = failed.map { case (block, msgs) => Candidate(block, findFunctionTypeFor(block)._1, msgs) }
+        val candidates = failed.map { case (block, msgs) => Candidate(block, findFunctionTypeFor(block)._1, msgs, Context.definitionTreeOption(block)) }
         Context.abort(OverloadResolution(candidates))
     }
   }

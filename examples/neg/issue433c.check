@@ -1,0 +1,31 @@
+[error] examples/neg/issue433c.effekt:5:3: Cannot typecheck call. [typer]
+  5    run("hi") { x =>
+       ^
+
+     There are multiple overloads, which all fail to check:
+  1  * def run(n: Int)    { action: Int => Unit }: Unit = action(n)
+           ^^^
+  5  |    run("hi") { x =>
+     |        ^^^^ Expected Int but got String.
+
+  2  * def run(s: String) { action: String => Unit }: Unit = action(s)
+           ^^^
+  6  |      val s: Int = x + 1
+     |                   ^^^^^ Cannot typecheck call.
+     |
+     |  |  There are multiple overloads, which all fail to check:
+343  |  |  * extern def infixPlus(x: Int, y: Int) at {}: Int =   /libraries/common/effekt.effekt:343:12
+     |  |               ^^^^^^^^^
+  6  |  |  |      val s: Int = x + 1   examples/neg/issue433c.effekt:6:18
+     |  |  |                   ^ Expected Int but got String.
+     |  |
+406  |  |  * extern def infixPlus(x: Double, y: Double) at {}: Double =   /libraries/common/effekt.effekt:406:12
+     |  |               ^^^^^^^^^
+  6  |  |  |      val s: Int = x + 1   examples/neg/issue433c.effekt:6:18
+     |  |  |                   ^^^^^ Expected Int but got Double.
+     |  |  |
+  6  |  |  |      val s: Int = x + 1
+     |  |  |                   ^ Expected Double but got String.
+     |  |  |
+  6  |  |  |      val s: Int = x + 1
+     |  |  |                       ^ Expected Double but got Int.

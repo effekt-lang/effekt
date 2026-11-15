@@ -3,7 +3,7 @@ package source
 
 import scala.util.DynamicVariable
 
-import effekt.util.messages.EffektMessages
+import effekt.util.messages.{EffektMessages, ErrorMessageReifier, Piece, StructuredMessage}
 import effekt.context.Context
 import effekt.symbols.{BlockType, ValueType, builtins, Name}
 import effekt.context.Annotations
@@ -17,41 +17,33 @@ object GenerateImplicitArgs {
   sealed trait ImplicitStencil {
     def name: String
     def kind: String
-    def explanation: Option[String] = None
+    def explanation: List[StructuredMessage] = Nil
   }
   case class ImplicitBlockLiteral(name: String, callTarget: symbols.CallTarget) extends ImplicitStencil {
     def kind = "block argument"
   }
   case class BoxedStencil(name: String, block: ImplicitStencil) extends ImplicitStencil {
     def kind = "value argument"
-    override def explanation: Option[String] = Some(
-      """An implicit argument of a boxed type will be instantiated by boxing the block
-        |  that an implicit block argument of the same name would be instantiated to""".stripMargin
-        + (block.explanation match {
-        case Some(e) => ":\n" + e
-        case None => ".\n"
-      }))
+    override def explanation: List[StructuredMessage] =
+      val boxing = "An implicit argument of a boxed type will be instantiated by boxing the block that an implicit block argument of the same name would be instantiated to"
+      if (block.explanation.isEmpty) List(pretty"${boxing}.") else pretty"${boxing}:" :: block.explanation
   }
   case class ImplicitVar(kind: String, name: String, content: Option[symbols.Symbol]) extends ImplicitStencil
   case class SourcePosition(constructor: symbols.CallTarget) extends ImplicitStencil {
     def name = "sourcePosition"
     def kind = "value argument"
     override def explanation =
-      Some(
-        """Implicit sourcePosition will call
-          |  SourcePosition(file, start_line, start_col, end_line, end_col)
-          | with the respective values for the source position of the call.
-          |""".stripMargin)
+      List(pretty"Implicit sourcePosition will call ${Piece.Code("SourcePosition(file, start_line, start_col, end_line, end_col)")} with the respective values for the source position of the call.")
   }
   case class CallId() extends ImplicitStencil {
     def name = "callId"
     def kind = "value argument"
-    override def explanation = Some("Implicit callId will generate a unique Int for each call to this function in the source code.")
+    override def explanation = List(pretty"Implicit callId will generate a unique Int for each call to this function in the source code.")
   }
   case class Error(underlying: ImplicitStencil,
                    index: Int, msgs: EffektMessages) extends ImplicitStencil {
     export underlying.{name, kind}
-    override def explanation: Option[String] = underlying.explanation
+    override def explanation: List[StructuredMessage] = underlying.explanation
   }
 
 

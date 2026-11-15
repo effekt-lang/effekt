@@ -167,6 +167,8 @@ case class Span(source: kiama.util.Source, from: Int, to: Int, origin: Origin = 
    */
   def synthesized: Span = Span(source, from, to, origin = Origin.Synthesized)
 
+  def isMissing: Boolean = origin == Origin.Missing
+
   def range: kiama.util.Range = kiama.util.Range(source.offsetToPosition(from), source.offsetToPosition(to))
 
   def text: Option[String] = {
@@ -888,13 +890,13 @@ export Resolvable.*
 
 extension [T](positioned: T) def sourceOfOpt: Option[String] = {
   positioned match {
-    case m: Many[_] if m.span.origin != Origin.Missing =>
+    case m: Many[_] if !m.span.isMissing =>
       Spans.substring(m.span.range.from, m.span.range.to)
 
-    case m: Maybe[_] if m.span.origin != Origin.Missing =>
+    case m: Maybe[_] if !m.span.isMissing =>
       Spans.substring(m.span.range.from, m.span.range.to)
 
-    case t: Tree if t.span.origin != Origin.Missing =>
+    case t: Tree if !t.span.isMissing =>
       Spans.substring(t.span.range.from, t.span.range.to)
   }
 }

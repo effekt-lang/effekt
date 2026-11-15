@@ -1,21 +1,32 @@
 [error] examples/neg/ambiguous_overload.effekt:4:14: Cannot typecheck call. [typer]
-There are multiple overloads, which all fail to check:
+  4  def main() = foo(1) + 2 // nested overload!
+                  ^^^^^^^^^^
 
-Possible overload: effekt::infixPlus of type (Int, Int) => Int
-  Ambiguous overload.
-  There are multiple overloads, which all would type check:
-  - ambiguous_overload::foo: Int => Int
-  - ambiguous_overload::foo: [A](A) => A
+     There are multiple overloads, which all fail to check:
+343  * extern def infixPlus(x: Int, y: Int) at {}: Int =   /libraries/common/effekt.effekt:343:12
+                  ^^^^^^^^^
+  4  |  def main() = foo(1) + 2 // nested overload!   examples/neg/ambiguous_overload.effekt:4:14
+     |               ^^^ Ambiguous overload.
+     |
+     |  |  There are multiple overloads, which all would type check:
+  1  |  |  * def foo(n: Int): Int = n + 1
+     |  |        ^^^
+     |  |
+  2  |  |  * def foo[A](a: A): A = a
+     |  |        ^^^
 
-Possible overload: effekt::infixPlus of type (Double, Double) => Double
-  Cannot typecheck call.
-  There are multiple overloads, which all fail to check:
-  
-  Possible overload: ambiguous_overload::foo of type Int => Int
-    Expected Double but got Int.
-  
-  Possible overload: ambiguous_overload::foo of type [A](A) => A
-    Expected Double but got Int.
-
-4  def main() = foo(1) + 2 // nested overload!
-                ^^^^^^^^^^
+406  * extern def infixPlus(x: Double, y: Double) at {}: Double =   /libraries/common/effekt.effekt:406:12
+                  ^^^^^^^^^
+  4  |  def main() = foo(1) + 2 // nested overload!   examples/neg/ambiguous_overload.effekt:4:14
+     |               ^^^^^^ Cannot typecheck call.
+     |
+     |  |  There are multiple overloads, which all fail to check:
+  1  |  |  * def foo(n: Int): Int = n + 1
+     |  |        ^^^
+  4  |  |  |  def main() = foo(1) + 2 // nested overload!
+     |  |  |               ^^^^^^ Expected Double but got Int.
+     |  |
+  2  |  |  * def foo[A](a: A): A = a
+     |  |        ^^^
+  4  |  |  |  def main() = foo(1) + 2 // nested overload!
+     |  |  |                   ^ Expected Double but got Int.

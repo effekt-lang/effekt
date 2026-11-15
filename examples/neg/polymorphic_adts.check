@@ -2,14 +2,19 @@
 36          case Pair2(n, t) => if (t) { n + 1 } else { 0 }
                                     ^
 [error] examples/neg/polymorphic_adts.effekt:36:38: Cannot typecheck call. [typer]
-There are multiple overloads, which all fail to check:
+ 36          case Pair2(n, t) => if (t) { n + 1 } else { 0 }
+                                          ^^^^^
 
-Possible overload: effekt::infixPlus of type (Int, Int) => Int
-  Expected Int but got Bool.
+     There are multiple overloads, which all fail to check:
+343  * extern def infixPlus(x: Int, y: Int) at {}: Int =   /libraries/common/effekt.effekt:343:12
+                  ^^^^^^^^^
+ 36  |          case Pair2(n, t) => if (t) { n + 1 } else { 0 }   examples/neg/polymorphic_adts.effekt:36:38
+     |                                       ^ Expected Int but got Bool.
 
-Possible overload: effekt::infixPlus of type (Double, Double) => Double
-  Expected Double but got Bool.
-  Expected Double but got Int.
-
-36          case Pair2(n, t) => if (t) { n + 1 } else { 0 }
-                                         ^^^^^
+406  * extern def infixPlus(x: Double, y: Double) at {}: Double =   /libraries/common/effekt.effekt:406:12
+                  ^^^^^^^^^
+ 36  |          case Pair2(n, t) => if (t) { n + 1 } else { 0 }   examples/neg/polymorphic_adts.effekt:36:38
+     |                                       ^ Expected Double but got Bool.
+     |
+ 36  |          case Pair2(n, t) => if (t) { n + 1 } else { 0 }
+     |                                           ^ Expected Double but got Int.
