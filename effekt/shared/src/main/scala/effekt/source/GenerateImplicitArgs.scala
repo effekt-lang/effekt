@@ -3,7 +3,7 @@ package source
 
 import scala.util.DynamicVariable
 
-import effekt.util.messages.{EffektMessages, ErrorMessageReifier, Piece, StructuredMessage}
+import effekt.util.messages.{ErrorMessageReifier, Failure, Piece, StructuredMessage}
 import effekt.context.Context
 import effekt.symbols.{BlockType, ValueType, builtins, Name}
 import effekt.context.Annotations
@@ -41,7 +41,7 @@ object GenerateImplicitArgs {
     override def explanation = List(pretty"Implicit callId will generate a unique Int for each call to this function in the source code.")
   }
   case class Error(underlying: ImplicitStencil,
-                   index: Int, msgs: EffektMessages) extends ImplicitStencil {
+                   index: Int, failure: Failure) extends ImplicitStencil {
     export underlying.{name, kind}
     override def explanation: List[StructuredMessage] = underlying.explanation
   }
@@ -102,11 +102,11 @@ object GenerateImplicitArgs {
           Try {
             body
           } match {
-            case Left(msgs) =>
+            case Left(failure) =>
               // Note: Recursion
               Context.at(inst) {
                 Context.abort(util.messages.ImplicitInstantiation(
-                  Error(stencil, index, msgs), tpe))
+                  Error(stencil, index, failure), tpe))
               }
             case Right(r) => r
           }
@@ -148,14 +148,14 @@ object GenerateImplicitArgs {
             .map { scope => scope.collect { case b: symbols.BlockSymbol => b } }
           SourcePosition(symbols.CallTarget(candidates, Some(scope.scope)))
         } match {
-          case Left(msgs) => Error(SourcePosition(symbols.CallTarget(Nil, Some(scope.scope))), index, msgs)
+          case Left(failure) => Error(SourcePosition(symbols.CallTarget(Nil, Some(scope.scope))), index, failure)
           case Right(r) => r
         }
       case ("callId", _) => CallId()
       case (name, Some(symbols.BoxedType(t, capt))) =>
         // try filling boxed types by instantiating a block argument and boxing it
         generateImplicitBlockArg(symbols.BlockParam(p.name, Some(t), symbols.Capture.CaptureParam(p.name), true, NoSource), index, scope, span) match {
-          case Error(u, i, msgs) => Error(BoxedStencil(name, u), i, msgs)
+          case Error(u, i, failure) => Error(BoxedStencil(name, u), i, failure)
           case b => BoxedStencil(name, b)
         }
       case _ =>
@@ -163,7 +163,7 @@ object GenerateImplicitArgs {
           val sym = scope.lookupFirstTerm(IdRef(Nil, p.name.name, span.synthesized))
           ImplicitVar("value argument", p.name.name, Some(sym))
         } match {
-          case Left(msgs) => Error(ImplicitVar("value argument", p.name.name, None), index, msgs)
+          case Left(failure) => Error(ImplicitVar("value argument", p.name.name, None), index, failure)
           case Right(r) => r
         }
     }
@@ -191,7 +191,7 @@ object GenerateImplicitArgs {
             .map { scope => scope.collect { case b: symbols.BlockSymbol => b } }
           ImplicitBlockLiteral(p.name.name, symbols.CallTarget(candidates, Some(scope.scope)))
         } match {
-          case Left(msgs) => Error(ImplicitBlockLiteral(p.name.name, symbols.CallTarget(Nil, Some(scope.scope))), index, msgs)
+          case Left(failure) => Error(ImplicitBlockLiteral(p.name.name, symbols.CallTarget(Nil, Some(scope.scope))), index, failure)
           case Right(r) => r
         }
       case BlockType.InterfaceType(typeConstructor, args) =>
@@ -199,7 +199,7 @@ object GenerateImplicitArgs {
           val sym = scope.lookupFirstTerm(IdRef(Nil, p.name.name, span.synthesized))
           ImplicitVar("block argument", p.name.name, Some(sym))
         } match {
-          case Left(msgs) => Error(ImplicitVar("block argument", p.name.name, None), index, msgs)
+          case Left(failure) => Error(ImplicitVar("block argument", p.name.name, None), index, failure)
           case Right(r) => r
         }
     }
@@ -228,7 +228,7 @@ object GenerateImplicitArgs {
   def instantiateImplicitBlock(b: ImplicitStencil, tpe: symbols.BlockType, span: source.Span = source.Span.missing)(using Context): source.Term = {
     if(!Context.messaging.hasErrors) {
       (b, tpe) match {
-        case (e @ Error(s, i, msgs), _) =>
+        case (e @ Error(s, i, failure), _) =>
           Context.abort(util.messages.ImplicitInstantiation(e, tpe))
 
         case (ImplicitBlockLiteral(name, sym),
@@ -286,7 +286,7 @@ object GenerateImplicitArgs {
       ValueArg(name, Literal(v, builtins.TInt, span.synthesized), span.synthesized)
 
     v match {
-      case e @ Error(s, i, msgs) =>
+      case e @ Error(s, i, failure) =>
         Context.abort(util.messages.ImplicitInstantiation(e, tpe))
 
       case ImplicitVar(kind, name, Some(sym)) =>
