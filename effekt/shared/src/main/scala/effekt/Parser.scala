@@ -50,6 +50,23 @@ object Parser extends Phase[Source, Parsed] {
   } map { tree =>
     Parsed(source, tree)
   }
+
+  lazy val precedenceTable = PrecedenceTable { table =>
+    given PrecedenceTable = table
+    // since by default, the associativity is left-associative, we only need to specify it for the cases where it is different
+    table.declare(Associativity.None, `===`, `!==`, `<=`, `>=`, `<`, `>`)
+    // We want `+` and `-` (as well as `*` and `/`) to bind equally strong and use associativity instead to disambiguate
+    `+` =?= `-`
+    `*` =?= `/`
+    Set(`||`) ?< Set(`&&`)
+    Set(`&&`) ?< Set(TokenKind.`|`)
+    Set(TokenKind.`|`) ?< Set(`&`)
+    Set(`&`) ?< Set(`===`, `!==`, `<=`, `>=`, `<`, `>`)
+    Set(`===`, `!==`, `<=`, `>=`, `<`, `>`) ?< Set(`..`, `...`, TokenKind.`~`, TokenKind.`~>`, TokenKind.`<~`)
+    Set(`..`, `...`, TokenKind.`~`, TokenKind.`~>`, TokenKind.`<~`) ?< Set(`++`, `--`, `+`, `-`, `<<`, `>>`, `^`, `^^`)
+    Set(`++`, `--`, `+`, `-`, `<<`, `>>`, `^`, `^^`) ?< Set(`*`, `/`)
+  }
+  lazy val infixOps = precedenceTable.operators
 }
 
 
@@ -1128,31 +1145,14 @@ class Parser(tokens: Seq[Token], source: Source) {
     }
     e
 
-  lazy val precedenceTable = PrecedenceTable { table =>
-    given PrecedenceTable = table
-    // since by default, the associativity is left-associative, we only need to specify it for the cases where it is different
-    table.declare(Associativity.None, `===`, `!==`, `<=`, `>=`, `<`, `>`)
-    // We want `+` and `-` (as well as `*` and `/`) to bind equally strong and use associativity instead to disambiguate
-    `+` =?= `-`
-    `*` =?= `/`
-    Set(`||`) ?< Set(`&&`)
-    Set(`&&`) ?< Set(TokenKind.`|`)
-    Set(TokenKind.`|`) ?< Set(`&`)
-    Set(`&`) ?< Set(`===`, `!==`, `<=`, `>=`, `<`, `>`)
-    Set(`===`, `!==`, `<=`, `>=`, `<`, `>`) ?< Set(`..`, `...`, TokenKind.`~`, TokenKind.`~>`, TokenKind.`<~`)
-    Set(`..`, `...`, TokenKind.`~`, TokenKind.`~>`, TokenKind.`<~`) ?< Set(`++`, `--`, `+`, `-`, `<<`, `>>`, `^`, `^^`)
-    Set(`++`, `--`, `+`, `-`, `<<`, `>>`, `^`, `^^`) ?< Set(`*`, `/`)
-  }
-  lazy val infixOps = precedenceTable.operators
-
   def exprOuter(prevOp: Option[TokenKind]): Term =
     nonterminal:
       var left = primExpr()
       boundary:
         while (true) {
           peek.kind match {
-            case op if infixOps.contains(op) =>
-              val precedence = prevOp.map(precedenceTable.compare(_, op)).getOrElse(Precedence.RightBindsTighter)
+            case op if Parser.infixOps.contains(op) =>
+              val precedence = prevOp.map(Parser.precedenceTable.compare(_, op)).getOrElse(Precedence.RightBindsTighter)
               precedence match {
                 case Precedence.LeftBindsTighter => boundary.break()
                 case Precedence.RightBindsTighter =>
