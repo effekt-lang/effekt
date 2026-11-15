@@ -11,8 +11,3 @@
    |                                        ^^^^^^^^^
 
    * note: Int and String differ.
-[error] examples/neg/typer/mismatch/if_arms_list_int_and_list_string.effekt:1:23: Expected List[A] but got List[A]. [typer]
-1  def choose(b: Bool) = if (b) [1] else ["hello"]
-                         ^^^^^^^^^^^^^^^^^^^^^^^^^
-
-   * note: Expected Int but got String.
