@@ -1,0 +1,6 @@
+// Namer: a value in the tightest scope shadows the functions of that name
+def f(x: Int): Int = 1
+def main() = {
+  val f = box { (x: Int) => 2 }
+  println(f(0))
+}

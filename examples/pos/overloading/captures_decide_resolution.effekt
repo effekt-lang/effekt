@@ -1,0 +1,5 @@
+// Typer: captures decide resolution: the boxed implicit `foo` would capture `io`, so only the block version fits (open: should captures decide?)
+def foo(): String = { println("(foo runs)"); "Foo" }
+def needFoo(?foo: () => String at {}): Unit = println("pure version")
+def needFoo { ?foo: () => String }: Unit = println("block version")
+def main() = needFoo()

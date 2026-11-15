@@ -1,0 +1,11 @@
+// implicits: BUG, 3 same-size steps are rejected: iterative deepening never happens, the bound stays 1
+type T0 { M0() }
+type T1 { M1() }
+type T2 { M2() }
+type T3 { M3() }
+def disp(x: T0): String = "0"
+def disp(x: T1) { ?disp: T0 => String }: String = disp(M0()) ++ "1"
+def disp(x: T2) { ?disp: T1 => String }: String = disp(M1()) ++ "2"
+def disp(x: T3) { ?disp: T2 => String }: String = disp(M2()) ++ "3"
+def top(x: T3) { ?disp: T3 => String }: String = "deep: " ++ disp(x)
+def main() = println(top(M3())) // ERROR Cannot typecheck call

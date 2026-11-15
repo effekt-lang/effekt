@@ -1,0 +1,5 @@
+// Typer: with a pure `foo`, both `needFoo`s fit: ambiguous (captures decided before)
+def foo(): String = "Foo"
+def needFoo(?foo: () => String at {}): Unit = println("pure version")
+def needFoo { ?foo: () => String }: Unit = println("block version")
+def main() = needFoo() // ERROR Ambiguous overload

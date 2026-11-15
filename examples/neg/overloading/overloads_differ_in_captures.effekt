@@ -1,0 +1,9 @@
+// Typer: overloads differing only in captures: `box dec` (pure) fits both `store`s, so the call is ambiguous inside `println`
+def store(f: Int => Int at {}): String = "pure"
+def store(f: Int => Int at {io}): String = "io"
+def main() = {
+  def inc(x: Int) = { println("io"); x + 1 }
+  def dec(x: Int) = x - 1
+  println(store(box inc))
+  println(store(box dec)) // ERROR Cannot typecheck call
+}

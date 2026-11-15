@@ -1,0 +1,6 @@
+// implicits: `?fmt` is resolved at the call site, where the local `fmt` is visible
+def describe(x: Int) { ?fmt: Int => String }: String = fmt(x)
+def main() = {
+  def fmt(x: Int): String = "local"
+  println(describe(1))
+}

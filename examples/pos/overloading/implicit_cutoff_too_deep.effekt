@@ -1,0 +1,30 @@
+// implicits: BUG, the deep `top` needs 12 same-size steps; cut off, it counts as failed and "shallow" wins
+type T0 { M0() }
+type T1 { M1() }
+type T2 { M2() }
+type T3 { M3() }
+type T4 { M4() }
+type T5 { M5() }
+type T6 { M6() }
+type T7 { M7() }
+type T8 { M8() }
+type T9 { M9() }
+type T10 { M10() }
+type T11 { M11() }
+type T12 { M12() }
+def disp(x: T0): String = "0"
+def disp(x: T1) { ?disp: T0 => String }: String = disp(M0()) ++ "1"
+def disp(x: T2) { ?disp: T1 => String }: String = disp(M1()) ++ "2"
+def disp(x: T3) { ?disp: T2 => String }: String = disp(M2()) ++ "3"
+def disp(x: T4) { ?disp: T3 => String }: String = disp(M3()) ++ "4"
+def disp(x: T5) { ?disp: T4 => String }: String = disp(M4()) ++ "5"
+def disp(x: T6) { ?disp: T5 => String }: String = disp(M5()) ++ "6"
+def disp(x: T7) { ?disp: T6 => String }: String = disp(M6()) ++ "7"
+def disp(x: T8) { ?disp: T7 => String }: String = disp(M7()) ++ "8"
+def disp(x: T9) { ?disp: T8 => String }: String = disp(M8()) ++ "9"
+def disp(x: T10) { ?disp: T9 => String }: String = disp(M9()) ++ "0"
+def disp(x: T11) { ?disp: T10 => String }: String = disp(M10()) ++ "1"
+def disp(x: T12) { ?disp: T11 => String }: String = disp(M11()) ++ "2"
+def top(x: T12) { ?disp: T12 => String }: String = "deep: " ++ disp(x)
+def top(x: T12): String = "shallow"
+def main() = { val s: String = top(M12()); println(s) }
