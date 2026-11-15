@@ -1,0 +1,6 @@
+// Typer: the inner scope's candidate fits, so the outer one is not considered
+def f(x: Int): String = "outer"
+def main() = {
+  def f(x: Int): String = "inner"
+  println(f(1))
+}

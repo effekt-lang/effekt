@@ -1,0 +1,4 @@
+// Namer: a block parameter is in a tighter scope than the function of that name
+def f(x: Int): Int = 1
+def g { f: Int => Int }: Int = f(0)
+def main() = println(g { x => 2 })

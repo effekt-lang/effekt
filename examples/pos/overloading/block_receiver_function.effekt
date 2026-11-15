@@ -1,0 +1,6 @@
+// Namer: for a block receiver without an operation of that name, `inc.size()` calls the function
+def size { f: Int => Int }: Int = f(41)
+def main() = {
+  def inc(x: Int) = x + 1
+  println(inc.size())
+}

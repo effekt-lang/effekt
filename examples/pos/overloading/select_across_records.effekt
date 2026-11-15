@@ -1,0 +1,7 @@
+// Namer: `x.n` is resolved among the fields named `n` of all records
+record A(n: Int)
+record B(n: String)
+def main() = {
+  println(A(1).n)
+  println(B("two").n)
+}
