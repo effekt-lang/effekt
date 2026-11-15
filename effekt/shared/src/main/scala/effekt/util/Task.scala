@@ -82,6 +82,7 @@ object Task { build =>
    * A concrete target / request to be build
    */
   case class Target[K, V](task: Task[K, V], key: K) {
+    override val hashCode: Int = scala.util.hashing.MurmurHash3.caseClassHash(this) // computed once
     override def toString = s"${task}@${fingerprint}"
     def fingerprint: Long = task.fingerprint(key)
   }
