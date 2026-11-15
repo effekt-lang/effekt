@@ -47,10 +47,10 @@ object Optimizer extends Phase[CoreTransformed, CoreTransformed] {
       val anfed = BindSubexpressions.transform(m)
       val normalized = Normalizer.normalize(Set(mainSymbol), anfed, policy)
       val live = Deadcode.remove(mainSymbol, normalized)
-      val tailRemoved = StaticResumptions(live)
-      val parameterized = ReferencesToParameters.transform(tailRemoved)
+      val parameterized = ReferencesToParameters.transform(live)
       val contified = contification(parameterized)
-      contified
+      val tailRemoved = StaticResumptions(contified)
+      tailRemoved
     }
 
     // (3) normalize a few times (since tail resumptions might only surface after normalization and leave dead Resets)
