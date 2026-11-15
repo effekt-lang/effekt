@@ -1632,15 +1632,19 @@ class Parser(tokens: Seq[Token], source: Source) {
     }
 
     // Simple function type: Int => Int
-    def functionTypeSimple: Maybe[Type] = backtrack {
-      refType() <~ `=>`
-    } map { tpe =>
+    def functionTypeSimple(tpe: TypeRef): Type =
       FunctionType(Many.empty(tpe.span.emptyAfter), Many(List(tpe), tpe.span.emptyAfter), Many.empty(tpe.span.emptyAfter), atomicType(), maybeEffects(), span())
-    }
 
-    // Try to parse each function type variant, fall back to basic type if none match
     nonterminal:
-      functionTypeSimple `orElse` functionTypeComplex `getOrElse` atomicType()
+      // if we're looking at a type ref, commit
+      if (isIdRef) {
+        val tpe = refType()
+        // function type iff `=>` follows, otherwise a simple type
+        if skipIf(`=>`) then functionTypeSimple(tpe) else tpe
+      // otherwise, try the complex function type and fall back to a tuple or a parenthesized type
+      } else {
+        functionTypeComplex `getOrElse` atomicType()
+      }
   }
 
   // Parse boxed types and effectfuls (lowest precedence)
