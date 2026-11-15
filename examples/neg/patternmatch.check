@@ -14,8 +14,3 @@
     |                  ^^^^^^^^^^^^^
 
     * note: Int and Bool differ.
-[error] examples/neg/patternmatch.effekt:13:20: Expected Box[A] but got Box[A]. [typer]
-13  def join(f: Foo) = f match {
-                       ^
-
-    * note: Expected Int but got Bool.

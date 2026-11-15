@@ -201,6 +201,7 @@ class Constraints(
 
       // create mapping to representative
       classes = classes.view.mapValues { node => if (node == x) y else node }.toMap
+      invalidate()
     }
 
     y match {
