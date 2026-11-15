@@ -1143,17 +1143,6 @@ object Typer extends Phase[NameResolved, Typechecked] {
     case b: BlockSymbol => (Context.lookupFunctionType(b), Context.lookupCapture(b))
   }
 
-  def attempt[T](f: => T)(using Context): Either[EffektMessages, (T, TyperState)] =
-     val stateBefore = Context.backupTyperstate()
-     try {
-      Try {
-        val result = f
-        (result, Context.backupTyperstate())
-      }
-     } finally {
-       Context.restoreTyperstate(stateBefore)
-     }
-
   /**
    * We do not respect nested scoping on overload resolution for methods right now.
    *
