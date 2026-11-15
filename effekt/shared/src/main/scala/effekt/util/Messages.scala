@@ -172,7 +172,9 @@ object messages {
    *
    * Messages are part of the reporting pipeline and can be backtracked by Typer
    */
-  case class FatalPhaseError(message: Diagnostic) extends Exception(message.toString)
+  case class FatalPhaseError(message: Diagnostic) extends Exception {
+    override def getMessage = message.toString // render only when they are asked for
+  }
 
   /**
    * Error that aborts the whole compilation and shows a stack trace
