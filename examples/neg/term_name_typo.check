@@ -1,0 +1,5 @@
+[error] examples/neg/term_name_typo.effekt:5:11: Could not resolve term sentence [namer]
+5    println(sentence)
+             ^^^^^^^^
+
+   * help: Did you mean sentence1?

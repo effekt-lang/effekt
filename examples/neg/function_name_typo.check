@@ -1,0 +1,5 @@
+[error] examples/neg/function_name_typo.effekt:3:22: Cannot find a function named `lenght`. [namer]
+3  def main() = println(lenght("four"))
+                        ^^^^^^
+
+   * help: Did you mean length?

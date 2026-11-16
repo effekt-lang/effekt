@@ -1,0 +1,4 @@
+module term_name_unrelated
+
+// no term in scope is close to `elephant`, so there is no suggestion
+def main() = println(elephant)

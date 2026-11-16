@@ -1,0 +1,6 @@
+module term_name_typo
+
+def main() = {
+  val sentence1 = "a sentence"
+  println(sentence)
+}

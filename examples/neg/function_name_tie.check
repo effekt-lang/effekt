@@ -1,0 +1,5 @@
+[error] examples/neg/function_name_tie.effekt:4:14: Cannot find a function named `printn`. [namer]
+4  def main() = printn("hello")
+                ^^^^^^
+
+   * help: Did you mean print or println?

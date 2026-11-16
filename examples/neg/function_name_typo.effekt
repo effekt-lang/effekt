@@ -1,0 +1,3 @@
+module function_name_typo
+
+def main() = println(lenght("four"))
