@@ -205,8 +205,8 @@ object messages {
 
     override def independent = candidates.map(_.failure) match {
       case failures if failures.forall(_.isDefined) =>
-        val errors = failures.flatten.map { f => f.diagnostics.filter { d => d.severity == Severity.Error } }
-        errors.head.distinct.filter { d => errors.tail.forall(_.contains(d)) }
+        val diagnostics = failures.flatten.map { f => f.diagnostics }
+        diagnostics.head.distinct.filter { d => diagnostics.tail.forall(_.contains(d)) }
       case _ => Vector.empty
     }
   }
@@ -409,8 +409,10 @@ object messages {
 
     def abortWith(resolution: OverloadResolution): Nothing = {
       val independent = resolution.independent
-      if (independent.nonEmpty && resolution.candidates.exists { c => resolution.dependent(c).forall { d => d.severity != Severity.Error } }) {
-        abortWith(independent)
+      val (errors, others) = independent.partition { d => d.severity == Severity.Error }
+      if (errors.nonEmpty && resolution.candidates.exists { c => resolution.dependent(c).forall { d => d.severity != Severity.Error } }) {
+        reraise(others)
+        abortWith(errors)
       } else {
         reraise(independent)
         abort(resolution)
