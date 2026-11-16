@@ -221,7 +221,7 @@ object scopes {
           .map { exactMatch => pretty"Did you mean $exactMatch?" }
           .orElse {
             // Priority 3: Edit distance
-            val threshold = ((nameNotFound.length + 2) max 3) / 3
+            val threshold = (nameNotFound.length max 3) / 3
 
             candidates
               .toSeq
