@@ -1,0 +1,3 @@
+module type_name_typo
+
+def greet(name: Strng): Unit = ()

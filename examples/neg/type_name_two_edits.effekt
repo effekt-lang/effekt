@@ -1,0 +1,4 @@
+module type_name_two_edits
+
+// `Int` is two edits from `Info`, too many for four characters, so there is no suggestion
+def describe(info: Info): Unit = ()

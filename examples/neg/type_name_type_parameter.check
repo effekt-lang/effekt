@@ -1,0 +1,5 @@
+[error] examples/neg/type_name_type_parameter.effekt:4:20: Could not resolve type A [namer]
+4  def identity[T](x: A): T = x
+                      ^
+
+   * help: Did you mean T?

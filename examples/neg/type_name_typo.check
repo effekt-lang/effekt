@@ -1,0 +1,5 @@
+[error] examples/neg/type_name_typo.effekt:3:17: Could not resolve type Strng [namer]
+3  def greet(name: Strng): Unit = ()
+                   ^^^^^
+
+   * help: Did you mean String?

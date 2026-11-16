@@ -1,0 +1,4 @@
+module type_name_type_parameter
+
+// the type parameter of the enclosing definition is the nearest one-letter type
+def identity[T](x: A): T = x
