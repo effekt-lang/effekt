@@ -3,5 +3,5 @@ interface Sized { def size(): Int }
 def size { f: Int => Int }: Int = f(41)
 def main() = {
   def inc(x: Int) = x + 1
-  println(inc.size()) // ERROR Cannot typecheck call
+  println(inc.size()) // ERROR Expected a capability type
 }

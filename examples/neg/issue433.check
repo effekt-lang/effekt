@@ -1,17 +1,3 @@
-[error] examples/neg/issue433.effekt:6:3: Cannot typecheck call. [typer]
-6    run(42) {
-     ^
-
-   There are multiple overloads, which all fail to check:
-1  * def run(n: Int)    { action: => Unit }: Unit = action()
-         ^^^
-7  |      val s: Int = add(1, "Hello world!");
-   |                          ^^^^^^^^^^^^^^ Expected Int but got String.
-
-2  * def run(s: String) { action: => Unit }: Unit = action()
-         ^^^
-6  |    run(42) {
-   |        ^^ Expected String but got Int.
-   |
-7  |      val s: Int = add(1, "Hello world!");
-   |                          ^^^^^^^^^^^^^^ Expected Int but got String.
+[error] examples/neg/issue433.effekt:7:25: Expected Int but got String. [typer]
+7      val s: Int = add(1, "Hello world!");
+                           ^^^^^^^^^^^^^^

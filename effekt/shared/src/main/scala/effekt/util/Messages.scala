@@ -68,6 +68,12 @@ object messages {
     // the candidates of a search, each with the errors that rejected it
     def alternatives: List[Candidate] = Nil
 
+    // diagnostics reported by every alternative (not depending on any overloading choices)
+    def independent: EffektMessages = Vector.empty
+
+    // diagnostics dependent on the specific choice made (candidate/alternative taken)
+    def dependent(c: Candidate): EffektMessages = c.errors.filterNot(independent.contains)
+
     // the causes for this diagnostic
     def causes: EffektMessages = Vector.empty
   }
@@ -196,6 +202,13 @@ object messages {
       else List(pretty"There are multiple overloads, which all fail to check:")
 
     override def alternatives = candidates
+
+    override def independent = candidates.map(_.failure) match {
+      case failures if failures.forall(_.isDefined) =>
+        val errors = failures.flatten.map { f => f.diagnostics.filter { d => d.severity == Severity.Error } }
+        errors.head.distinct.filter { d => errors.tail.forall(_.contains(d)) }
+      case _ => Vector.empty
+    }
   }
 
   case class Candidate(symbol: symbols.BlockSymbol, tpe: symbols.FunctionType, failure: Option[Failure], definitionTree: Option[source.IdDef]) {
@@ -392,6 +405,16 @@ object messages {
       case Failure.Undecided(cause, others) =>
         reraise(others)
         abort(cause)
+    }
+
+    def abortWith(resolution: OverloadResolution): Nothing = {
+      val independent = resolution.independent
+      if (independent.nonEmpty && resolution.candidates.exists { c => resolution.dependent(c).forall { d => d.severity != Severity.Error } }) {
+        abortWith(independent)
+      } else {
+        reraise(independent)
+        abort(resolution)
+      }
     }
 
     def at[T](t: Tree)(block: => T): T = {
