@@ -1,0 +1,3 @@
+module term_name_keyword
+
+def main() = if (True) println("yes") else println("no")

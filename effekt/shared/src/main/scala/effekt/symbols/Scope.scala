@@ -220,7 +220,15 @@ object scopes {
 
     /** Try to help with an unresolvable term that cannot be found by the closest term in scope */
     def didYouMeanTerm(id: IdRef)(using Subdiagnostics): Unit =
-      didYouMean(id.name, visibleTerms(id.path, scope).map { terms => terms.map { case (name, _) => name } })
+      didYouMean(id.name, visibleTerms(id.path, scope).map { terms => terms.map { case (name, _) => name } }, didYouMeanTermHeuristic)
+
+    // literals are keywords, not terms in scope; suggest `None()` only if it is in scope
+    private def didYouMeanTermHeuristic(name: String): Option[StructuredMessage] = name match {
+      case "True" | "TRUE" => suggestion(List("true"))
+      case "False" | "FALSE" => suggestion(List("false"))
+      case "null" | "nullptr" if first(Nil, scope) { _.terms.get("None") }.isDefined => suggestion(List("None()"))
+      case _ => None
+    }
 
     // NOTE: Most of these should be covered by the edit distance anyway...
     private def didYouMeanTypeHeuristic(name: String): Option[StructuredMessage] = name match {
