@@ -2,7 +2,7 @@ package effekt
 package symbols
 
 import effekt.source.IdRef
-import effekt.util.messages.{ErrorMessageReifier, ErrorReporter, StructuredMessage, Subdiagnostics, help, suggestion}
+import effekt.util.messages.{ErrorMessageReifier, ErrorReporter, StructuredMessage, Subdiagnostics, help, note, suggestion}
 
 /**
  * An immutable container of bindings.
@@ -72,17 +72,20 @@ object scopes {
     /**
      * A local scope introduced by functions, blocks, etc.
      */
-    case Local(name: Option[String], imports: Bindings, bindings: Bindings, outer: Scope)
+    case Local(name: Option[String], imports: Bindings, bindings: Bindings, outer: Scope, override val ended: List[TermSymbol] = Nil)
 
     /**
      * All scopes introduce (mutable) namespaces for their bindings
      */
     def bindings: Bindings
 
+    /** The terms whose scope has ended within this scope */
+    def ended: List[TermSymbol] = Nil
+
     def imports(using E: ErrorReporter): Bindings = this match {
       case s: Scope.Named => E.abort("Can only import at the top of a file or function definition.")
       case s@Scope.Global(imports, bindings) => imports
-      case s@Scope.Local(_, imports, bindings, outer) => imports
+      case s@Scope.Local(_, imports, bindings, outer, _) => imports
     }
 
     /**
@@ -94,7 +97,13 @@ object scopes {
         // Changing the bindings in a namespace requires us to update the outer scope(s) to point to the new bindings as well.
         val updatedOuter = updateOuterScopes(n.outer, n.name, newBindings)
         Named(n.name, newBindings, updatedOuter)
-      case l@Local(_, _, _, _) => l.copy(bindings = newBindings)
+      case l@Local(_, _, _, _, _) => l.copy(bindings = newBindings)
+    }
+
+    /** Record terms whose scope has ended, provided this scope keeps them */
+    def withEnded(terms: List[TermSymbol]): Scope = this match {
+      case l: Local => l.copy(ended = terms ++ l.ended)
+      case other => other
     }
 
     /**
@@ -122,7 +131,7 @@ object scopes {
     def withImports(newImports: Bindings): Scope = this match {
       case g@Global(_, _) => g.copy(imports = newImports)
       case n@Named(_, _, _) => throw new IllegalStateException("Cannot change imports in a named scope")
-      case l@Local(_, _, _, _) => l.copy(imports = newImports)
+      case l@Local(_, _, _, _, _) => l.copy(imports = newImports)
     }
 
     /**
@@ -148,7 +157,7 @@ object scopes {
         qualified(path, bindings) ++ qualified(path, imports)
       case Scope.Named(name, bindings, outer) =>
         qualified(path, bindings) ++ all(path, outer)(select)
-      case Scope.Local(_, imports, bindings, outer) =>
+      case Scope.Local(_, imports, bindings, outer, _) =>
         qualified(path, bindings) ++ qualified(path, imports) ++ all(path, outer)(select)
     }
   }
@@ -156,6 +165,12 @@ object scopes {
   /** The terms visible at `path` in `scope`, by scope (nearest first) */
   def visibleTerms(path: List[String], scope: Scope): List[List[(String, Set[TermSymbol])]] =
     all(path, scope) { bindings => bindings.terms.toList.sortBy { case (name, _) => name } }
+
+  /** The terms whose scope has ended within the current top-level definition, the latest first */
+  def endedTerms(scope: Scope): List[TermSymbol] = scope match {
+    case l: Scope.Local => l.ended ++ endedTerms(l.outer)
+    case _ => Nil
+  }
 
   case class Scoping(modulePath: List[String], var scope: Scope) {
     def importAs(bindings: Bindings, path: List[String])(using E: ErrorReporter): Unit = {
@@ -193,7 +208,7 @@ object scopes {
           qualified(path, bindings) orElse qualified(path, imports)
         case Scope.Named(name, bindings, outer) =>
           qualified(path, bindings) orElse first(path, outer)(select)
-        case Scope.Local(_, imports, bindings, outer) =>
+        case Scope.Local(_, imports, bindings, outer, _) =>
           qualified(path, bindings) orElse qualified(path, imports) orElse first(path, outer)(select)
       }
 
@@ -204,7 +219,7 @@ object scopes {
      *   - there a no matching terms at all
      */
     def lookupFirstTerm(id: IdRef)(using E: ErrorReporter): TermSymbol =
-      lookupFirstTermOption(id) getOrElse { E.abort(pretty"Could not resolve term ${id}") { didYouMeanTerm(id) } }
+      lookupFirstTermOption(id) getOrElse { E.abort(pretty"Could not resolve term ${id}") { explainMissingTerm(id) } }
 
     def lookupFirstTermOption(id: IdRef)(using E: ErrorReporter): Option[TermSymbol] =
       first(id.path, scope) { _.terms.get(id.name).map { syms =>
@@ -218,8 +233,23 @@ object scopes {
         suggestion(effekt.util.closest(nameNotFound, candidates)(identity))
       } foreach { msg => help(msg) }
 
+    def explainMissingTerm(id: IdRef)(using Subdiagnostics): Unit = {
+      val binder = if (id.path.isEmpty) endedTerms(scope).find { sym => sym.name.name == id.name } else None
+
+      binder match {
+        case Some(binder) =>
+          // position at the name of the binder, as opposed to its whole definition
+          val at = binder.decl match {
+            case d: source.Definition => d.id.span
+            case tree => tree.span
+          }
+          note(pretty"There is a `${binder.name}` bound here, but not in the current scope.", Some(at))
+        case None => didYouMeanTerm(id)
+      }
+    }
+
     /** Try to help with an unresolvable term that cannot be found by the closest term in scope */
-    def didYouMeanTerm(id: IdRef)(using Subdiagnostics): Unit =
+    private def didYouMeanTerm(id: IdRef)(using Subdiagnostics): Unit =
       didYouMean(id.name, visibleTerms(id.path, scope).map { terms => terms.map { case (name, _) => name } }, didYouMeanTermHeuristic)
 
     // literals are keywords, not terms in scope; suggest `None()` only if it is in scope
@@ -348,15 +378,16 @@ object scopes {
 
     def exports: Bindings = scope.bindings
 
-    def scoped[R](name: String, block: => R): R =
-      val before = scope
-      scope = Scope.Local(Some(name), Bindings.empty, Bindings.empty, before)
-      try { block } finally { scope = before }
+    def scoped[R](name: String, block: => R): R = local(Some(name)) { block }
 
-    def scoped[R](block: => R): R =
+    def scoped[R](block: => R): R = local(None) { block }
+
+    /** Runs `block` in a new local scope, whose terms have ended when it is left */
+    private def local[R](name: Option[String])(block: => R): R = {
       val before = scope
-      scope = Scope.Local(None, Bindings.empty, Bindings.empty, before)
-      try { block } finally { scope = before }
+      scope = Scope.Local(name, Bindings.empty, Bindings.empty, before)
+      try { block } finally { scope = before.withEnded(scope.bindings.terms.values.flatten.toList ++ scope.ended) }
+    }
 
     // (re-)enter the namespace
     def namespace[R](name: String)(block: => R): R =
@@ -375,7 +406,7 @@ object scopes {
           // name spaces also START a new path, if there hasn't been one, already
           case None => Some(List(name))
         }
-        case Scope.Local(_, imports, bindings, outer) => None
+        case Scope.Local(_, imports, bindings, outer, _) => None
       }
       collect(scope)
   }

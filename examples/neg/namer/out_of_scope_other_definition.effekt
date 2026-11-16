@@ -1,0 +1,4 @@
+// the binder of `tally` in another definition is not mentioned
+def f(tally: Int) = tally
+def g() = tally
+def main() = ()

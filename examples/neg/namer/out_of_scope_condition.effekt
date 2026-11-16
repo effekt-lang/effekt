@@ -1,0 +1,3 @@
+// what `is` binds is only visible where the condition is true
+def f(x: Option[Int]) = if (x is Some(y)) 1 else y
+def main() = ()

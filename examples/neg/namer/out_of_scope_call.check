@@ -1,0 +1,7 @@
+[error] examples/neg/namer/out_of_scope_call.effekt:3:3: Cannot find a function named `helper`. [namer]
+3    helper()
+     ^^^^^^
+
+   * note: There is a `helper` bound here, but not in the current scope.
+2  |    if (b) { def helper() = 1; () } else ()
+   |                 ^^^^^^

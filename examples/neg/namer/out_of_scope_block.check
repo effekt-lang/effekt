@@ -1,0 +1,7 @@
+[error] examples/neg/namer/out_of_scope_block.effekt:3:3: Could not resolve term y [namer]
+3    y
+     ^
+
+   * note: There is a `y` bound here, but not in the current scope.
+2  |    if (b) { val y = 1; () } else ()
+   |                 ^

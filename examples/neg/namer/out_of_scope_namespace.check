@@ -1,0 +1,3 @@
+[error] examples/neg/namer/out_of_scope_namespace.effekt:4:13: Could not resolve term tally [namer]
+4    def g() = tally
+               ^^^^^
