@@ -7,14 +7,11 @@
          ^^^
 6  |  def main() = run(true) {
    |                   ^^^^ Expected Int but got Bool.
-   |
-7  |    try { () } with exc { () }
-   |    ^^^^^^^^^^^^^^^^^^^^^^^^^^ Handling effect exc, which seems not to be used by the program.
 
 4  * def run(s: String) { action: () => Unit }: Unit = action()
          ^^^
 6  |  def main() = run(true) {
    |                   ^^^^ Expected String but got Bool.
-   |
-7  |    try { () } with exc { () }
-   |    ^^^^^^^^^^^^^^^^^^^^^^^^^^ Handling effect exc, which seems not to be used by the program.
+[warning] examples/neg/overloading/shared_warning.effekt:7:3: Handling effect exc, which seems not to be used by the program. [typer]
+7    try { () } with exc { () }
+     ^^^^^^^^^^^^^^^^^^^^^^^^^^

@@ -1,4 +1,4 @@
-// Overloading: BUG?, a warning every candidate reports is shown under each of them (only errors are reported once)
+// Overloading: a warning every candidate reports is reported once, on its own
 effect exc(): Unit
 def run(n: Int) { action: () => Unit }: Unit = action()
 def run(s: String) { action: () => Unit }: Unit = action()
