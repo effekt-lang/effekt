@@ -1,0 +1,53 @@
+[error] examples/neg/typer/handler_clause_result.effekt:7:56: Expected String but got Int. [typer]
+7  def value(): String = try { do get().show } with get { 42 }
+                                                          ^^
+
+   * help: Did you mean to resume with it, `resume(...)`? Here, `resume` has type Int => String.
+[error] examples/neg/typer/handler_clause_result.effekt:8:70: Expected String but got Int. [typer]
+8  def bidirectional(): String = try { try { do ask().show } with ask { 42 } } with exc { "" }
+                                                                        ^^
+
+   * help: Did you mean to resume with it, `resume { ... }`? Here, `resume` has type {() => Int / { exc }} => String.
+[error] examples/neg/typer/handler_clause_result.effekt:9:66: Expected String but got Int. [typer]
+9  def higherOrder(): String = try { do hof { 1 }.show } with hof { 42 }
+                                                                    ^^
+
+   * help: Did you mean to resume with it, `resume { {...} => ... }`? Here, `resume` has type {{() => Int} => Int} => String.
+[warning] examples/neg/typer/handler_clause_result.effekt:15:3: Handling effect exc, which seems not to be used by the program. [typer]
+15    try { 42 } with exc { 0 }
+      ^^^^^^^^^^^^^^^^^^^^^^^^^
+[error] examples/neg/typer/handler_clause_result.effekt:15:3: Expected String but got Int. [typer]
+15    try { 42 } with exc { 0 }
+      ^^^^^^^^^^^^^^^^^^^^^^^^^
+
+    * help: Did you mean to resume with it, `resume(...)`? Here, `resume` has type Int => String.
+[error] examples/neg/typer/handler_clause_result.effekt:15:7: Expected String but got Int. [typer]
+15    try { 42 } with exc { 0 }
+          ^^^^^^
+
+    * help: Did you mean to resume with it, `resume(...)`? Here, `resume` has type Int => String.
+[error] examples/neg/typer/handler_clause_result.effekt:15:9: Expected String but got Int. [typer]
+15    try { 42 } with exc { 0 }
+            ^^
+
+    * help: Did you mean to resume with it, `resume(...)`? Here, `resume` has type Int => String.
+[error] examples/neg/typer/handler_clause_result.effekt:19:56: Expected String but got Bool. [typer]
+19  def other(): String = try { do get().show } with get { true }
+                                                           ^^^^
+
+    * note: String is the type of the handled statement.
+19  |  def other(): String = try { do get().show } with get { true }
+    |                            ^^^^^^^^^^^^^^^^^
+
+    * note: In this handler clause, `resume` has type Int => String.
+[error] examples/neg/typer/handler_clause_result.effekt:25:31: Expected type [typer]
+  () => String at {}
+but got type
+  () => Int at ?C
+25    val f: () => String at {} = box { () => 42 }
+                                  ^^^^^^^^^^^^^^^^
+
+    * note: Expected String but got Int.
+[error] examples/neg/typer/handler_clause_result.effekt:25:43: Expected String but got Int. [typer]
+25    val f: () => String at {} = box { () => 42 }
+                                              ^^
