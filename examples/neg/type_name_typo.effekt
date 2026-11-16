@@ -1,3 +1,5 @@
 module type_name_typo
 
-def greet(name: Strng): Unit = ()
+record Person(name: String)
+
+def greet(person: Persn): Unit = ()

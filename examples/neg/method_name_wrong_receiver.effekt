@@ -1,4 +1,9 @@
 module method_name_wrong_receiver
 
-// no `length` takes a list (lists have `size`), so nothing is suggested
-def main() = println([1, 2, 3].lenght)
+record Rope(text: String)
+record Knot()
+
+def weight(rope: Rope): Int = 0
+
+// `weight` takes a `Rope`, not a `Knot`, so nothing is suggested
+def main() = println(Knot().wieght)

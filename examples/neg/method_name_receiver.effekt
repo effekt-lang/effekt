@@ -1,4 +1,8 @@
 module method_name_receiver
 
-// `length` takes a string, so it is suggested here
-def main() = println("four".lenght)
+record Rope(text: String)
+
+def weight(rope: Rope): Int = 0
+
+// `weight` takes a `Rope`, so it is suggested here
+def main() = println(Rope("four").wieght)

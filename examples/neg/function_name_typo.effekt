@@ -1,3 +1,5 @@
 module function_name_typo
 
-def main() = println(lenght("four"))
+def lengthOf(text: String): Int = 0
+
+def main() = println(lenghtOf("four"))
