@@ -1,0 +1,4 @@
+module method_name_wrong_receiver
+
+// no `length` takes a list (lists have `size`), so nothing is suggested
+def main() = println([1, 2, 3].lenght)

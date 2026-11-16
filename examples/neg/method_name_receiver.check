@@ -1,0 +1,5 @@
+[error] examples/neg/method_name_receiver.effekt:4:22: Cannot typecheck call to lenght. Does a function/method with that name exist? [typer]
+4  def main() = println("four".lenght)
+                        ^^^^^^^^^^^^^
+
+   * help: Did you mean length?

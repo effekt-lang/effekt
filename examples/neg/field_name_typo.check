@@ -1,0 +1,5 @@
+[error] examples/neg/field_name_typo.effekt:5:22: Cannot typecheck call to aeg. Does a function/method with that name exist? [typer]
+5  def main() = println(Person("Ada", 36).aeg)
+                        ^^^^^^^^^^^^^^^^^^^^^
+
+   * help: Did you mean age?

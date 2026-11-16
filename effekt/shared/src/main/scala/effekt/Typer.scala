@@ -1272,12 +1272,37 @@ object Typer extends Phase[NameResolved, Typechecked] {
       Result(tpe, effs)
     }}
 
-    resolveOverload(id, results)
+    resolveOverload(id, results, didYouMeanMethod(id, vargs, iscope))
+  }
+
+  /** Helps with a function called on a receiver that cannot be found */
+  private def didYouMeanMethod(id: source.IdRef, vargs: Many[source.ValueArg], scope: Option[scopes.Scope])(using Context, Captures, Subdiagnostics): Unit = {
+    val receiver = vargs.unspan.headOption.flatMap { arg =>
+      Try { checkExpr(arg.value, None).tpe }.toOption.map { tpe => Context.unification(tpe) }
+    }
+
+    def takesReceiver(sym: TermSymbol): Boolean = (sym, receiver) match {
+      case (_: Operation, _) => false
+      case (c: Callable, Some(ValueTypeApp(constructor, _))) => c.vparams.headOption.flatMap { p => p.tpe }.exists {
+        case ValueTypeApp(other, _) => other == constructor
+        case ValueTypeRef(param: TypeParam) => c.tparams.contains(param)
+        case _ => false
+      }
+      // a receiver of no known type constructor: any callable with a parameter
+      case (c: Callable, _) => c.vparams.nonEmpty
+      case _ => false
+    }
+    val candidates = scope.toList.flatMap { s => scopes.visibleTerms(Nil, s) }.map { terms =>
+      terms.collect { case (name, syms) if syms.exists(takesReceiver) => name }
+    }
+
+    suggestion(effekt.util.closest(id.name, candidates)(identity)).foreach(help)
   }
 
   private def resolveOverload(
     id: source.IdRef,
-    scopes: List[(List[(BlockSymbol, Result[ValueType], TyperState)], List[(BlockSymbol, Failure)])]
+    scopes: List[(List[(BlockSymbol, Result[ValueType], TyperState)], List[(BlockSymbol, Failure)])],
+    explainMissing: Subdiagnostics ?=> Unit = () // explain a call when no candidate found
   )(using Context): Result[ValueType] = {
 
     def candidate(sym: BlockSymbol, failure: Option[Failure]) =
@@ -1316,7 +1341,7 @@ object Typer extends Phase[NameResolved, Typechecked] {
 
     scopes.flatMap { scope => scope._2 } match {
       case Nil =>
-        Context.abort(pretty"Cannot typecheck call to ${id}. Does a function/method with that name exist?")
+        Context.abort(pretty"Cannot typecheck call to ${id}. Does a function/method with that name exist?") { explainMissing }
 
       // exactly one error
       case List((sym, failure)) =>
