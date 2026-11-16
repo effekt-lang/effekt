@@ -185,10 +185,14 @@ object messages {
       c.failure.exists { case _: Failure.Undecided => true; case _ => false }
     }
 
-    def claim = if ambiguous then pretty"Ambiguous overload." else pretty"Cannot typecheck call."
+    def claim =
+      if ambiguous then pretty"Ambiguous overload."
+      else if undecided then pretty"Cannot decide which overload to call: an implicit search reached its depth limit."
+      else pretty"Cannot typecheck call."
 
     override def details =
       if ambiguous then List(pretty"There are multiple overloads, which all would type check:")
+      else if undecided then List(pretty"There are multiple overloads, which all could type check:")
       else List(pretty"There are multiple overloads, which all fail to check:")
 
     override def alternatives = candidates
@@ -201,7 +205,6 @@ object messages {
     def show: StructuredMessage = pretty"${Piece.Code(fullname(symbol.name))} of type ${tpe}"
   }
 
-  // Iterative deepening of the implicit search matches on this class.
   case class ImplicitMaxRecursion(text: String) extends Reason {
     def claim = pretty"${text}"
 
@@ -382,6 +385,13 @@ object messages {
       val msgs = errs.tail
       reraise(msgs)
       abort(msg)
+    }
+
+    def abortWith(failure: Failure): Nothing = failure match {
+      case Failure.Rejected(messages) => abortWith(messages)
+      case Failure.Undecided(cause, others) =>
+        reraise(others)
+        abort(cause)
     }
 
     def at[T](t: Tree)(block: => T): T = {
