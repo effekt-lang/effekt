@@ -74,7 +74,8 @@ object GenerateImplicitArgs {
     }.sum }.sum
 
   private val recursionStack: DynamicVariable[Map[String, (Int, Int)]] = DynamicVariable(Map.empty)
-  private val currentMaxRecurse: DynamicVariable[Int] = DynamicVariable(1)
+  /** Depth bound of the implicit search we are in, if any */
+  private val currentMaxRecurse: DynamicVariable[Option[Int]] = DynamicVariable(None)
 
   val maxRecurse = 10
   /**
@@ -90,31 +91,36 @@ object GenerateImplicitArgs {
     val newValue = inst match {
       case source.BlockLiteral(_, _, _, source.Return(source.Call(source.IdTarget(id), _, _, _, _), _), _) =>
         val (depth, lastSize) = recursionStack.value.getOrElse((id.name), (0, tpeSize))
-        if (tpeSize >= lastSize && depth > currentMaxRecurse.value) {
-          Context.abort(util.messages.ImplicitMaxRecursion(s"Aborted recursive generation of implicit parameter ${id.name} after ${currentMaxRecurse.value} levels with non-decreasing types at the same name."))
+        currentMaxRecurse.value.foreach { max =>
+          if (tpeSize >= lastSize && depth > max) {
+            Context.abort(util.messages.ImplicitMaxRecursion(s"Aborted recursive generation of implicit parameter ${id.name} after ${max} levels with non-decreasing types at the same name."))
+          }
         }
         recursionStack.value.updated((id.name), (if tpeSize >= lastSize then depth + 1 else depth, tpeSize))
       case _ => recursionStack.value
     }
-    typer.Typer.iterativeDeepening(currentMaxRecurse.value, maxRecurse) { d =>
-      currentMaxRecurse.withValue(d) {
-        recursionStack.withValue(newValue) {
-          Try {
-            body
-          } match {
-            case Left(failure) =>
-              // Note: Recursion
-              Context.at(inst) {
-                Context.abort(util.messages.ImplicitInstantiation(
-                  Error(stencil, index, failure), tpe))
-              }
-            case Right(r) => r
+    def check(): R = recursionStack.withValue(newValue) {
+      Try {
+        body
+      } match {
+        case Left(failure) =>
+          // Note: Recursion
+          Context.at(inst) {
+            Context.abort(util.messages.ImplicitInstantiation(
+              Error(stencil, index, failure), tpe))
           }
-        }
+        case Right(r) => r
       }
-    }{
-      case util.messages.Diagnostic(_, _, _, util.messages.ImplicitMaxRecursion(_), _) => true
-      case _ => false
+    }
+
+    currentMaxRecurse.value match {
+      case Some(_) => check()
+      case None =>
+        typer.Typer.iterativeDeepening(1, maxRecurse) { d => 
+          currentMaxRecurse.withValue(Some(d)) { check() } 
+        } {
+          _.reason.undecided
+        }
     }
   }
 

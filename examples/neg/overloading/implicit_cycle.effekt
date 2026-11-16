@@ -3,4 +3,4 @@ type A { MA() }
 type B { MB() }
 def f(x: A) { ?f: B => String }: String = f(MB())
 def f(x: B) { ?f: A => String }: String = f(MA())
-def main() = { val s: String = f(MA()); println(s) } // ERROR Cannot typecheck call
+def main() = { val s: String = f(MA()); println(s) } // ERROR Cannot instantiate implicit argument

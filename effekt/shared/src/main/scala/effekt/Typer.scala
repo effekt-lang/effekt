@@ -1205,7 +1205,7 @@ object Typer extends Phase[NameResolved, Typechecked] {
 
       checkCallTo(call, op.name.name, op.vparams, op.bparams, funTpe, synthTargs, vargs, bargs, expected, scope)
     }
-    resolveOverload(id, List(successes), errors)
+    resolveOverload(id, List((successes, errors)))
   }
 
   // sorted by the name we report them by, then by where they are declared, so that their order does not depend on hashing
@@ -1266,48 +1266,59 @@ object Typer extends Phase[NameResolved, Typechecked] {
       Result(tpe, effs)
     }}
 
-    val successes = results.map { scope => scope._1 }
-    val errors = results.flatMap { scope => scope._2 }
-
-    resolveOverload(id, successes, errors)
+    resolveOverload(id, results)
   }
 
   private def resolveOverload(
     id: source.IdRef,
-    successes: List[List[(BlockSymbol, Result[ValueType], TyperState)]],
-    failures: List[(BlockSymbol, Failure)]
+    scopes: List[(List[(BlockSymbol, Result[ValueType], TyperState)], List[(BlockSymbol, Failure)])]
   )(using Context): Result[ValueType] = {
 
-    successes foreachAborting {
-      // continue in outer scope
-      case Nil => ()
+    def candidate(sym: BlockSymbol, failure: Option[Failure]) =
+      Candidate(sym, findFunctionTypeFor(sym)._1, failure, Context.definitionTreeOption(sym))
 
-      // Exactly one successful result in the current scope
-      case List((sym, tpe, st)) =>
-        // use the typer state after this checking pass
-        Context.restoreTyperstate(st)
-        // reassign symbol of fun to resolved calltarget symbol
-        Context.annotateSymbol(id, sym)
+    scopes foreachAborting { (successes, failures) =>
+      // A candidate whose implicit search was cut off could have worked, so it competes with the successes of its scope
+      val undecided = failures.filter { case (_, failure) => failure.isInstanceOf[Failure.Undecided] }
 
-        return tpe
+      (successes, undecided) match {
+        // continue in outer scope
+        case (Nil, Nil) => ()
 
-      // Ambiguous reference
-      case results =>
-        val candidates = results.map { case (sym, res, st) => Candidate(sym, findFunctionTypeFor(sym)._1, None, Context.definitionTreeOption(sym)) }
-        Context.abort(Context.diagnostic(OverloadResolution(candidates), Severity.Error, Context.spanOf(id)))
+        // Exactly one successful result in the current scope
+        case (List((sym, tpe, st)), Nil) =>
+          // use the typer state after this checking pass
+          Context.restoreTyperstate(st)
+          // reassign symbol of fun to resolved calltarget symbol
+          Context.annotateSymbol(id, sym)
+
+          return tpe
+
+        // Ambiguous reference
+        case (results, _) if results.size > 1 =>
+          val candidates = results.map { case (sym, res, st) => candidate(sym, None) }
+          Context.abort(Context.diagnostic(OverloadResolution(candidates), Severity.Error, Context.spanOf(id)))
+
+        // Cannot decide
+        case (results, _) =>
+          results.map { case (sym, res, st) => (sym, None) } ++ undecided.map { case (sym, failure) => (sym, Some(failure)) } match {
+            case List((sym, Some(failure))) => Context.abortWith(failure) // specializing for single failure
+            case competitors => Context.abort(OverloadResolution(competitors.map(candidate)))
+          }
+      }
     }
 
-    failures match {
+    scopes.flatMap { scope => scope._2 } match {
       case Nil =>
         Context.abort(pretty"Cannot typecheck call to ${id}. Does a function/method with that name exist?")
 
       // exactly one error
       case List((sym, failure)) =>
-        Context.abortWith(failure.diagnostics)
+        Context.abortWith(failure)
 
       case failed =>
         // reraise all and abort
-        val candidates = failed.map { case (block, failure) => Candidate(block, findFunctionTypeFor(block)._1, Some(failure), Context.definitionTreeOption(block)) }
+        val candidates = failed.map { case (block, failure) => candidate(block, Some(failure)) }
         Context.abort(OverloadResolution(candidates))
     }
   }

@@ -1,4 +1,4 @@
-// implicits: BUG, both `top`s fit (the deep one after 3 same-size steps), but the cut-off one counts as failed and "shallow" wins
+// implicits: 3 same-size steps resolve: only the outermost search deepens, up to the bound
 type T0 { M0() }
 type T1 { M1() }
 type T2 { M2() }
@@ -8,5 +8,4 @@ def disp(x: T1) { ?disp: T0 => String }: String = disp(M0()) ++ "1"
 def disp(x: T2) { ?disp: T1 => String }: String = disp(M1()) ++ "2"
 def disp(x: T3) { ?disp: T2 => String }: String = disp(M2()) ++ "3"
 def top(x: T3) { ?disp: T3 => String }: String = "deep: " ++ disp(x)
-def top(x: T3): String = "shallow"
-def main() = { val s: String = top(M3()); println(s) } // ERROR ambiguous
+def main() = println(top(M3()))

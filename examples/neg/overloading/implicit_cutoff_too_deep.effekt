@@ -1,4 +1,4 @@
-// implicits: BUG, the deep `top` needs 12 same-size steps; cut off, it counts as failed and "shallow" wins
+// implicits: the deep `top` needs 12 same-size steps, beyond the bound: whether it fits is unknown, so "shallow" must not win
 type T0 { M0() }
 type T1 { M1() }
 type T2 { M2() }
@@ -27,4 +27,4 @@ def disp(x: T11) { ?disp: T10 => String }: String = disp(M10()) ++ "1"
 def disp(x: T12) { ?disp: T11 => String }: String = disp(M11()) ++ "2"
 def top(x: T12) { ?disp: T12 => String }: String = "deep: " ++ disp(x)
 def top(x: T12): String = "shallow"
-def main() = { val s: String = top(M12()); println(s) }
+def main() = { val s: String = top(M12()); println(s) } // ERROR Cannot decide which overload to call
