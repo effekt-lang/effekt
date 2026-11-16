@@ -1,0 +1,14 @@
+// Overloading: BUG, the pattern error is the same under both `visit`s, but the second stops at its block's arity, so the overload error stays
+effect pick(): Int
+effect stop(): Unit
+
+// two overloads of our own (as the standard library's `foreach`), so that the test does not depend on its overloads
+def visit[A](l: List[A]) { f: A => Unit }: Unit = ()
+def visit[A](l: List[A]) { f: (A) {stop} => Unit }: Unit = ()
+
+def solve(): Option[Int] =
+  try { do pick(); None() } with pick {
+    [1].visit { d => if (resume(d) is Nil()) {} }
+  }
+
+def main() = ()

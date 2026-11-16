@@ -1,0 +1,19 @@
+[error] examples/neg/overloading/impossible_candidate.effekt:5:29: Cannot typecheck call. [typer]
+5  def main() = { val r: Int = twice { "one" }; () }
+                               ^^^^^^^^^^^^^^^
+
+   There are multiple overloads, which all fail to check:
+2  * def twice(x: Int): Int = x * 2
+         ^^^^^
+5  |  def main() = { val r: Int = twice { "one" }; () }
+   |                              ^^^^^^^^^^^^^^^ Wrong number of arguments to twice: expected 1 value argument and 0 block arguments, but got 0 value arguments and 1 block argument
+   |
+   |  |  * help: Did you mean to pass 1 block argument as a value? e.g. box it using `box { ... }`
+
+3  * def twice { f: () => Int }: Int = f() * 2
+         ^^^^^
+5  |  def main() = { val r: Int = twice { "one" }; () }
+   |                                      ^^^^^ Expected Int but got String.
+   |
+5  |  def main() = { val r: Int = twice { "one" }; () }
+   |                                      ^^^^^ Expected Int but got String.

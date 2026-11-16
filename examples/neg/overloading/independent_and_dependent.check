@@ -1,0 +1,17 @@
+[error] examples/neg/overloading/independent_and_dependent.effekt:7:14: Cannot typecheck call. [typer]
+7  def main() = run(true) {
+                ^
+
+   There are multiple overloads, which all fail to check:
+3  * def run(n: Int) { action: () => Unit }: Unit = action()
+         ^^^
+7  |  def main() = run(true) {
+   |                   ^^^^ Expected Int but got Bool.
+
+4  * def run(s: String) { action: () => Unit }: Unit = action()
+         ^^^
+7  |  def main() = run(true) {
+   |                   ^^^^ Expected String but got Bool.
+[error] examples/neg/overloading/independent_and_dependent.effekt:8:23: Expected Int but got String. [typer]
+8    val s: Int = add(1, "two")
+                         ^^^^^

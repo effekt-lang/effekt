@@ -1,0 +1,10 @@
+// Overloading: the error inside the block is the same under both `run`s, so it is reported once, on its own
+// each `run` also fails for its own reason, so the overload error is reported too
+def run(n: Int) { action: () => Unit }: Unit = action()
+def run(s: String) { action: () => Unit }: Unit = action()
+def add(a: Int, b: Int): Int = a + b
+
+def main() = run(true) {
+  val s: Int = add(1, "two")
+  ()
+}

@@ -1,0 +1,17 @@
+[error] examples/neg/overloading/shared_warning.effekt:6:14: Cannot typecheck call. [typer]
+6  def main() = run(true) {
+                ^
+
+   There are multiple overloads, which all fail to check:
+3  * def run(n: Int) { action: () => Unit }: Unit = action()
+         ^^^
+6  |  def main() = run(true) {
+   |                   ^^^^ Expected Int but got Bool.
+
+4  * def run(s: String) { action: () => Unit }: Unit = action()
+         ^^^
+6  |  def main() = run(true) {
+   |                   ^^^^ Expected String but got Bool.
+[warning] examples/neg/overloading/shared_warning.effekt:7:3: Handling effect exc, which seems not to be used by the program. [typer]
+7    try { () } with exc { () }
+     ^^^^^^^^^^^^^^^^^^^^^^^^^^
