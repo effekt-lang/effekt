@@ -1,0 +1,5 @@
+// Overloading: BUG, the block `twice` shows the same error twice at the same place
+def twice(x: Int): Int = x * 2
+def twice { f: () => Int }: Int = f() * 2
+
+def main() = { val r: Int = twice { "one" }; () }

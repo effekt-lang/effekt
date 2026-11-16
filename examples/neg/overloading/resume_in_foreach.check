@@ -1,0 +1,23 @@
+[error] examples/neg/overloading/resume_in_foreach.effekt:11:5: Expected Option[Int] but got Unit. [typer]
+11      [1].visit { d => if (resume(d) is Nil()) {} }
+        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+    * note: Option[Int] is the type of the handled statement.
+10  |    try { do pick(); None() } with pick {
+    |        ^^^^^^^^^^^^^^^^^^^^^
+
+    * note: In this handler clause, `resume` has type Int => Option[Int].
+[error] examples/neg/overloading/resume_in_foreach.effekt:11:5: Cannot typecheck call. [typer]
+11      [1].visit { d => if (resume(d) is Nil()) {} }
+        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+    There are multiple overloads, which all fail to check:
+ 6  * def visit[A](l: List[A]) { f: A => Unit }: Unit = ()
+          ^^^^^
+11  |      [1].visit { d => if (resume(d) is Nil()) {} }
+    |                                        ^^^^^ Pattern matches against type List[A] but scrutinee has type Option[Int].
+
+ 7  * def visit[A](l: List[A]) { f: (A) {stop} => Unit }: Unit = ()
+          ^^^^^
+11  |      [1].visit { d => if (resume(d) is Nil()) {} }
+    |                  ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^ Wrong number of arguments to function: expected 1 block argument, but got 0 block arguments
