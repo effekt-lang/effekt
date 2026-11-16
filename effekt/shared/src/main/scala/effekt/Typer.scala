@@ -1272,8 +1272,14 @@ object Typer extends Phase[NameResolved, Typechecked] {
       Result(tpe, effs)
     }}
 
-    resolveOverload(id, results, didYouMeanMethod(id, vargs, iscope))
+    resolveOverload(id, results, explainMissingMethod(id, vargs, iscope))
   }
+
+  private def explainMissingMethod(id: source.IdRef, vargs: Many[source.ValueArg], scope: Option[scopes.Scope])(using Context, Captures, Subdiagnostics): Unit =
+    scope.flatMap { s => scopes.endedTerm(id, s) } match {
+      case Some(binder) => scopes.noteEnded(binder)
+      case None => didYouMeanMethod(id, vargs, scope)
+    }
 
   /** Helps with a function called on a receiver that cannot be found */
   private def didYouMeanMethod(id: source.IdRef, vargs: Many[source.ValueArg], scope: Option[scopes.Scope])(using Context, Captures, Subdiagnostics): Unit = {

@@ -172,6 +172,20 @@ object scopes {
     case _ => Nil
   }
 
+  /** The latest term named `id` whose scope has ended, if `id` is unqualified */
+  def endedTerm(id: IdRef, scope: Scope): Option[TermSymbol] =
+    if (id.path.isEmpty) endedTerms(scope).find { sym => sym.name.name == id.name } else None
+
+  /** Notes where a term whose scope has ended is bound */
+  def noteEnded(binder: TermSymbol)(using Subdiagnostics): Unit = {
+    // position at the name of the binder, as opposed to its whole definition
+    val at = binder.decl match {
+      case d: source.Definition => d.id.span
+      case tree => tree.span
+    }
+    note(pretty"There is a `${binder.name}` bound here, but not in the current scope.", Some(at))
+  }
+
   case class Scoping(modulePath: List[String], var scope: Scope) {
     def importAs(bindings: Bindings, path: List[String])(using E: ErrorReporter): Unit = {
       def go(ns: Bindings, path: List[String]): Bindings = path match {
@@ -233,20 +247,11 @@ object scopes {
         suggestion(effekt.util.closest(nameNotFound, candidates)(identity))
       } foreach { msg => help(msg) }
 
-    def explainMissingTerm(id: IdRef)(using Subdiagnostics): Unit = {
-      val binder = if (id.path.isEmpty) endedTerms(scope).find { sym => sym.name.name == id.name } else None
-
-      binder match {
-        case Some(binder) =>
-          // position at the name of the binder, as opposed to its whole definition
-          val at = binder.decl match {
-            case d: source.Definition => d.id.span
-            case tree => tree.span
-          }
-          note(pretty"There is a `${binder.name}` bound here, but not in the current scope.", Some(at))
+    def explainMissingTerm(id: IdRef)(using Subdiagnostics): Unit =
+      endedTerm(id, scope) match {
+        case Some(binder) => noteEnded(binder)
         case None => didYouMeanTerm(id)
       }
-    }
 
     /** Try to help with an unresolvable term that cannot be found by the closest term in scope */
     private def didYouMeanTerm(id: IdRef)(using Subdiagnostics): Unit =

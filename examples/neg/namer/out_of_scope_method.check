@@ -1,0 +1,7 @@
+[error] examples/neg/namer/out_of_scope_method.effekt:4:3: Cannot typecheck call to helper. Does a function/method with that name exist? [typer]
+4    5.helper()
+     ^^^^^^^^^^
+
+   * note: There is a `helper` bound here, but not in the current scope.
+3  |    if (b) { def helper(x: Int) = x; () } else ()
+   |                 ^^^^^^
