@@ -1303,7 +1303,7 @@ object Typer extends Phase[NameResolved, Typechecked] {
         case (results, _) =>
           results.map { case (sym, res, st) => (sym, None) } ++ undecided.map { case (sym, failure) => (sym, Some(failure)) } match {
             case List((sym, Some(failure))) => Context.abortWith(failure) // specializing for single failure
-            case competitors => Context.abort(OverloadResolution(competitors.map(candidate)))
+            case competitors => Context.abortWith(OverloadResolution(competitors.map(candidate)))
           }
       }
     }
@@ -1319,7 +1319,7 @@ object Typer extends Phase[NameResolved, Typechecked] {
       case failed =>
         // reraise all and abort
         val candidates = failed.map { case (block, failure) => candidate(block, Some(failure)) }
-        Context.abort(OverloadResolution(candidates))
+        Context.abortWith(OverloadResolution(candidates))
     }
   }
 

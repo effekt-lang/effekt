@@ -37,13 +37,13 @@ object Drawing {
     d.primary.toList.flatMap { label => excerpt(label.span) }
 
   private def body(d: Diagnostic): Body = {
-    val blocks = d.reason.alternatives.map(block) ++ d.reason.causes.toList.map(block) ++ d.subdiagnostics.map(block)
+    val blocks = d.reason.alternatives.map { c => block(c, d.reason) } ++ d.reason.causes.toList.map(block) ++ d.subdiagnostics.map(block)
     Body(d.reason.details, blocks)
   }
 
-  private def block(c: Candidate): Block = {
+  private def block(c: Candidate, of: Reason): Block = {
     val declaration = c.definitionTree.toList.flatMap { name => excerpt(name.span) }
-    Block.Candidate(c.show, declaration, c.errors.toList.map(block))
+    Block.Candidate(c.show, declaration, of.dependent(c).toList.map(block))
   }
 
   private def block(d: Diagnostic): Block.Nested =
