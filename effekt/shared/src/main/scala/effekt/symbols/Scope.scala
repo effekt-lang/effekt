@@ -135,6 +135,28 @@ object scopes {
   }
 
 
+  def all[T](path: List[String], scope: Scope)(select: Bindings => T): List[T] = {
+    def qualified(path: List[String], bindings: Bindings): List[T] = path match {
+      case Nil => select(bindings) :: Nil
+      case pathSegment :: rest => bindings.namespaces.get(pathSegment).toList.flatMap {
+        namespace => qualified(rest, namespace)
+      }
+    }
+
+    scope match {
+      case Scope.Global(imports, bindings) =>
+        qualified(path, bindings) ++ qualified(path, imports)
+      case Scope.Named(name, bindings, outer) =>
+        qualified(path, bindings) ++ all(path, outer)(select)
+      case Scope.Local(_, imports, bindings, outer) =>
+        qualified(path, bindings) ++ qualified(path, imports) ++ all(path, outer)(select)
+    }
+  }
+
+  /** The terms visible at `path` in `scope`, by scope (nearest first) */
+  def visibleTerms(path: List[String], scope: Scope): List[List[(String, Set[TermSymbol])]] =
+    all(path, scope) { bindings => bindings.terms.toList.sortBy { case (name, _) => name } }
+
   case class Scoping(modulePath: List[String], var scope: Scope) {
     def importAs(bindings: Bindings, path: List[String])(using E: ErrorReporter): Unit = {
       def go(ns: Bindings, path: List[String]): Bindings = path match {
@@ -175,24 +197,6 @@ object scopes {
           qualified(path, bindings) orElse qualified(path, imports) orElse first(path, outer)(select)
       }
 
-    private def all[T](path: List[String], scope: Scope)(select: Bindings => T): List[T] =
-
-      def qualified(path: List[String], bindings: Bindings): List[T] = path match {
-        case Nil => select(bindings) :: Nil
-        case pathSegment :: rest => bindings.namespaces.get(pathSegment).toList.flatMap {
-          namespace => qualified(rest, namespace)
-        }
-      }
-
-      scope match {
-        case Scope.Global(imports, bindings) =>
-          qualified(path, bindings) ++ qualified(path, imports)
-        case Scope.Named(name, bindings, outer) =>
-          qualified(path, bindings) ++ all(path, outer)(select)
-        case Scope.Local(_, imports, bindings, outer) =>
-          qualified(path, bindings) ++ qualified(path, imports) ++ all(path, outer)(select)
-      }
-
     /**
      * Searches the nested scopes to find the first term.
      * Fails if:
@@ -200,7 +204,7 @@ object scopes {
      *   - there a no matching terms at all
      */
     def lookupFirstTerm(id: IdRef)(using E: ErrorReporter): TermSymbol =
-      lookupFirstTermOption(id) getOrElse { E.abort(pp"Could not resolve term ${id}") }
+      lookupFirstTermOption(id) getOrElse { E.abort(pretty"Could not resolve term ${id}") { didYouMeanTerm(id) } }
 
     def lookupFirstTermOption(id: IdRef)(using E: ErrorReporter): Option[TermSymbol] =
       first(id.path, scope) { _.terms.get(id.name).map { syms =>
@@ -213,6 +217,10 @@ object scopes {
       specificHeuristic(nameNotFound) orElse {
         suggestion(effekt.util.closest(nameNotFound, candidates)(identity))
       } foreach { msg => help(msg) }
+
+    /** Try to help with an unresolvable term that cannot be found by the closest term in scope */
+    def didYouMeanTerm(id: IdRef)(using Subdiagnostics): Unit =
+      didYouMean(id.name, visibleTerms(id.path, scope).map { terms => terms.map { case (name, _) => name } })
 
     // NOTE: Most of these should be covered by the edit distance anyway...
     private def didYouMeanTypeHeuristic(name: String): Option[StructuredMessage] = name match {

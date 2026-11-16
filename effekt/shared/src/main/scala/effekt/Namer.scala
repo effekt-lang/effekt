@@ -1176,6 +1176,7 @@ trait NamerOps extends ContextOps { Context: Context =>
             ops.foreach { op =>
               help(pretty"There is an equally named effect operation ${op} of interface ${op.interface}. Use syntax `do ${id}()` to call it.")
             }
+            if (ops.isEmpty) scope.didYouMeanTerm(id)
           }
         }
         assignSymbol(id, CallTarget(blocks, Some(scope.scope)))
