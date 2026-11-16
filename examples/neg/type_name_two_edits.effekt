@@ -1,0 +1,6 @@
+module type_name_two_edits
+
+record Tree()
+
+// `Tree` is two edits from `Trap`, too many for four characters, so there is no suggestion
+def climb(tree: Trap): Unit = ()

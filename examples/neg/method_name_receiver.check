@@ -1,0 +1,5 @@
+[error] examples/neg/method_name_receiver.effekt:8:22: Cannot typecheck call to wieght. Does a function/method with that name exist? [typer]
+8  def main() = println(Rope("four").wieght)
+                        ^^^^^^^^^^^^^^^^^^^
+
+   * help: Did you mean weight?

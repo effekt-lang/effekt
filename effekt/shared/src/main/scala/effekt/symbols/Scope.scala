@@ -2,7 +2,7 @@ package effekt
 package symbols
 
 import effekt.source.IdRef
-import effekt.util.messages.{ErrorMessageReifier, ErrorReporter, StructuredMessage, Subdiagnostics, help}
+import effekt.util.messages.{ErrorMessageReifier, ErrorReporter, StructuredMessage, Subdiagnostics, help, suggestion}
 
 /**
  * An immutable container of bindings.
@@ -135,6 +135,28 @@ object scopes {
   }
 
 
+  def all[T](path: List[String], scope: Scope)(select: Bindings => T): List[T] = {
+    def qualified(path: List[String], bindings: Bindings): List[T] = path match {
+      case Nil => select(bindings) :: Nil
+      case pathSegment :: rest => bindings.namespaces.get(pathSegment).toList.flatMap {
+        namespace => qualified(rest, namespace)
+      }
+    }
+
+    scope match {
+      case Scope.Global(imports, bindings) =>
+        qualified(path, bindings) ++ qualified(path, imports)
+      case Scope.Named(name, bindings, outer) =>
+        qualified(path, bindings) ++ all(path, outer)(select)
+      case Scope.Local(_, imports, bindings, outer) =>
+        qualified(path, bindings) ++ qualified(path, imports) ++ all(path, outer)(select)
+    }
+  }
+
+  /** The terms visible at `path` in `scope`, by scope (nearest first) */
+  def visibleTerms(path: List[String], scope: Scope): List[List[(String, Set[TermSymbol])]] =
+    all(path, scope) { bindings => bindings.terms.toList.sortBy { case (name, _) => name } }
+
   case class Scoping(modulePath: List[String], var scope: Scope) {
     def importAs(bindings: Bindings, path: List[String])(using E: ErrorReporter): Unit = {
       def go(ns: Bindings, path: List[String]): Bindings = path match {
@@ -175,24 +197,6 @@ object scopes {
           qualified(path, bindings) orElse qualified(path, imports) orElse first(path, outer)(select)
       }
 
-    private def all[T](path: List[String], scope: Scope)(select: Bindings => T): List[T] =
-
-      def qualified(path: List[String], bindings: Bindings): List[T] = path match {
-        case Nil => select(bindings) :: Nil
-        case pathSegment :: rest => bindings.namespaces.get(pathSegment).toList.flatMap {
-          namespace => qualified(rest, namespace)
-        }
-      }
-
-      scope match {
-        case Scope.Global(imports, bindings) =>
-          qualified(path, bindings) ++ qualified(path, imports)
-        case Scope.Named(name, bindings, outer) =>
-          qualified(path, bindings) ++ all(path, outer)(select)
-        case Scope.Local(_, imports, bindings, outer) =>
-          qualified(path, bindings) ++ qualified(path, imports) ++ all(path, outer)(select)
-      }
-
     /**
      * Searches the nested scopes to find the first term.
      * Fails if:
@@ -200,7 +204,7 @@ object scopes {
      *   - there a no matching terms at all
      */
     def lookupFirstTerm(id: IdRef)(using E: ErrorReporter): TermSymbol =
-      lookupFirstTermOption(id) getOrElse { E.abort(pp"Could not resolve term ${id}") }
+      lookupFirstTermOption(id) getOrElse { E.abort(pretty"Could not resolve term ${id}") { didYouMeanTerm(id) } }
 
     def lookupFirstTermOption(id: IdRef)(using E: ErrorReporter): Option[TermSymbol] =
       first(id.path, scope) { _.terms.get(id.name).map { syms =>
@@ -208,46 +212,38 @@ object scopes {
         else syms.head
       }}
 
-    // TODO: Use this for more than just types?
-    //
-    // NOTE: We might also want to generalize to return more possible candidates than one
-    //       (1 works fine for types, but maybe not for fields/methods/functions/...)
-    private def didYouMean(nameNotFound: String, candidates: => Set[String], specificHeuristic: String => Option[StructuredMessage] = _ => None)(using Subdiagnostics): Unit =
-      // Priority 1: A specific heuristic
+    // a specific heuristic first, then the closest of the candidates given by scope (nearest first)
+    private def didYouMean(nameNotFound: String, candidates: => Seq[Seq[String]], specificHeuristic: String => Option[StructuredMessage] = _ => None)(using Subdiagnostics): Unit =
       specificHeuristic(nameNotFound) orElse {
-        // Priority 2: Exact case-insensitive match
-        candidates
-          .find { name => name.toUpperCase == nameNotFound.toUpperCase }
-          .map { exactMatch => pretty"Did you mean $exactMatch?" }
-          .orElse {
-            // Priority 3: Edit distance
-            val threshold = ((nameNotFound.length + 2) max 3) / 3
-
-            candidates
-              .toSeq
-              .flatMap { candidate =>
-                effekt.util.editDistance(nameNotFound, candidate, threshold).map((_, candidate))
-              }
-              .sorted
-              .headOption
-              .map { case (_, name) => pretty"Did you mean $name?" }
-          }
+        suggestion(effekt.util.closest(nameNotFound, candidates)(identity))
       } foreach { msg => help(msg) }
+
+    /** Try to help with an unresolvable term that cannot be found by the closest term in scope */
+    def didYouMeanTerm(id: IdRef)(using Subdiagnostics): Unit =
+      didYouMean(id.name, visibleTerms(id.path, scope).map { terms => terms.map { case (name, _) => name } }, didYouMeanTermHeuristic)
+
+    // literals are keywords, not terms in scope; suggest `None()` only if it is in scope
+    private def didYouMeanTermHeuristic(name: String): Option[StructuredMessage] = name match {
+      case "True" | "TRUE" => suggestion(List("true"))
+      case "False" | "FALSE" => suggestion(List("false"))
+      case "null" | "nullptr" if first(Nil, scope) { _.terms.get("None") }.isDefined => suggestion(List("None()"))
+      case _ => None
+    }
 
     // NOTE: Most of these should be covered by the edit distance anyway...
     private def didYouMeanTypeHeuristic(name: String): Option[StructuredMessage] = name match {
-      case "Boolean" | "boolean" => Some(pretty"Did you mean Bool?")
-      case "Str" | "str" => Some(pretty"Did you mean String?")
+      case "Boolean" | "boolean" => suggestion(List("Bool"))
+      case "Str" | "str" => suggestion(List("String"))
       case "Integer" | "Int32" | "Int64" | "I32" | "I64" | "i32" | "i64" =>
-        Some(pretty"Did you mean Int?")
+        suggestion(List("Int"))
       case "UInt32" | "UInt64" | "UInt" | "U32" | "U64" | "u32" | "u64" =>
         Some(pretty"Effekt only supports signed integers, did you mean Int?")
       case "Int8" | "UInt8" | "I8" | "U8" | "i8" | "u8" =>
         Some(pretty"Did you mean Byte (8 bits) or Char (32 bits)?")
       case "Float" | "float" | "F64" | "F32" | "f64" | "f32" =>
         Some(pretty"Effekt only supports 64bit floating numbers, did you mean Double?")
-      case "Maybe" | "maybe" => Some(pretty"Did you mean Option?")
-      case "Void" | "void" => Some(pretty"Did you mean Unit?")
+      case "Maybe" | "maybe" => suggestion(List("Option"))
+      case "Void" | "void" => suggestion(List("Unit"))
       case _ => None
     }
 
@@ -256,8 +252,8 @@ object scopes {
         // If we got here, we could not find an exact match.
         // But let's try and find a close one!
         def availableTypes = all(id.path, scope) {
-          _.types.keys.toList
-        }.flatten.toSet
+          _.types.keys.toList.sorted
+        }
 
         E.abort(pretty"Could not resolve type $id") {
           didYouMean(id.name, availableTypes, didYouMeanTypeHeuristic)

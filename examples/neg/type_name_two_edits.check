@@ -1,0 +1,3 @@
+[error] examples/neg/type_name_two_edits.effekt:6:17: Could not resolve type Trap [namer]
+6  def climb(tree: Trap): Unit = ()
+                   ^^^^

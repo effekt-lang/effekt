@@ -1,0 +1,8 @@
+module method_name_receiver
+
+record Rope(text: String)
+
+def weight(rope: Rope): Int = 0
+
+// `weight` takes a `Rope`, so it is suggested here
+def main() = println(Rope("four").wieght)

@@ -1,0 +1,4 @@
+module function_name_tie
+
+// `print` and `println` are both one edit away, so both are suggested
+def main() = printn("hello")

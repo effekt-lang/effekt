@@ -1,0 +1,5 @@
+module type_name_typo
+
+record Person(name: String)
+
+def greet(person: Persn): Unit = ()

@@ -166,6 +166,17 @@ object messages {
   def pluralized(n: Int, singular: String): String =
     if (n == 1) s"$n $singular" else s"$n ${singular}s"
 
+  /** Offers names in place of one that cannot be found, at most three: `Did you mean a, b or c?` */
+  def suggestion(names: List[String]): Option[StructuredMessage] =
+    Option.when(names.nonEmpty) { pretty"Did you mean ${enumerated(names.take(3), "or")}?" }
+
+  /** `a`, `a and b`, `a, b and c` for the conjunction `and` */
+  def enumerated(items: List[String], conjunction: String): String = items match {
+    case Nil => ""
+    case List(item) => item
+    case items => s"${items.init.mkString(", ")} ${conjunction} ${items.last}"
+  }
+
   case class TypeMismatch(expected: symbols.Type, got: symbols.Type) extends Reason {
     def claim = pretty"Expected ${expected} but got ${got}."
 

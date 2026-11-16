@@ -1,0 +1,5 @@
+[error] examples/neg/type_name_typo.effekt:5:19: Could not resolve type Persn [namer]
+5  def greet(person: Persn): Unit = ()
+                     ^^^^^
+
+   * help: Did you mean Person?

@@ -1,0 +1,5 @@
+[error] examples/neg/term_name_keyword.effekt:3:18: Could not resolve term True [namer]
+3  def main() = if (True) println("yes") else println("no")
+                    ^^^^
+
+   * help: Did you mean true?

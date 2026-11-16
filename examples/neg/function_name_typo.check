@@ -1,0 +1,5 @@
+[error] examples/neg/function_name_typo.effekt:5:22: Cannot find a function named `lenghtOf`. [namer]
+5  def main() = println(lenghtOf("four"))
+                        ^^^^^^^^
+
+   * help: Did you mean lengthOf?

@@ -1,0 +1,9 @@
+module method_name_wrong_receiver
+
+record Rope(text: String)
+record Knot()
+
+def weight(rope: Rope): Int = 0
+
+// `weight` takes a `Rope`, not a `Knot`, so nothing is suggested
+def main() = println(Knot().wieght)

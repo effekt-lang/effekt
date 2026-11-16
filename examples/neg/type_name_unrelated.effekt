@@ -1,0 +1,4 @@
+module type_name_unrelated
+
+// no type in scope is close to `Person`, so there is no suggestion
+def greet(person: Person): Unit = ()

@@ -1,0 +1,5 @@
+module field_name_typo
+
+record Person(name: String, age: Int)
+
+def main() = println(Person("Ada", 36).aeg)

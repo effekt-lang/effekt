@@ -56,3 +56,28 @@ inline def levenshtein(s1: String, s2: String): Int = {
 
   d(n)(m)
 }
+
+/** The candidates closest to `name`, given by scope (nearest first) */
+def closest[A](name: String, scopes: Seq[Seq[A]])(nameOf: A => String): List[A] = {
+  val limit = (name.length max 3) / 3
+
+  // equal up to case is closer than any edit
+  def distance(candidate: A): Option[Int] =
+    if (nameOf(candidate).equalsIgnoreCase(name)) Some(-1)
+    else editDistance(name, nameOf(candidate), limit)
+
+  // the candidates of one scope that are close enough, with their distance
+  def near(scope: Seq[A]): Seq[(Int, A)] = scope.flatMap { candidate =>
+    distance(candidate).map { d => (d, candidate) }
+  }
+
+  val nearByScope = scopes.map(near)
+  val distances = nearByScope.flatMap { scope => scope.map { case (d, _) => d } }
+
+  distances.minOption match {
+    case None => Nil
+    case Some(best) =>
+      val nearestScope = nearByScope.find { scope => scope.exists { case (d, _) => d == best } }.getOrElse(Nil)
+      nearestScope.collect { case (d, candidate) if d == best => candidate }.distinctBy(nameOf).toList
+  }
+}
