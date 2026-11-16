@@ -147,25 +147,28 @@ def Context(using C: Context): C.type = C
 
 
 /**
- * Returns Left(Messages) if there are any errors
+ * Returns the failure if there are any errors, or if the block aborted
  *
  * In the case of nested calls, currently only the errors of the innermost failing call
  * are reported
  */
-def Try[T](block: => T)(using C: Context): Either[EffektMessages, T] = {
-  val (msgs, optRes) = Context withMessages {
+def Try[T](block: => T)(using C: Context): Either[util.messages.Failure, T] = {
+  import util.messages.{ Failure, FatalPhaseError, Severity }
+  val (msgs, result) = Context withMessages {
     try {
-      Some(block)
+      Right(block)
     } catch {
-      case util.messages.FatalPhaseError(msg) =>
+      case FatalPhaseError(msg) =>
         C.report(msg)
-        None
+        Left(msg)
     }
   }
 
-  if (msgs.exists { m => m.severity == util.messages.Severity.Error } || optRes.isEmpty) {
-    Left(msgs)
-  } else {
-    Right(optRes.get)
+  result match {
+    case Left(cause) if cause.reason.undecided && msgs.forall { m => (m eq cause) || m.severity != Severity.Error } =>
+      Left(Failure.Undecided(cause, msgs.filterNot { m => m eq cause }))
+    case Left(_) => Left(Failure.Rejected(msgs))
+    case Right(r) if msgs.exists { m => m.severity == Severity.Error } => Left(Failure.Rejected(msgs))
+    case Right(r) => Right(r)
   }
 }

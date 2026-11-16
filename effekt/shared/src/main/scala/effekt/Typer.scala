@@ -1143,17 +1143,6 @@ object Typer extends Phase[NameResolved, Typechecked] {
     case b: BlockSymbol => (Context.lookupFunctionType(b), Context.lookupCapture(b))
   }
 
-  def attempt[T](f: => T)(using Context): Either[EffektMessages, (T, TyperState)] =
-     val stateBefore = Context.backupTyperstate()
-     try {
-      Try {
-        val result = f
-        (result, Context.backupTyperstate())
-      }
-     } finally {
-       Context.restoreTyperstate(stateBefore)
-     }
-
   /**
    * We do not respect nested scoping on overload resolution for methods right now.
    *
@@ -1286,7 +1275,7 @@ object Typer extends Phase[NameResolved, Typechecked] {
   private def resolveOverload(
     id: source.IdRef,
     successes: List[List[(BlockSymbol, Result[ValueType], TyperState)]],
-    failures: List[(BlockSymbol, EffektMessages)]
+    failures: List[(BlockSymbol, Failure)]
   )(using Context): Result[ValueType] = {
 
     successes foreachAborting {
@@ -1304,7 +1293,7 @@ object Typer extends Phase[NameResolved, Typechecked] {
 
       // Ambiguous reference
       case results =>
-        val candidates = results.map { case (sym, res, st) => Candidate(sym, findFunctionTypeFor(sym)._1, Vector.empty, Context.definitionTreeOption(sym)) }
+        val candidates = results.map { case (sym, res, st) => Candidate(sym, findFunctionTypeFor(sym)._1, None, Context.definitionTreeOption(sym)) }
         Context.abort(Context.diagnostic(OverloadResolution(candidates), Severity.Error, Context.spanOf(id)))
     }
 
@@ -1313,12 +1302,12 @@ object Typer extends Phase[NameResolved, Typechecked] {
         Context.abort(pretty"Cannot typecheck call to ${id}. Does a function/method with that name exist?")
 
       // exactly one error
-      case List((sym, errs)) =>
-        Context.abortWith(errs)
+      case List((sym, failure)) =>
+        Context.abortWith(failure.diagnostics)
 
       case failed =>
         // reraise all and abort
-        val candidates = failed.map { case (block, msgs) => Candidate(block, findFunctionTypeFor(block)._1, msgs, Context.definitionTreeOption(block)) }
+        val candidates = failed.map { case (block, failure) => Candidate(block, findFunctionTypeFor(block)._1, Some(failure), Context.definitionTreeOption(block)) }
         Context.abort(OverloadResolution(candidates))
     }
   }
@@ -1593,7 +1582,7 @@ object Typer extends Phase[NameResolved, Typechecked] {
     Result(ret, effs)
   }
 
-  def tryEach[K, R](inputs: List[K])(f: K => R)(using Context): (List[(K, R, TyperState)], List[(K, EffektMessages)]) = {
+  def tryEach[K, R](inputs: List[K])(f: K => R)(using Context): (List[(K, R, TyperState)], List[(K, Failure)]) = {
     val stateBefore = Context.backupTyperstate()
     val results = inputs.map {
       case input =>

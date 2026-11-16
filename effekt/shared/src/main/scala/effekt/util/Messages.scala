@@ -9,6 +9,17 @@ object messages {
 
   type EffektMessages = Vector[Diagnostic]
 
+  enum Failure {
+    case Rejected(messages: EffektMessages)
+    // Ended by `cause`: a search cut off at its depth bound, with no error before
+    case Undecided(cause: Diagnostic, others: EffektMessages)
+
+    def diagnostics: EffektMessages = this match {
+      case Rejected(messages)       => messages
+      case Undecided(cause, others) => others :+ cause
+    }
+  }
+
   enum Severity { case Error, Warning, Info, Hint }
 
   case class Label(span: Span)
@@ -44,6 +55,9 @@ object messages {
   /** The exact (open) kind of an issue of a diagnostic. */
   trait Reason {
     def claim: StructuredMessage
+
+    // the outcome is unknown (rather than wrong), that is a search was cut off at its depth bound
+    def undecided: Boolean = false
 
     // how the claim reads in an output with lines
     def show: List[StructuredMessage] = List(claim) // claim only by default
@@ -165,7 +179,11 @@ object messages {
 
   /** Overload resolution that did not resolve: either no candidate fits, or several do. */
   case class OverloadResolution(candidates: List[Candidate]) extends Reason {
-    def ambiguous: Boolean = candidates.count { c => c.errors.isEmpty } > 1
+    def ambiguous: Boolean = candidates.count { c => c.failure.isEmpty } > 1
+
+    override def undecided: Boolean = !ambiguous && candidates.exists { c =>
+      c.failure.exists { case _: Failure.Undecided => true; case _ => false }
+    }
 
     def claim = if ambiguous then pretty"Ambiguous overload." else pretty"Cannot typecheck call."
 
@@ -176,7 +194,9 @@ object messages {
     override def alternatives = candidates
   }
 
-  case class Candidate(symbol: symbols.BlockSymbol, tpe: symbols.FunctionType, errors: EffektMessages, definitionTree: Option[source.IdDef]) {
+  case class Candidate(symbol: symbols.BlockSymbol, tpe: symbols.FunctionType, failure: Option[Failure], definitionTree: Option[source.IdDef]) {
+    def errors: EffektMessages = failure.map(_.diagnostics).getOrElse(Vector.empty)
+
     // without its declaration
     def show: StructuredMessage = pretty"${Piece.Code(fullname(symbol.name))} of type ${tpe}"
   }
@@ -184,6 +204,8 @@ object messages {
   // Iterative deepening of the implicit search matches on this class.
   case class ImplicitMaxRecursion(text: String) extends Reason {
     def claim = pretty"${text}"
+
+    override def undecided = true
   }
 
   case class ImplicitInstantiation(stencil: source.GenerateImplicitArgs.Error, tpe: symbols.Type) extends Reason {
@@ -199,7 +221,12 @@ object messages {
       pretty"Cannot instantiate ${index} ${stencil.kind} ${stencil.name} of type ${tpe}." :: stencil.explanation
     }
 
-    override def causes = stencil.msgs
+    override def undecided: Boolean = stencil.failure match {
+      case _: Failure.Undecided => true
+      case _ => false
+    }
+
+    override def causes = stencil.failure.diagnostics
   }
 
   /**
