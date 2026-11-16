@@ -1,34 +1,6 @@
-[error] examples/neg/issue373/wrong_type_argument.effekt:11:9: Cannot typecheck call. [typer]
+[error] examples/neg/issue373/wrong_type_argument.effekt:11:21: Expected Bool but got Int. [typer]
 11    try { myPrintLine(eff.op[Bool]("hello")) } // ERROR Expected Bool but got Int
-            ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-
-    There are multiple overloads, which all fail to check:
- 6  * def myPrintLine(n: Int): Unit = println(n)
-          ^^^^^^^^^^^
-11  |    try { myPrintLine(eff.op[Bool]("hello")) } // ERROR Expected Bool but got Int
-    |                      ^^^^^^^^^^^^^^^^^^^^^ Expected Int but got Bool.
-    |
-11  |    try { myPrintLine(eff.op[Bool]("hello")) } // ERROR Expected Bool but got Int
-    |                                   ^^^^^^^ Expected Bool but got String.
-    |
-11  |    try { myPrintLine(eff.op[Bool]("hello")) } // ERROR Expected Bool but got Int
-    |                      ^^^^^^^^^^^^^^^^^^^^^ Expected Bool but got Int.
-
- 7  * def myPrintLine(b: Bool): Unit = println(b)
-          ^^^^^^^^^^^
-11  |    try { myPrintLine(eff.op[Bool]("hello")) } // ERROR Expected Bool but got Int
-    |                                   ^^^^^^^ Expected Bool but got String.
-    |
-11  |    try { myPrintLine(eff.op[Bool]("hello")) } // ERROR Expected Bool but got Int
-    |                      ^^^^^^^^^^^^^^^^^^^^^ Expected Bool but got Int.
-
- 8  * def myPrintLine(s: String): Unit = println(s)
-          ^^^^^^^^^^^
-11  |    try { myPrintLine(eff.op[Bool]("hello")) } // ERROR Expected Bool but got Int
-    |                      ^^^^^^^^^^^^^^^^^^^^^ Expected String but got Bool.
-    |
-11  |    try { myPrintLine(eff.op[Bool]("hello")) } // ERROR Expected Bool but got Int
-    |                                   ^^^^^^^ Expected Bool but got String.
-    |
-11  |    try { myPrintLine(eff.op[Bool]("hello")) } // ERROR Expected Bool but got Int
-    |                      ^^^^^^^^^^^^^^^^^^^^^ Expected Bool but got Int.
+                        ^^^^^^^^^^^^^^^^^^^^^
+[error] examples/neg/issue373/wrong_type_argument.effekt:11:34: Expected Bool but got String. [typer]
+11    try { myPrintLine(eff.op[Bool]("hello")) } // ERROR Expected Bool but got Int
+                                     ^^^^^^^
