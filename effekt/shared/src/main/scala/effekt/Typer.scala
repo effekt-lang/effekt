@@ -42,6 +42,12 @@ import scala.annotation.tailrec
 case class Result[+T](tpe: T, effects: ConcreteEffects)
 
 /**
+ * The type something is checked against and why (see [[ErrorContext.Because]])
+ * Statements pass their expectation on to where their value comes from, newly synthetized expectations have no reason.
+ */
+case class Expectation(tpe: ValueType, because: Option[ErrorContext.Because] = None)
+
+/**
  * Coercion as inferred by Typer
  */
 enum Coercion {
@@ -130,7 +136,7 @@ object Typer extends Phase[NameResolved, Typechecked] {
 
   //<editor-fold desc="expressions">
 
-  def checkExpr(expr: Term, expected: Option[ValueType])(using Context, Captures): Result[ValueType] =
+  def checkExpr(expr: Term, expected: Option[Expectation])(using Context, Captures): Result[ValueType] =
     checkAgainst(expr, expected) {
       case source.Literal(_, tpe, _) => Result(tpe, Pure)
 
@@ -143,7 +149,7 @@ object Typer extends Phase[NameResolved, Typechecked] {
 
       case source.While(guards, body, default, _) =>
         val Result((), guardEffs) = checkGuards(guards)
-        val expectedType = if default.isDefined then expected else Some(TUnit)
+        val expectedType = if default.isDefined then expected else Some(Expectation(TUnit))
         val Result(bodyTpe, bodyEffs) = checkStmt(body, expectedType)
         val Result(defaultTpe, defaultEffs) = default.map { s =>
           checkStmt(s, expectedType)
@@ -175,7 +181,7 @@ object Typer extends Phase[NameResolved, Typechecked] {
 
       case l @ source.Box(annotatedCapture, block, _) =>
 
-        val expectedTpe = expected.map(Context.unification.apply).collect { case BoxedType(tpe, cap) => tpe }
+        val expectedTpe = expected.map(e => Context.unification(e.tpe)).collect { case BoxedType(tpe, cap) => tpe }
         val inferredCap: Captures = annotatedCapture.map { _.resolve }.getOrElse {
           Context.freshCaptVar(CaptUnificationVar.InferredBox(l))
         }
@@ -183,7 +189,7 @@ object Typer extends Phase[NameResolved, Typechecked] {
         flowingInto(inferredCap) {
           val Result(inferredTpe, inferredEff) = checkExprAsBlock(block, expectedTpe)
           val tpe = Context.unification(BoxedType(inferredTpe, inferredCap))
-          expected.map(Context.unification.apply) foreach { matchExpected(tpe, _, None) }
+          expected.map(e => Context.unification(e.tpe)) foreach { matchExpected(tpe, _, None) }
           Result(tpe, inferredEff)
         }
 
@@ -220,7 +226,7 @@ object Typer extends Phase[NameResolved, Typechecked] {
         // Fresh vars are created inside checkExprAsBlock only if the callee type is unresolved.
         // Note that block args are excluded, their types would require block type unification. [!]
         val hint: Option[(Int, ValueType)] =
-          if bargs.isEmpty then expected.map(retTpe => (vargs.length, retTpe))
+          if bargs.isEmpty then expected.map(e => (vargs.length, e.tpe))
           else None
 
         val Result(tpe, funEffs) = checkExprAsBlock(e, None, hint) match {
@@ -278,7 +284,7 @@ object Typer extends Phase[NameResolved, Typechecked] {
 
         handlers foreach Context.withFocus { h =>
           flowingInto(continuationCaptHandled) {
-            val Result(_, usedEffects) = checkImplementation(h.impl, Some((ret, continuationCapt)))
+            val Result(_, usedEffects) = checkImplementation(h.impl, Some((ret, continuationCapt, prog)))
             handlerEffs = handlerEffs ++ usedEffects
           }
         }
@@ -387,10 +393,10 @@ object Typer extends Phase[NameResolved, Typechecked] {
           val Result(tpe, effs) = checkStmt(stmt, None)
           Some(tpe)
         )
-        h.expectedType = expected
+        h.expectedType = expected.map(_.tpe)
         h.argTypes = tpes
 
-        Result(expected.getOrElse(TBottom), Pure)
+        Result(expected.map(_.tpe).getOrElse(TBottom), Pure)
 
       case tree : source.New => Context.abort("Expected an expression, but got an object implementation (which is a block).")
       case tree : source.BlockLiteral => Context.abort("Expected an expression, but got a block literal.")
@@ -410,7 +416,7 @@ object Typer extends Phase[NameResolved, Typechecked] {
   /**
    * The [[continuationDetails]] are only provided, if a continuation is captured (that is for implementations as part of effect handlers).
    */
-  def checkImplementation(impl: source.Implementation, continuationDetails: Option[(ValueType, CaptUnificationVar)])(using Context, Captures): Result[InterfaceType] = Context.focusing(impl) {
+  def checkImplementation(impl: source.Implementation, continuationDetails: Option[(ValueType, CaptUnificationVar, source.Stmt)])(using Context, Captures): Result[InterfaceType] = Context.focusing(impl) {
     case source.Implementation(sig, clauses, _) =>
 
       var handlerEffects: ConcreteEffects = Pure
@@ -522,7 +528,7 @@ object Typer extends Phase[NameResolved, Typechecked] {
               Result(bodyType, bodyEffs -- Effects(effs))
 
             // handler implementation: we have a continuation
-            case Some(ret, continuationCapt) =>
+            case Some(ret, continuationCapt, handled) =>
 
               if (bparams.nonEmpty)
                 Context.error("Block parameters are bound by resume and not the effect operation itself")
@@ -545,7 +551,7 @@ object Typer extends Phase[NameResolved, Typechecked] {
               }
 
               // (4) synthesize type of continuation
-              val resumeType = if (isBidirectional) {
+              val resumeType: FunctionType = if (isBidirectional) {
                 // resume { {f} => e }
                 val resumeType = FunctionType(Nil, cparams, Nil, bps, tpe, Effects(effs))
                 val resumeCapt = CaptureParam(Name.local("resumeBlock"))
@@ -556,7 +562,7 @@ object Typer extends Phase[NameResolved, Typechecked] {
               }
               Context.bind(Context.symbolOf(resume).asBlockSymbol, resumeType, continuationCapt)
 
-              body `checkAgainst` ret
+              checkStmt(body, Some(Expectation(ret, Some(ErrorContext.Because.HandlerClauseResult(resumeType, handled)))))
           }
 
           handlerEffects = handlerEffects ++ effs
@@ -582,7 +588,7 @@ object Typer extends Phase[NameResolved, Typechecked] {
           val captVar = Context.freshCaptVar(CaptUnificationVar.InferredUnbox(u))
           BoxedType(tpe, captVar)
         }
-        val Result(vtpe, eff1) = checkExpr(expr, expectedTpe)
+        val Result(vtpe, eff1) = checkExpr(expr, expectedTpe.map(Expectation(_)))
         // TODO here we also need unification variables for block types!
         // C.unify(tpe, BoxedType())
         Context.unification(vtpe) match {
@@ -703,7 +709,7 @@ object Typer extends Phase[NameResolved, Typechecked] {
 
   def checkGuard(guard: MatchGuard)(using Context, Captures): Result[Map[Symbol, ValueType]] = guard match {
     case MatchGuard.BooleanGuard(condition, _) =>
-      val Result(tpe, effs) = checkExpr(condition, Some(TBoolean))
+      val Result(tpe, effs) = checkExpr(condition, Some(Expectation(TBoolean)))
       Result(Map.empty, effs)
     case MatchGuard.PatternGuard(scrutinee, pattern, _) =>
       val Result(tpe, effs) = checkExpr(scrutinee, None)
@@ -714,7 +720,7 @@ object Typer extends Phase[NameResolved, Typechecked] {
 
   //<editor-fold desc="statements and definitions">
 
-  def checkStmt(stmt: Stmt, expected: Option[ValueType])(using Context, Captures): Result[ValueType] =
+  def checkStmt(stmt: Stmt, expected: Option[Expectation])(using Context, Captures): Result[ValueType] =
     checkAgainst(stmt, expected) {
       // local mutable state
       case source.DefStmt(d @ source.VarDef(id, annot, binding, doc, span), rest, _) =>
@@ -986,7 +992,7 @@ object Typer extends Phase[NameResolved, Typechecked] {
             case source.ExternBody.StringExternBody(ff, body, span) =>
               body.args.foreach { arg => checkExpr(arg, None) }
             case source.ExternBody.EffektExternBody(ff, body, span) =>
-              checkStmt(body, Some(expectedReturnType))
+              checkStmt(body, Some(Expectation(expectedReturnType)))
             case u: source.ExternBody.Unsupported => u
           }
         }
@@ -1155,7 +1161,7 @@ object Typer extends Phase[NameResolved, Typechecked] {
     targs: List[ValueType],
     vargs: Many[source.ValueArg],
     bargs: Many[source.Term],
-    expected: Option[ValueType]
+    expected: Option[Expectation]
   )(using Context, Captures): Result[ValueType] = {
     val sym = id.symbol
 
@@ -1225,7 +1231,7 @@ object Typer extends Phase[NameResolved, Typechecked] {
     targs: List[ValueType],
     vargs: Many[source.ValueArg],
     bargs: Many[source.Term],
-    expected: Option[ValueType]
+    expected: Option[Expectation]
   )(using Context, Captures): Result[ValueType] = {
 
     val (scopes, iscope) = id.symbol match {
@@ -1470,7 +1476,7 @@ object Typer extends Phase[NameResolved, Typechecked] {
     targs: List[ValueType],
     vargs: Many[source.ValueArg],
     bargs: Many[source.Term],
-    expected: Option[ValueType],
+    expected: Option[Expectation],
     scope: Option[scopes.Scope]
   )(using Context, Captures): Result[ValueType] = {
     val callsite = currentCapture
@@ -1518,7 +1524,7 @@ object Typer extends Phase[NameResolved, Typechecked] {
     val (explicitVps, implicitVps) = vps.splitAt(vargs.length)
 
     (explicitVps zip vargs.unspan) foreach { case (tpe, expr) =>
-      val Result(t, eff) = checkExpr(expr.value, Some(tpe))
+      val Result(t, eff) = checkExpr(expr.value, Some(Expectation(tpe)))
       effs = effs ++ eff.toEffects
     }
 
@@ -1528,7 +1534,7 @@ object Typer extends Phase[NameResolved, Typechecked] {
       val inst = source.GenerateImplicitArgs.instantiateImplicitValue(expr, tpe, vargs.span)
       instImplicitVargs.append(inst)
       val Result(t, eff) = source.GenerateImplicitArgs.recursionGuard(expr, "value argument", vargs.length + ii, inst, tpe) {
-        checkExpr(inst.value, Some(tpe))
+        checkExpr(inst.value, Some(Expectation(tpe)))
       }
       effs = effs ++ eff.toEffects
     }
@@ -1701,15 +1707,22 @@ object Typer extends Phase[NameResolved, Typechecked] {
     Context.requireSubtype(scrutinee, patternTpe, ErrorContext.PatternMatch(scrutinee, patternTpe, pattern))
 
   def matchExpected(got: ValueType, expected: ValueType, coercible: Option[source.Tree])(using Context): Unit =
-    Context.requireSubtype(got, expected,
-      ErrorContext.Expected(Context.unification(got), Context.unification(expected), Context.focus, coercible.map(t => c => Context.coerce(t, c))))
+    matchExpected(got, Expectation(expected), coercible)
+
+  def matchExpected(got: ValueType, expected: Expectation, coercible: Option[source.Tree])(using Context): Unit =
+    val (gotNow, expectedNow) = (Context.unification(got), Context.unification(expected.tpe))
+    val coerce = coercible.map(t => c => Context.coerce(t, c))
+    val because = expected.because.map { // substitute into the reason if there is one
+      case ErrorContext.Because.HandlerClauseResult(resume, handled) => ErrorContext.Because.HandlerClauseResult(Context.unification(resume), handled)
+    }
+    Context.requireSubtype(got, expected.tpe, ErrorContext.Expected(gotNow, expectedNow, Context.focus, coerce, because))
 
   /**
    * Computes the join of all types, only called to merge the different arms of if and match
    */
-  def join(expected: Option[ValueType], arms: List[(ValueType, ErrorContext.Arm)])(using Context): ValueType =
+  def join(expected: Option[Expectation], arms: List[(ValueType, ErrorContext.Arm)])(using Context): ValueType =
     val result = arms match {
-      case Nil => expected.getOrElse(TBottom) // TODO actually this type is arbitrary, not bottom!
+      case Nil => expected.map(_.tpe).getOrElse(TBottom) // TODO actually this type is arbitrary, not bottom!
       case first :: rest =>
         // the arm named for the types merged so far is the first one that is not `Nothing`
         val (merged, _) = rest.foldLeft[(ValueType, ErrorContext.Arm)](first) { case ((t1, arm1), (t2, arm2)) =>
@@ -1732,18 +1745,18 @@ object Typer extends Phase[NameResolved, Typechecked] {
 
   extension (expr: Term) {
     def checkAgainst(tpe: ValueType)(using Context, Captures): Result[ValueType] =
-      checkExpr(expr, Some(tpe))
+      checkExpr(expr, Some(Expectation(tpe)))
   }
 
   extension (stmt: Stmt) {
     def checkAgainst(tpe: ValueType)(using Context, Captures): Result[ValueType] =
-      checkStmt(stmt, Some(tpe))
+      checkStmt(stmt, Some(Expectation(tpe)))
   }
 
   /**
    * Combinators that also store the computed type for a tree in the TypesDB
    */
-  def checkAgainst[T <: Tree](t: T, expected: Option[ValueType])(f: T => Result[ValueType])(using Context, Captures): Result[ValueType] =
+  def checkAgainst[T <: Tree](t: T, expected: Option[Expectation])(f: T => Result[ValueType])(using Context, Captures): Result[ValueType] =
     Context.at(t) {
       val Result(got, effs) = f(t)
       wellformed(got)

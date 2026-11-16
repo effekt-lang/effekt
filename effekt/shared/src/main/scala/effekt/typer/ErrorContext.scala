@@ -1,7 +1,7 @@
 package effekt
 package typer
 
-import effekt.util.messages.{ErrorMessageReifier, Message, Reason, StructuredMessage, Subdiagnostics, TypeMismatch, note}
+import effekt.util.messages.{ErrorMessageReifier, Message, Reason, StructuredMessage, Subdiagnostics, TypeMismatch, help, note}
 
 sealed trait ErrorContext { def polarity: Polarity; def coercible: Option[Coercion => Unit] }
 sealed trait PositiveContext extends ErrorContext { def polarity = Covariant }
@@ -16,7 +16,13 @@ object ErrorContext {
    *
    * TODO we use this for value types AND blocktypes (which cannot be coerced)
    */
-  case class Expected(got: symbols.Type, exp: symbols.Type, checkedTree: source.Tree, coercible: Option[Coercion => Unit]) extends PositiveContext
+  case class Expected(got: symbols.Type, exp: symbols.Type, checkedTree: source.Tree, coercible: Option[Coercion => Unit], because: Option[Because] = None) extends PositiveContext
+
+  /** Why a type is expected in cases where that explains a mismatch better than just "expected" */
+  enum Because {
+    /** The result of a handler clause, which could [[resume]], has the type of the [[handled]] statement */
+    case HandlerClauseResult(resume: symbols.FunctionType, handled: source.Stmt)
+  }
 
   /**
    * A pattern matching context, checking a scrutinee of type [[scrutinee]] against the type [[matched]] of the match pattern [[pattern]]
@@ -82,7 +88,7 @@ object ErrorContext {
   }
 
   def claim(ctx: ErrorContext, issue: => StructuredMessage): Reason = root(ctx) match {
-    case Expected(got, exp, _, _)            => TypeMismatch(exp, got)
+    case Expected(got, exp, _, _, _)         => TypeMismatch(exp, got)
     case Declaration(_, declared, defined)   => Message(pretty"Type ${defined} does not match the declared type ${declared}.")
     case PatternMatch(scrutinee, matched, _) => Message(pretty"Pattern matches against type ${matched} but scrutinee has type ${scrutinee}.")
     case MergeTypes(_, _, arm, _)            => arm match {
@@ -107,12 +113,19 @@ object ErrorContext {
     def same(t1: symbols.Type, t2: symbols.Type) = unboxed(t1) == unboxed(t2)
 
     root(ctx) match {
-      case Expected(got, exp, _, _)            => same(left, got) && same(right, exp)
+      case Expected(got, exp, _, _, _)         => same(left, got) && same(right, exp)
       case Declaration(_, declared, defined)   => same(left, defined) && same(right, declared)
       case PatternMatch(scrutinee, matched, _) => same(left, scrutinee) && same(right, matched)
       case MergeTypes(l, r, _, _)              => (same(left, l) && same(right, r)) || (same(left, r) && same(right, l))
       case _                                   => false
     }
+  }
+
+  private def resumesWith(resume: symbols.FunctionType): Option[(symbols.ValueType, String)] = resume match {
+    case symbols.FunctionType(Nil, Nil, List(argument), Nil, _, _) => Some((argument, "resume(...)"))
+    case symbols.FunctionType(Nil, _, Nil, List(symbols.FunctionType(Nil, _, Nil, bparams, argument, _)), _, _) =>
+      Some((argument, if (bparams.isEmpty) "resume { ... }" else "resume { {...} => ... }"))
+    case _ => None
   }
 
   /** Why a comparison failed, as subdiagnostics. */
@@ -122,6 +135,17 @@ object ErrorContext {
       note(pretty"This ${leftArm.kind} has type ${left}.", leftArm.tree.map(_.span))
       note(pretty"This ${rightArm.kind} has type ${right}.", rightArm.tree.map(_.span))
       issue.foreach { i => note(pretty"${i}.") }
+    case Expected(got, exp, _, _, Some(Because.HandlerClauseResult(resume, handled))) =>
+      issue.foreach { i => note(pretty"${i}.") }
+
+      // resuming with the result is suggested only if when the type would fit to get rid of the mismatch
+      resumesWith(resume) match {
+        case Some((argument, syntax)) if got == argument =>
+          help(pretty"Did you mean to resume with it, `${syntax}`? Here, `resume` has type ${resume}.")
+        case _ =>
+          note(pretty"${exp} is the type of the handled statement.", Some(handled.span))
+          note(pretty"In this handler clause, `resume` has type ${resume}.")
+      }
     case _ =>
       issue.foreach { i => note(pretty"${i}.") }
   }

@@ -1,0 +1,29 @@
+effect get(): Int
+effect ask(): Int / exc
+effect exc(): Unit
+effect hof { f: () => Int }: Int
+
+// suggest resuming if it would likely fix the issue
+def value(): String = try { do get().show } with get { 42 }
+def bidirectional(): String = try { try { do ask().show } with ask { 42 } } with exc { "" }
+def higherOrder(): String = try { do hof { 1 }.show } with hof { 42 }
+
+def throughTry(): String = try {
+  do get().show
+} with get {
+  // here it's through a different handler
+  try { 42 } with exc { 0 }
+}
+
+// resuming would not help here, but note what `resume` is
+def other(): String = try { do get().show } with get { true }
+
+// a function in a clause has its own result
+def insideFunction(): String = try {
+  do get().show
+} with get {
+  val f: () => String at {} = box { () => 42 }
+  resume(1)
+}
+
+def main() = ()
