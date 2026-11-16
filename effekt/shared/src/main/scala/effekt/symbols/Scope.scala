@@ -2,7 +2,7 @@ package effekt
 package symbols
 
 import effekt.source.IdRef
-import effekt.util.messages.{ErrorMessageReifier, ErrorReporter, StructuredMessage, Subdiagnostics, help}
+import effekt.util.messages.{ErrorMessageReifier, ErrorReporter, StructuredMessage, Subdiagnostics, help, suggestion}
 
 /**
  * An immutable container of bindings.
@@ -208,46 +208,26 @@ object scopes {
         else syms.head
       }}
 
-    // TODO: Use this for more than just types?
-    //
-    // NOTE: We might also want to generalize to return more possible candidates than one
-    //       (1 works fine for types, but maybe not for fields/methods/functions/...)
-    private def didYouMean(nameNotFound: String, candidates: => Set[String], specificHeuristic: String => Option[StructuredMessage] = _ => None)(using Subdiagnostics): Unit =
-      // Priority 1: A specific heuristic
+    // a specific heuristic first, then the closest of the candidates given by scope (nearest first)
+    private def didYouMean(nameNotFound: String, candidates: => Seq[Seq[String]], specificHeuristic: String => Option[StructuredMessage] = _ => None)(using Subdiagnostics): Unit =
       specificHeuristic(nameNotFound) orElse {
-        // Priority 2: Exact case-insensitive match
-        candidates
-          .find { name => name.toUpperCase == nameNotFound.toUpperCase }
-          .map { exactMatch => pretty"Did you mean $exactMatch?" }
-          .orElse {
-            // Priority 3: Edit distance
-            val threshold = (nameNotFound.length max 3) / 3
-
-            candidates
-              .toSeq
-              .flatMap { candidate =>
-                effekt.util.editDistance(nameNotFound, candidate, threshold).map((_, candidate))
-              }
-              .sorted
-              .headOption
-              .map { case (_, name) => pretty"Did you mean $name?" }
-          }
+        suggestion(effekt.util.closest(nameNotFound, candidates)(identity))
       } foreach { msg => help(msg) }
 
     // NOTE: Most of these should be covered by the edit distance anyway...
     private def didYouMeanTypeHeuristic(name: String): Option[StructuredMessage] = name match {
-      case "Boolean" | "boolean" => Some(pretty"Did you mean Bool?")
-      case "Str" | "str" => Some(pretty"Did you mean String?")
+      case "Boolean" | "boolean" => suggestion(List("Bool"))
+      case "Str" | "str" => suggestion(List("String"))
       case "Integer" | "Int32" | "Int64" | "I32" | "I64" | "i32" | "i64" =>
-        Some(pretty"Did you mean Int?")
+        suggestion(List("Int"))
       case "UInt32" | "UInt64" | "UInt" | "U32" | "U64" | "u32" | "u64" =>
         Some(pretty"Effekt only supports signed integers, did you mean Int?")
       case "Int8" | "UInt8" | "I8" | "U8" | "i8" | "u8" =>
         Some(pretty"Did you mean Byte (8 bits) or Char (32 bits)?")
       case "Float" | "float" | "F64" | "F32" | "f64" | "f32" =>
         Some(pretty"Effekt only supports 64bit floating numbers, did you mean Double?")
-      case "Maybe" | "maybe" => Some(pretty"Did you mean Option?")
-      case "Void" | "void" => Some(pretty"Did you mean Unit?")
+      case "Maybe" | "maybe" => suggestion(List("Option"))
+      case "Void" | "void" => suggestion(List("Unit"))
       case _ => None
     }
 
@@ -256,8 +236,8 @@ object scopes {
         // If we got here, we could not find an exact match.
         // But let's try and find a close one!
         def availableTypes = all(id.path, scope) {
-          _.types.keys.toList
-        }.flatten.toSet
+          _.types.keys.toList.sorted
+        }
 
         E.abort(pretty"Could not resolve type $id") {
           didYouMean(id.name, availableTypes, didYouMeanTypeHeuristic)

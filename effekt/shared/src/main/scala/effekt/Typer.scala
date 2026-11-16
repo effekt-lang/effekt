@@ -1444,12 +1444,7 @@ object Typer extends Phase[NameResolved, Typechecked] {
           blocks.map { pluralized(_, "block argument") }
         ).flatten
 
-        parts match {
-          case Nil => "no arguments"
-          case single :: Nil => single
-          case init :+ last => init.mkString(", ") + " and " + last
-          case _ => parts.mkString(", ")
-        }
+        if (parts.isEmpty) "no arguments" else enumerated(parts, "and")
       }
 
       val expected = formatArgs(
