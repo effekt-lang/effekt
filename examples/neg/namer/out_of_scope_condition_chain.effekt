@@ -1,0 +1,3 @@
+// what the guards of a condition bind is only visible where all of them are true
+def f(x: Option[Option[Int]]) = if (x is Some(y) and y is Some(42)) 1 else { println(y); 0 }
+def main() = ()

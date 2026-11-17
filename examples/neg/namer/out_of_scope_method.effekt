@@ -1,0 +1,6 @@
+// `5.helper()` means `helper(5)`, so it is explained the same way
+def f(b: Bool) = {
+  if (b) { def helper(x: Int) = x; () } else ()
+  5.helper()
+}
+def main() = ()

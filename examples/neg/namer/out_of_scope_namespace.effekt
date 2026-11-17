@@ -1,0 +1,6 @@
+namespace tools {
+  def f(tally: Int) = tally
+  // the binder of `tally` in another definition of the namespace is not mentioned
+  def g() = tally
+}
+def main() = ()

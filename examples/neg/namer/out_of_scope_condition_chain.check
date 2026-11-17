@@ -1,0 +1,7 @@
+[error] examples/neg/namer/out_of_scope_condition_chain.effekt:2:86: Could not resolve term y [namer]
+2  def f(x: Option[Option[Int]]) = if (x is Some(y) and y is Some(42)) 1 else { println(y); 0 }
+                                                                                        ^
+
+   * note: There is a `y` bound here, but not in the current scope.
+2  |  def f(x: Option[Option[Int]]) = if (x is Some(y) and y is Some(42)) 1 else { println(y); 0 }
+   |                                                ^

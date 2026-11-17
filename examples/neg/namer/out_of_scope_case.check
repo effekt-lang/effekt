@@ -1,0 +1,7 @@
+[error] examples/neg/namer/out_of_scope_case.effekt:3:18: Could not resolve term y [namer]
+3    case None() => y
+                    ^
+
+   * note: There is a `y` bound here, but not in the current scope.
+2  |    case Some(y) => 1
+   |              ^

@@ -1,0 +1,5 @@
+def f(x: Option[Int]) = x match {
+  case Some(y) => 1
+  case None() => y
+}
+def main() = ()

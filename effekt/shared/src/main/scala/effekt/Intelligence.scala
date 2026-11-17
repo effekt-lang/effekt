@@ -176,7 +176,7 @@ trait Intelligence {
       case Scope.Named(name, bindings, outer) =>
         val bindingsOut = allBindings(BindingOrigin.Defined, bindings)
         ScopeInfo(Some(name), ScopeKind.Namespace, bindingsOut, Some(allBindings(outer)))
-      case Scope.Local(name, imports, bindings, outer) =>
+      case Scope.Local(name, imports, bindings, outer, _) =>
         val bindingsOut = allBindings(BindingOrigin.Imported, imports)
           ++ allBindings(BindingOrigin.Defined, bindings)
         ScopeInfo(name, ScopeKind.Local, bindingsOut, Some(allBindings(outer)))

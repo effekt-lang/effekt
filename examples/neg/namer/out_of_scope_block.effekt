@@ -1,0 +1,5 @@
+def f(b: Bool) = {
+  if (b) { val y = 1; () } else ()
+  y
+}
+def main() = ()
