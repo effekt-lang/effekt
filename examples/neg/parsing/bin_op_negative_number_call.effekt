@@ -1,0 +1,5 @@
+def half(x: Double): Double = x
+
+def main() = {
+  val _ = half(1.0) -0.5
+}

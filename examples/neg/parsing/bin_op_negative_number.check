@@ -1,0 +1,5 @@
+[error] examples/neg/parsing/bin_op_negative_number.effekt:2:12: Expected an operator but got integer -2 [parser]
+2    val _ = 1-2
+              ^^
+
+   * help: A `-` immediately before a digit starts a negative number. To subtract, put a space before and after the `-`.
