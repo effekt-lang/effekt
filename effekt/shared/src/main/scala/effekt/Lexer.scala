@@ -485,6 +485,7 @@ class Lexer(source: Source) extends Iterator[Token] {
       case ('+',   _) => advanceWith(TokenKind.`+`)
 
       case ('-', c) if c.isDigit => advanceWith(number(negative = true))
+      case ('-', '-')            => advance2With(TokenKind.`--`)
       case ('-', '=')            => advance2With(TokenKind.`-=`)
       case ('-', _)              => advanceWith(TokenKind.`-`)
 
