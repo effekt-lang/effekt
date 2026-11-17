@@ -1,0 +1,8 @@
+def run { f: () => Int }: Int = f()
+
+def g(): Int = {
+  val v = 1
+  run {v}
+}
+
+def main() = ()

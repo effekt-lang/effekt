@@ -1,0 +1,5 @@
+def double(x: Int): Int = x + x
+
+def quadruple(): Int = double(1)(2)
+
+def main() = ()
