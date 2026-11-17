@@ -196,8 +196,8 @@ object Typer extends Phase[NameResolved, Typechecked] {
       case source.Unbox(_, _) =>
         Context.abort("Expected an expression, but got an unbox (which is a block).")
 
-      case c @ source.Select(receiver, field, _) =>
-        checkOverloadedFunctionCall(c, field, Nil, Many(List(source.ValueArg.Unnamed(receiver)), c.span.synthesized), Many.empty(field.span.emptyAfter), expected)
+      case source.Select(receiver, field, _) =>
+        Context.panic("Cannot happen: Select is only introduced later")
 
       case c @ source.Do(op, targs, vargs, bargs, _) =>
         // (1) first check the call

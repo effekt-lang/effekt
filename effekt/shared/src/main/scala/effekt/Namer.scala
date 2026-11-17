@@ -1171,20 +1171,6 @@ trait NamerOps extends ContextOps { Context: Context =>
     }
 
   /**
-   * Resolves a potentially overloaded field access
-   */
-  private[namer] def resolveSelect(id: IdRef): Unit = at(id) {
-    val syms = scope.lookupOverloaded(id, term => term.isInstanceOf[Field])
-
-    if (syms.isEmpty) {
-      abort(pretty"Cannot resolve field access ${id}")
-    }
-
-    val bsyms = syms.asInstanceOf[List[Set[BlockSymbol]]]
-    assignSymbol(id, CallTarget(bsyms, Some(scope.scope)))
-  }
-
-  /**
    * Resolves a potentially overloaded call to an effect
    */
   private[namer] def resolveEffectCall(id: IdRef): Unit = at(id) {

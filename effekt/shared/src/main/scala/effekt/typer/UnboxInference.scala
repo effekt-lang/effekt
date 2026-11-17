@@ -95,11 +95,8 @@ object UnboxInference extends Phase[NameResolved, NameResolved] {
     case Match(scs, clauses, default, span) =>
       Match(scs.map(rewriteAsExpr), clauses.map(rewrite), default.map(rewrite), span)
 
-    case s @ Select(recv, name, span) if s.definition.isInstanceOf[Field] =>
-      Select(rewriteAsExpr(recv), name, span)
-
-    case s @ Select(recv, name, span) =>
-      C.abort("selection on blocks not supported yet.")
+    case Select(recv, name, span) =>
+      C.panic("Cannot happen: Select is only introduced later")
 
     case Do(id, targs, vargs, bargs, span) =>
       Do(id, targs, vargs.map(rewriteAsExpr), bargs.map(rewriteAsBlock), span)
