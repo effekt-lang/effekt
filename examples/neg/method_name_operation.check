@@ -1,0 +1,5 @@
+[error] examples/neg/method_name_operation.effekt:8:3: Cannot typecheck call to incremnt. Does a function/method with that name exist? [typer]
+8    c.incremnt()
+     ^^^^^^^^^^^^
+
+   * help: Did you mean increment?

@@ -95,11 +95,8 @@ object UnboxInference extends Phase[NameResolved, NameResolved] {
     case Match(scs, clauses, default, span) =>
       Match(scs.map(rewriteAsExpr), clauses.map(rewrite), default.map(rewrite), span)
 
-    case s @ Select(recv, name, span) if s.definition.isInstanceOf[Field] =>
-      Select(rewriteAsExpr(recv), name, span)
-
-    case s @ Select(recv, name, span) =>
-      C.abort("selection on blocks not supported yet.")
+    case Select(recv, name, span) =>
+      C.panic("Cannot happen: Select is only introduced later")
 
     case Do(id, targs, vargs, bargs, span) =>
       Do(id, targs, vargs.map(rewriteAsExpr), bargs.map(rewriteAsBlock), span)
@@ -107,30 +104,9 @@ object UnboxInference extends Phase[NameResolved, NameResolved] {
     case Call(fun, targs, vargs, bargs, span) =>
       Call(rewrite(fun), targs, vargs.map(rewriteAsExpr), bargs.map(rewriteAsBlock), span)
 
-    case m @ MethodCall(receiver, id, targs, vargs, bargs, span) =>
-      val vargsTransformed = vargs.map(rewriteAsExpr)
-      val bargsTransformed = bargs.map(rewriteAsBlock)
-
-      val hasMethods = m.definition match {
-        case symbols.CallTarget(syms, _) => syms.flatten.exists(_.isInstanceOf[symbols.Operation])
-        case _: symbols.Operation => true
-        case _ => false
-      }
-
-      if (hasMethods) {
-        // True method call on interface - receiver is the object
-        MethodCall(rewriteAsBlock(receiver), id, targs, vargsTransformed, bargsTransformed, span)
-      } else if (!isBlockLike(receiver)) {
-        // Value-UFCS: receiver becomes first value argument
-        Call(IdTarget(id).inheritPosition(id), targs,
-          Many(rewriteAsExpr(ValueArg.Unnamed(receiver)) :: vargsTransformed.unspan, vargsTransformed.span),
-          bargsTransformed, span)
-      } else {
-        // Block-UFCS: receiver becomes first block argument
-        Call(IdTarget(id).inheritPosition(id), targs,
-          vargsTransformed,
-          Many(rewriteAsBlock(receiver) :: bargsTransformed.unspan, bargsTransformed.span), span)
-      }
+    case MethodCall(receiver, id, targs, vargs, bargs, span) =>
+      val recv = if (isBlockLike(receiver)) rewriteAsBlock(receiver) else rewriteAsExpr(receiver)
+      MethodCall(recv, id, targs, vargs.map(rewriteAsExpr), bargs.map(rewriteAsBlock), span)
 
     case TryHandle(prog, handlers, span) =>
       TryHandle(rewrite(prog), handlers.map(rewrite), span)
@@ -145,15 +121,20 @@ object UnboxInference extends Phase[NameResolved, NameResolved] {
       Box(c, rewriteAsBlock(b), span)
   }
 
+  // the unbox of a called value
+  def unboxCallee(t: source.IdTarget)(using C: Context): source.Term = {
+    // Since we synthesized this `Unbox`, we mark the `IdTarget` in question for better error messages.
+    // See [[Annotations.UnboxParent]] for more details about this annotation.
+    val u = source.Unbox(source.Var(t.id, t.id.span).inheritPosition(t), t.span.synthesized).inheritPosition(t)
+    C.annotate(Annotations.UnboxParent, u, t)
+    u
+  }
+
   def rewrite(target: source.CallTarget)(using C: Context): source.CallTarget = visit(target) {
     case source.ExprTarget(receiver) => source.ExprTarget(rewriteAsBlock(receiver))
     case t: source.IdTarget => t.definition match {
       case sym: (ValueSymbol | symbols.RefBinder) =>
-        // Since we synthesized this `Unbox`, we mark the `IdTarget` in question for better error messages.
-        // See [[Annotations.UnboxParent]] for more details about this annotation.
-        val u = source.Unbox(source.Var(t.id, t.id.span).inheritPosition(t), t.span.synthesized).inheritPosition(t)
-        C.annotate(Annotations.UnboxParent, u, t)
-        source.ExprTarget(u).inheritPosition(t)
+        source.ExprTarget(unboxCallee(t)).inheritPosition(t)
       case sym: BlockSymbol =>
         t
     }
@@ -249,6 +230,9 @@ object UnboxInference extends Phase[NameResolved, NameResolved] {
     C.copyAnnotations(source, target)
     target
   }
+
+  def asBlock(receiver: Term)(using Context): Term =
+    if (isBlockLike(receiver)) receiver else Unbox(receiver, receiver.span.synthesized)
 
   /**
    * Determines if a term is inherently a block (computation) based on its syntactic form & definition.

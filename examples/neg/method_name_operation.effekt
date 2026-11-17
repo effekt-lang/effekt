@@ -1,0 +1,9 @@
+module method_name_operation
+
+interface Counter { def increment(): Unit }
+
+// `increment` is an operation of `Counter`, so it is suggested for a block receiver
+def main() = {
+  def c = new Counter { def increment() = () }
+  c.incremnt()
+}

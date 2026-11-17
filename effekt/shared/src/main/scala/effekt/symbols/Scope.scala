@@ -244,7 +244,7 @@ object scopes {
     // a specific heuristic first, then the closest of the candidates given by scope (nearest first)
     private def didYouMean(nameNotFound: String, candidates: => Seq[Seq[String]], specificHeuristic: String => Option[StructuredMessage] = _ => None)(using Subdiagnostics): Unit =
       specificHeuristic(nameNotFound) orElse {
-        suggestion(effekt.util.closest(nameNotFound, candidates)(identity))
+        suggestion(effekt.util.CloseMatches(nameNotFound, candidates)(identity).closest)
       } foreach { msg => help(msg) }
 
     def explainMissingTerm(id: IdRef)(using Subdiagnostics): Unit =
@@ -304,28 +304,11 @@ object scopes {
     def lookupOverloaded(id: IdRef, filter: TermSymbol => Boolean)(using ErrorReporter): List[Set[TermSymbol]] =
       all(id.path, scope) { _.terms.getOrElse(id.name, Set.empty).filter(filter) }
 
-    def lookupOverloadedMethod(id: IdRef, filter: TermSymbol => Boolean)(using ErrorReporter): List[Set[Operation]] =
-      all(id.path, scope) { namespace =>
-        namespace.terms.getOrElse(id.name, Set.empty).collect { case op: Operation if filter(op) => op }
-      }
-
     // the last element in the path can also be the type of the name.
     def lookupOperation(path: List[String], name: String)(using ErrorReporter): List[Set[Operation]] =
       all(path, scope) { namespace =>
         namespace.terms.getOrElse(name, Set.empty).collect { case op: Operation => op }
       }.filter { namespace => namespace.nonEmpty }
-
-    def lookupFunction(path: List[String], name: String)(using ErrorReporter): List[Set[Callable]] =
-      all(path, scope) { namespace =>
-        namespace.terms.getOrElse(name, Set.empty).collect { case c: Callable if !c.isInstanceOf[Operation] => c }
-      }.filter { namespace => namespace.nonEmpty }
-
-    def lookupFirstBlockParam(path: List[String], name: String)(using ErrorReporter): Set[BlockParam] =
-       first(path, scope) { namespace =>
-        namespace.terms.get(name).map(set =>
-          set.collect { case bp: BlockParam => bp }
-        )
-      }.getOrElse(Set.empty)
 
     // can be a term OR a type symbol
     def lookupFirst(path: List[String], name: String)(using E: ErrorReporter): Symbol =

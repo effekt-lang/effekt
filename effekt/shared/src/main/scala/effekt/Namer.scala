@@ -556,35 +556,7 @@ object Namer extends Phase[Parsed, NameResolved] {
     case source.MethodCall(receiver, target, targs, vargs, bargs, _) =>
       resolve(receiver)
 
-      // We are a bit context sensitive in resolving the method
-      Context.focusing(target) { _ =>
-        receiver match {
-          case source.Var(id, _) => Context.resolveTerm(id) match {
-            // (foo: ValueType).bar(args)  = Call(bar, foo :: args)
-            case symbol: ValueSymbol =>
-              if !Context.resolveOverloadedFunction(target)
-              then Context.abort(pp"Cannot resolve function ${target}, called on a value receiver.")
-
-            case symbol: RefBinder =>
-              if !Context.resolveOverloadedFunction(target)
-              then Context.abort(pp"Cannot resolve function ${target}, called on a receiver that is a reference.")
-
-            // (foo: BlockType).bar(args)  = Invoke(foo, bar, args)
-            case symbol: BlockSymbol =>
-              if !Context.resolveOverloadedOperation(target)
-              then Context.abort(pp"Cannot resolve operation ${target}, called on a receiver that is a computation.")
-          }
-
-          case source.Unbox(term, _) =>
-            if !Context.resolveOverloadedFunction(target)
-            then Context.abort(pp"Cannot resolve operation ${target}, called on an unboxed computation.")
-
-          // expr.bar(args) = Call(bar, expr :: args)
-          case term =>
-            if !Context.resolveOverloadedFunction(target)
-            then Context.abort(pp"Cannot resolve function ${target}, called on an expression.")
-        }
-      }
+      Context.focusing(target) { _ => Context.resolveReceiverCall(target) }
       targs foreach resolveValueType
       vargs.foreach(resolve)
       bargs.foreach(resolve)
@@ -1129,34 +1101,9 @@ trait NamerOps extends ContextOps { Context: Context =>
     sym
   }
 
-  /**
-   * Resolves a potentially overloaded method target
-   */
-  private[namer] def resolveOverloadedOperation(id: IdRef): Boolean = at(id) {
-    val syms = scope.lookupOperation(id.path, id.name)
-
-    val syms2 = if (syms.isEmpty) scope.lookupFunction(id.path, id.name) else syms
-
-    if (syms2.nonEmpty) {
-      val syms3 = syms2.asInstanceOf[List[Set[BlockSymbol]]]
-      assignSymbol(id, CallTarget(syms3, Some(scope.scope)))
-      true
-    } else { false }
-  }
-
-  private[namer] def resolveOverloadedFunction(id: IdRef): Boolean = at(id) {
-    val syms = scope.lookupFunction(id.path, id.name)
-
-    val syms2 = if (syms.isEmpty) scope.lookupOperation(id.path, id.name) else syms
-
-    // lookup first block param and do not collect multiple since we do not (yet?) permit overloading on block parameters
-    val syms3 = if (syms2.isEmpty) List(scope.lookupFirstBlockParam(id.path, id.name)) else syms2
-
-    if (syms3.nonEmpty) {
-      val syms4 = syms3.asInstanceOf[List[Set[BlockSymbol]]]
-      assignSymbol(id, CallTarget(syms4, Some(scope.scope)))
-      true
-    } else { false }
+  // values are candidates too, but do not shadow: a value that does not take `x` leaves `f` to outer scopes
+  private[namer] def resolveReceiverCall(id: IdRef): Unit = at(id) {
+    assignSymbol(id, CallTarget(scope.lookupOverloaded(id, _ => true).filterNot(_.isEmpty), Some(scope.scope)))
   }
 
   /**
@@ -1194,7 +1141,7 @@ trait NamerOps extends ContextOps { Context: Context =>
    *    and resolve to an overloaded target.
    */
   @tailrec
-  private def resolveFunctionCalltarget(id: IdRef, candidates: List[Set[TermSymbol]]): Either[TermSymbol, List[Set[BlockSymbol]]] =
+  private[effekt] final def resolveFunctionCalltarget(id: IdRef, candidates: List[Set[TermSymbol]]): Either[TermSymbol, List[Set[BlockSymbol]]] =
 
     // Mutable variables are treated as values, not as blocks. Maybe we should change the representation.
     def isValue(t: TermSymbol): Boolean = t.isInstanceOf[ValueSymbol] || t.isInstanceOf[RefBinder]
@@ -1222,20 +1169,6 @@ trait NamerOps extends ContextOps { Context: Context =>
 
       case _ => panic("Should not happen")
     }
-
-  /**
-   * Resolves a potentially overloaded field access
-   */
-  private[namer] def resolveSelect(id: IdRef): Unit = at(id) {
-    val syms = scope.lookupOverloaded(id, term => term.isInstanceOf[Field])
-
-    if (syms.isEmpty) {
-      abort(pretty"Cannot resolve field access ${id}")
-    }
-
-    val bsyms = syms.asInstanceOf[List[Set[BlockSymbol]]]
-    assignSymbol(id, CallTarget(bsyms, Some(scope.scope)))
-  }
 
   /**
    * Resolves a potentially overloaded call to an effect

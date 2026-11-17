@@ -222,7 +222,7 @@ object messages {
     }
   }
 
-  case class Candidate(symbol: symbols.BlockSymbol, tpe: symbols.FunctionType, failure: Option[Failure], definitionTree: Option[source.IdDef]) {
+  case class Candidate(symbol: symbols.TermSymbol, tpe: symbols.Type, failure: Option[Failure], definitionTree: Option[source.IdDef]) {
     def errors: EffektMessages = failure.map(_.diagnostics).getOrElse(Vector.empty)
 
     // without its declaration

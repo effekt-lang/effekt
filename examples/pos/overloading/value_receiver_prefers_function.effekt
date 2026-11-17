@@ -1,4 +1,4 @@
-// Namer: for a value receiver, `xs.size()` calls the function, not the operation of the same name
+// Typer: for a value receiver, the operation `size` and the function `size` are both candidates; only the function takes a list
 interface Sized { def size(): Int }
 def size(xs: List[Int]): Int = 42
 def main() = println([1, 2, 3].size())

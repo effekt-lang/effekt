@@ -1,0 +1,7 @@
+// implicits: like for `f(...)`, a value `fmt` in a tighter scope shadows the function `fmt`
+// `?fmt` then finds the outer one _only if_ no value is closer
+def fmt(x: Int): String = "outer"
+def describe(x: Int) { ?fmt: Int => String }: String = fmt(x)
+def main() = {
+  println(describe(1))
+}

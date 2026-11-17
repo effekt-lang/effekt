@@ -193,9 +193,13 @@ object GenerateImplicitArgs {
             BlockParam(IdDef(s"block_arg${i}", span.synthesized), Some(source.BlockTypeTree(p, span.synthesized)), false, span.synthesized)
           }
         Try {
-          val candidates = scope.lookupOverloaded(IdRef(Nil, p.name.name, span.synthesized), term => !term.isInstanceOf[Operation])
-            .map { scope => scope.collect { case b: symbols.BlockSymbol => b } }
-          ImplicitBlockLiteral(p.name.name, symbols.CallTarget(candidates, Some(scope.scope)))
+          val id = IdRef(Nil, p.name.name, span.synthesized)
+          // like for `f(...)`: a value in the innermost scope shadows the blocks
+          val blocks = Context.resolveFunctionCalltarget(id, scope.lookupOverloaded(id, term => !term.isInstanceOf[Operation])) match {
+            case Left(_) => Nil
+            case Right(blocks) => blocks
+          }
+          ImplicitBlockLiteral(p.name.name, symbols.CallTarget(blocks, Some(scope.scope)))
         } match {
           case Left(failure) => Error(ImplicitBlockLiteral(p.name.name, symbols.CallTarget(Nil, Some(scope.scope))), index, failure)
           case Right(r) => r

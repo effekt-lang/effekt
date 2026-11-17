@@ -1,0 +1,8 @@
+// implicits: like for `f(...)`, a value `fmt` in the tightest scope shadows the function `fmt`, so no block `fmt` is found for `?fmt`
+def fmt(x: Int): String = "outer"
+def describe(x: Int) { ?fmt: Int => String }: String = fmt(x)
+def main() = {
+  val fmt = 42
+  val s: String = describe(1)
+  ()
+}

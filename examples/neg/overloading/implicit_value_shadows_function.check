@@ -1,0 +1,7 @@
+[error] examples/neg/overloading/implicit_value_shadows_function.effekt:6:30: Cannot instantiate implicit argument. [typer]
+6    val s: String = describe(1)
+                                ^
+
+   Cannot instantiate 1st block argument fmt of type Int => String.
+6    val s: String = describe(1)
+                                ^ Cannot typecheck call to fmt. Does a function/method with that name exist?

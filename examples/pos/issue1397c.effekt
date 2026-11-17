@@ -1,0 +1,5 @@
+def display(x: Int): String = x.show
+
+def bar[A](x: A){ ? display: A => String }: String = x.display
+
+def main() = println(bar(12))

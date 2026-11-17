@@ -196,8 +196,8 @@ object Typer extends Phase[NameResolved, Typechecked] {
       case source.Unbox(_, _) =>
         Context.abort("Expected an expression, but got an unbox (which is a block).")
 
-      case c @ source.Select(receiver, field, _) =>
-        checkOverloadedFunctionCall(c, field, Nil, Many(List(source.ValueArg.Unnamed(receiver)), c.span.synthesized), Many.empty(field.span.emptyAfter), expected)
+      case source.Select(receiver, field, _) =>
+        Context.panic("Cannot happen: Select is only introduced later")
 
       case c @ source.Do(op, targs, vargs, bargs, _) =>
         // (1) first check the call
@@ -222,25 +222,10 @@ object Typer extends Phase[NameResolved, Typechecked] {
         checkOverloadedFunctionCall(c, t.id, targs map { _.resolveValueType }, vargs, bargs, expected)
 
       case c @ source.Call(source.ExprTarget(e), targs, vargs, bargs, _) =>
-        // Construct a hint: expected arity + return type
-        // Fresh vars are created inside checkExprAsBlock only if the callee type is unresolved.
-        // Note that block args are excluded, their types would require block type unification. [!]
-        val hint: Option[(Int, ValueType)] =
-          if bargs.isEmpty then expected.map(e => (vargs.length, e.tpe))
-          else None
+        checkCallOfExpr(c, e, targs map { _.resolveValueType }, vargs, bargs, expected)
 
-        val Result(tpe, funEffs) = checkExprAsBlock(e, None, hint) match {
-          case Result(b: FunctionType, capt) => Result(b, capt)
-          case _ => Context.abort("Cannot infer function type for callee.")
-        }
-
-        val Result(t, eff) = checkCallTo(c, "function", Nil, Nil, tpe, targs map { _.resolveValueType }, vargs, bargs, expected, None)
-        Result(t, eff ++ funEffs)
-
-      // precondition: PreTyper translates all uniform-function calls to `Call`.
-      //   so the method calls here are actually methods calls on blocks as receivers.
       case c @ source.MethodCall(receiver, id, targs, vargs, bargs, _) =>
-        checkOverloadedMethodCall(c, receiver, id, targs map { _.resolveValueType }, vargs, bargs, expected)
+        checkReceiverCall(c, receiver, id, targs map { _.resolveValueType }, vargs, bargs, expected)
 
       case tree @ source.Region(name, body, _) =>
         val reg = tree.symbol
@@ -1149,13 +1134,32 @@ object Typer extends Phase[NameResolved, Typechecked] {
     case b: BlockSymbol => (Context.lookupFunctionType(b), Context.lookupCapture(b))
   }
 
-  /**
-   * We do not respect nested scoping on overload resolution for methods right now.
-   *
-   * Uniform function syntax has been desugared by [[PreTyper]]
-   */
-  def checkOverloadedMethodCall(
+  def checkCallOfExpr(
     call: source.CallLike,
+    callee: source.Term,
+    targs: List[ValueType],
+    vargs: Many[source.ValueArg],
+    bargs: Many[source.Term],
+    expected: Option[Expectation]
+  )(using Context, Captures): Result[ValueType] = {
+    // Construct a hint: expected arity + return type
+    // Fresh vars are created inside checkExprAsBlock only if the callee type is unresolved.
+    // Note that block args are excluded, their types would require block type unification. [!]
+    val hint: Option[(Int, ValueType)] =
+      if bargs.isEmpty then expected.map(e => (vargs.length, e.tpe))
+      else None
+
+    val Result(tpe, funEffs) = checkExprAsBlock(callee, None, hint) match {
+      case Result(b: FunctionType, capt) => Result(b, capt)
+      case _ => Context.abort("Cannot infer function type for callee.")
+    }
+
+    val Result(t, eff) = checkCallTo(call, "function", Nil, Nil, tpe, targs, vargs, bargs, expected, None)
+    Result(t, eff ++ funEffs)
+  }
+
+  def checkReceiverCall(
+    call: source.MethodCall,
     receiver: source.Term,
     id: source.IdRef,
     targs: List[ValueType],
@@ -1163,59 +1167,90 @@ object Typer extends Phase[NameResolved, Typechecked] {
     bargs: Many[source.Term],
     expected: Option[Expectation]
   )(using Context, Captures): Result[ValueType] = {
-    val sym = id.symbol
-
-    val (methods, scope) = sym match {
+    val (scopes, iscope) = id.symbol match {
       // an overloaded call target
-      case CallTarget(syms, scope) => (inReportedOrder(syms.flatten.collect { case op: Operation => op }), scope)
+      case CallTarget(syms, iscope) => (syms, iscope)
       // already resolved by a previous attempt to typecheck
-      case sym: Operation => (List(sym), None)
-      case s => Context.panic(s"Not a valid method: ${s} : ${s.getClass.getSimpleName}")
+      case sym: TermSymbol => (List(Set(sym)), None)
+      case s => Context.panic(s"Not a valid call target: ${s}")
     }
 
+    def checkCandidate(expected: Option[Expectation])(sym: TermSymbol) =
+      checkReceiverCallTo(call, receiver, sym, targs, vargs, bargs, expected, iscope)
+
+    val results = scopes map { scope => tryEach(inReportedOrder(scope))(checkCandidate(expected)) }
+
+    // without the expected type: the suggestion must not depend on an enclosing choice
+    resolveOverload(id, results, explainMissingMethod(id, iscope)(checkCandidate(None)))
+  }
+
+  def checkReceiverCallTo(
+    call: source.MethodCall,
+    receiver: source.Term,
+    sym: TermSymbol,
+    targs: List[ValueType],
+    vargs: Many[source.ValueArg],
+    bargs: Many[source.Term],
+    expected: Option[Expectation],
+    scope: Option[scopes.Scope]
+  )(using Context, Captures): Result[ValueType] = sym match {
+    case op: Operation =>
+      checkMethodCall(call, UnboxInference.asBlock(receiver), op, targs, vargs, bargs, expected, scope)
+    case _ if UnboxInference.isBlockLike(receiver) =>
+      checkCallToCandidate(call, sym, targs, vargs, Many(receiver :: bargs.unspan, bargs.span), expected, scope)
+    case _ =>
+      checkCallToCandidate(call, sym, targs, Many(source.ValueArg.Unnamed(receiver) :: vargs.unspan, vargs.span), bargs, expected, scope)
+  }
+
+  def checkMethodCall(
+    call: source.CallLike,
+    receiver: source.Term,
+    op: Operation,
+    targs: List[ValueType],
+    vargs: Many[source.ValueArg],
+    bargs: Many[source.Term],
+    expected: Option[Expectation],
+    scope: Option[scopes.Scope]
+  )(using Context, Captures): Result[ValueType] = {
     val Result(recvTpe, recvEffs) = checkExprAsBlock(receiver, None)
 
     val interface = recvTpe.asInterfaceType
-    // filter out operations that do not fit the receiver
-    val candidates = methods.filter( op => op.interface == interface.typeConstructor )
+    if (op.interface != interface.typeConstructor) Context.abort(TypeMismatch(op.appliedInterface, interface))
 
-    val (successes, errors) = tryEach(candidates) { op =>
-      val (funTpe, capture) = findFunctionTypeFor(op)
+    val (funTpe, capture) = findFunctionTypeFor(op)
 
-      // 1) check arity of explicitly provided type arguments
+    // 1) check arity of explicitly provided type arguments
 
-      if (targs.nonEmpty && targs.size != funTpe.tparams.size)
-        Context.abort(s"Wrong number of type arguments, given ${targs.size} but expected ${funTpe.tparams.size}")
+    if (targs.nonEmpty && targs.size != funTpe.tparams.size)
+      Context.abort(s"Wrong number of type arguments, given ${targs.size} but expected ${funTpe.tparams.size}")
 
-      // 2)
-      // args present: check prefix against receiver
-      (targs zip interface.args).foreach { case (manual, inferred) =>
-        matchExpected(inferred, manual, None)
+    // 2)
+    // args present: check prefix against receiver
+    (targs zip interface.args).foreach { case (manual, inferred) =>
+      matchExpected(inferred, manual, None)
+    }
+
+    // args missing: synthesize args from receiver and unification variables (e.g. [Int, String, ?A, ?B])
+    def fillInTypeArguments(tparams: List[TypeParam], interfaceArgs: List[ValueType]): List[ValueType] =
+      (tparams, interfaceArgs) match {
+        // we have an argument, provided by the interface: use it
+        case (param :: params, arg :: args) => arg :: fillInTypeArguments(params, args)
+        // we don't have an argument, create fresh unification variable
+        case (param :: params, Nil) => ValueTypeRef(Context.freshTypeVar(param, call)) :: fillInTypeArguments(params, Nil)
+        case (Nil, _) => Nil
       }
 
-      // args missing: synthesize args from receiver and unification variables (e.g. [Int, String, ?A, ?B])
-      def fillInTypeArguments(tparams: List[TypeParam], interfaceArgs: List[ValueType]): List[ValueType] =
-        (tparams, interfaceArgs) match {
-          // we have an argument, provided by the interface: use it
-          case (param :: params, arg :: args) => arg :: fillInTypeArguments(params, args)
-          // we don't have an argument, create fresh unification variable
-          case (param :: params, Nil) => ValueTypeRef(Context.freshTypeVar(param, call)) :: fillInTypeArguments(params, Nil)
-          case (Nil, _) => Nil
-        }
+    val synthTargs = if targs.nonEmpty then targs else fillInTypeArguments(funTpe.tparams, interface.args)
 
-      val synthTargs = if targs.nonEmpty then targs else fillInTypeArguments(funTpe.tparams, interface.args)
+    // TODO maybe type checking all calls should have a similar structure like above:
+    //   1. make up and annotate unification variables, if no type arguments are there
+    //   2. type check call with either existing or made up type arguments
 
-      // TODO maybe type checking all calls should have a similar structure like above:
-      //   1. make up and annotate unification variables, if no type arguments are there
-      //   2. type check call with either existing or made up type arguments
-
-      checkCallTo(call, op.name.name, op.vparams, op.bparams, funTpe, synthTargs, vargs, bargs, expected, scope)
-    }
-    resolveOverload(id, List((successes, errors)))
+    checkCallTo(call, op.name.name, op.vparams, op.bparams, funTpe, synthTargs, vargs, bargs, expected, scope)
   }
 
   // sorted by the name we report them by, then by where they are declared, so that their order does not depend on hashing
-  private def inReportedOrder[S <: BlockSymbol](candidates: Iterable[S]): List[S] =
+  private def inReportedOrder[S <: TermSymbol](candidates: Iterable[S]): List[S] =
     candidates.toList.sortBy { s => (fullname(s.name), s.decl.span.from) }
 
   /**
@@ -1238,7 +1273,7 @@ object Typer extends Phase[NameResolved, Typechecked] {
       // an overloaded call target
       case CallTarget(syms, iscope) => (syms, iscope)
       // already resolved by a previous attempt to typecheck
-      case sym: BlockSymbol => (List(Set(sym)), None)
+      case sym: BlockSymbol => (List(Set[TermSymbol](sym)), None)
       case id: ValueSymbol => Context.abort(pp"Cannot call value ${id}")
     }
 
@@ -1261,58 +1296,78 @@ object Typer extends Phase[NameResolved, Typechecked] {
     // - If there is none: proceed to outer scope
     // - If there is exactly one match, fully typecheck the call with this.
     val results = scopes map { scope => tryEach(inReportedOrder(scope)) { receiver =>
-      val (funTpe, capture) = findFunctionTypeFor(receiver)
-      val (vps, bps) = receiver match {
-        case c: Callable  => (c.vparams, c.bparams)
-        case _ => (Nil, Nil)
-      }
-      val Result(tpe, effs) = checkCallTo(call, receiver.name.name, vps, bps, funTpe, targs, vargs, bargs, expected, iscope)
-      // This is different, compared to method calls:
-      usingCapture(capture)
-      Result(tpe, effs)
+      checkCallToCandidate(call, receiver, targs, vargs, bargs, expected, iscope)
     }}
 
-    resolveOverload(id, results, explainMissingMethod(id, vargs, iscope))
+    resolveOverload(id, results)
   }
 
-  private def explainMissingMethod(id: source.IdRef, vargs: Many[source.ValueArg], scope: Option[scopes.Scope])(using Context, Captures, Subdiagnostics): Unit =
+  def checkCallToCandidate(
+    call: source.CallLike,
+    receiver: TermSymbol,
+    targs: List[ValueType],
+    vargs: Many[source.ValueArg],
+    bargs: Many[source.Term],
+    expected: Option[Expectation],
+    scope: Option[scopes.Scope]
+  )(using Context, Captures): Result[ValueType] = receiver match {
+    // a value is called as `f(…)` calls it
+    case value: (ValueSymbol | RefBinder) =>
+      val target = new source.IdTarget(source.IdRef(Nil, value.name.name, call.span.synthesized))
+      Context.annotateSymbol(target.id, value)
+      checkCallOfExpr(call, UnboxInference.unboxCallee(target), targs, vargs, bargs, expected)
+    case block: BlockSymbol => checkCallToBlock(call, block, targs, vargs, bargs, expected, scope)
+  }
+
+  def checkCallToBlock(
+    call: source.CallLike,
+    receiver: BlockSymbol,
+    targs: List[ValueType],
+    vargs: Many[source.ValueArg],
+    bargs: Many[source.Term],
+    expected: Option[Expectation],
+    scope: Option[scopes.Scope]
+  )(using Context, Captures): Result[ValueType] = {
+    val (funTpe, capture) = findFunctionTypeFor(receiver)
+    val (vps, bps) = receiver match {
+      case c: Callable  => (c.vparams, c.bparams)
+      case _ => (Nil, Nil)
+    }
+    val Result(tpe, effs) = checkCallTo(call, receiver.name.name, vps, bps, funTpe, targs, vargs, bargs, expected, scope)
+    // This is different, compared to method calls:
+    usingCapture(capture)
+    Result(tpe, effs)
+  }
+
+  private def explainMissingMethod(id: source.IdRef, scope: Option[scopes.Scope])(checkCandidate: TermSymbol => Result[ValueType])(using Context, Subdiagnostics): Unit =
     scope.flatMap { s => scopes.endedTerm(id, s) } match {
       case Some(binder) => scopes.noteEnded(binder)
-      case None => didYouMeanMethod(id, vargs, scope)
+      case None => didYouMeanMethod(id, scope)(checkCandidate)
     }
 
-  /** Helps with a function called on a receiver that cannot be found */
-  private def didYouMeanMethod(id: source.IdRef, vargs: Many[source.ValueArg], scope: Option[scopes.Scope])(using Context, Captures, Subdiagnostics): Unit = {
-    val receiver = vargs.unspan.headOption.flatMap { arg =>
-      Try { checkExpr(arg.value, None).tpe }.toOption.map { tpe => Context.unification(tpe) }
-    }
+  /** Helps with `x.f(…)` when nothing named `f` exists: the closest names with a candidate that accepts the call */
+  private def didYouMeanMethod(id: source.IdRef, scope: Option[scopes.Scope])(checkCandidate: TermSymbol => Result[ValueType])(using Context, Subdiagnostics): Unit = {
+    def accepts(syms: Set[TermSymbol]): Boolean = tryEach(syms.toList)(checkCandidate)._1.nonEmpty
 
-    def takesReceiver(sym: TermSymbol): Boolean = (sym, receiver) match {
-      case (_: Operation, _) => false
-      case (c: Callable, Some(ValueTypeApp(constructor, _))) => c.vparams.headOption.flatMap { p => p.tpe }.exists {
-        case ValueTypeApp(other, _) => other == constructor
-        case ValueTypeRef(param: TypeParam) => c.tparams.contains(param)
-        case _ => false
-      }
-      // a receiver of no known type constructor: any callable with a parameter
-      case (c: Callable, _) => c.vparams.nonEmpty
-      case _ => false
-    }
-    val candidates = scope.toList.flatMap { s => scopes.visibleTerms(Nil, s) }.map { terms =>
-      terms.collect { case (name, syms) if syms.exists(takesReceiver) => name }
-    }
+    val candidates = scope.toList.flatMap { s => scopes.visibleTerms(Nil, s) }
+    val closest = effekt.util.CloseMatches(id.name, candidates) { case (name, _) => name }.filter { case (_, syms) => accepts(syms) }.closest
+    suggestion(closest.map { case (name, _) => name }).foreach(help)
+  }
 
-    suggestion(effekt.util.closest(id.name, candidates)(identity)).foreach(help)
+  private def candidateType(sym: TermSymbol)(using Context): Type = sym match {
+    case x: ValueSymbol => Context.lookup(x)
+    case x: RefBinder => TState.extractType(Context.lookup(x)._1)
+    case b: BlockSymbol => findFunctionTypeFor(b)._1
   }
 
   private def resolveOverload(
     id: source.IdRef,
-    scopes: List[(List[(BlockSymbol, Result[ValueType], TyperState)], List[(BlockSymbol, Failure)])],
+    scopes: List[(List[(TermSymbol, Result[ValueType], TyperState)], List[(TermSymbol, Failure)])],
     explainMissing: Subdiagnostics ?=> Unit = () // explain a call when no candidate found
   )(using Context): Result[ValueType] = {
 
-    def candidate(sym: BlockSymbol, failure: Option[Failure]) =
-      Candidate(sym, findFunctionTypeFor(sym)._1, failure, Context.definitionTreeOption(sym))
+    def candidate(sym: TermSymbol, failure: Option[Failure]) =
+      Candidate(sym, candidateType(sym), failure, Context.definitionTreeOption(sym))
 
     scopes foreachAborting { (successes, failures) =>
       // A candidate whose implicit search was cut off could have worked, so it competes with the successes of its scope

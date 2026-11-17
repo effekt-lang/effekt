@@ -6,6 +6,7 @@ import effekt.symbols.*
 import effekt.context.assertions.*
 import effekt.source.Tree.Rewrite
 import effekt.source.SpannedOps._
+import effekt.typer.UnboxInference
 
 /**
  * Transformation on source trees that translates programs into explicit capability-passing style
@@ -82,9 +83,21 @@ object ExplicitCapabilities extends Phase[Typechecked, Typechecked], Rewrite {
       val typeArguments = Context.annotation(Annotations.TypeArguments, c)
       val typeArgs = typeArguments.map { e => ValueTypeTree(e, Span.missing) }
 
-      val recv = rewrite(receiver)
-
-      MethodCall(recv, id, typeArgs, Many(valueArgs, vargs.span), Many(blockArgs ++ capabilityArgs, bargs.span), span)
+      // the shape of the call follows from the chosen candidate and the kind of the receiver
+      c.definition match {
+        case value: (ValueSymbol | RefBinder) if UnboxInference.isBlockLike(receiver) =>
+          Call(ExprTarget(Unbox(referenceToValue(value), span.synthesized)), typeArgs, Many(valueArgs, vargs.span), Many(rewrite(receiver) :: blockArgs ++ capabilityArgs, bargs.span), span)
+        case value: (ValueSymbol | RefBinder) =>
+          Call(ExprTarget(Unbox(referenceToValue(value), span.synthesized)), typeArgs, Many(ValueArg.Unnamed(rewrite(receiver)) :: valueArgs, vargs.span), Many(blockArgs ++ capabilityArgs, bargs.span), span)
+        case _: Operation =>
+          MethodCall(rewrite(UnboxInference.asBlock(receiver)), id, typeArgs, Many(valueArgs, vargs.span), Many(blockArgs ++ capabilityArgs, bargs.span), span)
+        case _: Field =>
+          Select(rewrite(receiver), id, span)
+        case _ if UnboxInference.isBlockLike(receiver) =>
+          Call(IdTarget(id), typeArgs, Many(valueArgs, vargs.span), Many(rewrite(receiver) :: blockArgs ++ capabilityArgs, bargs.span), span)
+        case _ =>
+          Call(IdTarget(id), typeArgs, Many(ValueArg.Unnamed(rewrite(receiver)) :: valueArgs, vargs.span), Many(blockArgs ++ capabilityArgs, bargs.span), span)
+      }
 
     case c @ Call(recv, targs, vargs, bargs, span) =>
       val receiver = rewrite(recv)
@@ -158,6 +171,17 @@ object ExplicitCapabilities extends Phase[Typechecked, Typechecked], Rewrite {
     C.assignSymbol(id, capability)
     val ref: Var = Var(id, Span.missing)
     C.annotate(Annotations.InferredBlockType, ref, C.blockTypeOf(capability))
+    ref
+
+  def referenceToValue(value: ValueSymbol | RefBinder)(using C: Context): Var =
+    val id = IdRef(Nil, value.name.name, Span.missing)
+    C.assignSymbol(id, value)
+    val ref: Var = Var(id, Span.missing)
+    val tpe = value match {
+      case v: ValueSymbol => C.valueTypeOf(v)
+      case r: RefBinder => builtins.TState.extractType(C.blockTypeOf(r))
+    }
+    C.annotate(Annotations.InferredValueType, ref, tpe)
     ref
 
   def definitionFor(s: symbols.BlockParam)(using C: Context): source.BlockParam =

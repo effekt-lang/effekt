@@ -1,0 +1,10 @@
+def foo(): Int = 377 // commenting this line fixes the error below.
+
+interface Foo {
+  def foo(): Bool
+}
+
+def main() = {
+  val x = box new Foo { def foo() = true }
+  println(x.foo())
+}

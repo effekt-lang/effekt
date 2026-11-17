@@ -1,0 +1,8 @@
+interface F { def foo(n: Int): Int }
+def foo(s: String): Int = 0
+
+def main() = {
+  val b: F at {} = box new F { def foo(n) = n + 1 }
+  println(b.foo(1))
+  println(foo("x"))
+}
