@@ -1,0 +1,10 @@
+// from issue #1599
+record Interval(from: Int, to: Int)
+
+def infixMinusMinus(a: Interval, b: Interval): Interval = Interval(a.from, b.from)
+
+def main() = {
+  val i = Interval(1, 10) -- Interval(5, 10)
+  println(i.from)
+  println(i.to)
+}
