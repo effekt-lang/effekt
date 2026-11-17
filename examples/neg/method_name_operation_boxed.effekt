@@ -1,0 +1,9 @@
+module method_name_operation_boxed
+
+interface Counter { def increment(): Unit }
+
+// `increment` is an operation of `Counter`, so it is suggested for a boxed receiver
+def main() = {
+  val b: Counter at {} = box new Counter { def increment() = () }
+  b.incremnt()
+}

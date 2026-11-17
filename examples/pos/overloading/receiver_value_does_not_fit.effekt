@@ -1,0 +1,4 @@
+// Typer: for `x.f(…)`, a value hides nothing: the parameter `len` is not a function, so `xs.len()` calls the function `len`
+def len(xs: List[Int]): Int = 7
+def f(len: Int, xs: List[Int]): Int = xs.len() + len
+def main() = println(f(1, [1]))

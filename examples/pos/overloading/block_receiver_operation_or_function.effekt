@@ -1,0 +1,7 @@
+// Typer (#1397): for a block receiver, the operation `size` and the function `size` are both candidates; only the function takes `inc`
+interface Sized { def size(): Int }
+def size { f: Int => Int }: Int = f(41)
+def main() = {
+  def inc(x: Int) = x + 1
+  println(inc.size())
+}

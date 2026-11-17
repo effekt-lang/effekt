@@ -1,0 +1,7 @@
+// Typer: for `x.f(…)`, a value is a candidate of its scope: the binder `inc` is closer than the function `inc`
+def inc(xs: List[Int]): Int = 0
+def f(fs: List[Int => Int at {}]): Int = fs match {
+  case Cons(inc, _) => 1.inc()
+  case Nil() => 0
+}
+def main() = println(f([box { x => x + 1 }]))

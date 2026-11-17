@@ -1,0 +1,15 @@
+interface Stream[A] {
+  def head(): A
+  def tail(): Stream[A] at {}
+}
+
+def ones(): Stream[Int] at {} = box new Stream[Int] {
+  def head() = 1
+  def tail() = ones()
+}
+
+def main() = {
+  val rest: Stream[Int] at {} = ones()
+  println(rest.head())
+  println(rest.tail().head())
+}
