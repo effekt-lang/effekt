@@ -608,6 +608,12 @@ object Typer extends Phase[NameResolved, Typechecked] {
                     // Since this `unbox` was synthesized by the compiler when trying to call a value as if it was a function (e.g., `myArray(0)`),
                     // we provide a more helpful error message; see [issue #737](https://github.com/effekt-lang/effekt/issues/737)
                     Context.abort(pretty"Expected $id to be a function, but got a value of type $vtpe instead, which cannot be called as a function.")
+                  case Some(source.ExprTarget(_)) =>
+                    Context.abort(pretty"Expected a function, but got a value of type $vtpe instead, which cannot be called as a function.")
+                  case _ if u.span.origin == source.Origin.Synthesized => expected match {
+                    case Some(tpe) => Context.abort(pretty"Expected $tpe, but got a value of type $vtpe.")
+                    case None => Context.abort(pretty"Expected a block, but got a value of type $vtpe.")
+                  }
                   case _ =>
                     Context.abort(pretty"Unbox requires a boxed type, but got $vtpe.")
                 }
