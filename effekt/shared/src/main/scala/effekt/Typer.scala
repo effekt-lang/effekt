@@ -1140,21 +1140,24 @@ object Typer extends Phase[NameResolved, Typechecked] {
     targs: List[ValueType],
     vargs: Many[source.ValueArg],
     bargs: Many[source.Term],
-    expected: Option[Expectation]
+    expected: Option[Expectation],
+    receiver: Option[Receiver] = None
   )(using Context, Captures): Result[ValueType] = {
     // Construct a hint: expected arity + return type
     // Fresh vars are created inside checkExprAsBlock only if the callee type is unresolved.
     // Note that block args are excluded, their types would require block type unification. [!]
-    val hint: Option[(Int, ValueType)] =
-      if bargs.isEmpty then expected.map(e => (vargs.length, e.tpe))
-      else None
+    val hint: Option[(Int, ValueType)] = receiver match {
+      case Some(Receiver.Value(_)) if bargs.isEmpty => expected.map(e => (vargs.length + 1, e.tpe))
+      case None if bargs.isEmpty => expected.map(e => (vargs.length, e.tpe))
+      case _ => None
+    }
 
     val Result(tpe, funEffs) = checkExprAsBlock(callee, None, hint) match {
       case Result(b: FunctionType, capt) => Result(b, capt)
       case _ => Context.abort("Cannot infer function type for callee.")
     }
 
-    val Result(t, eff) = checkCallTo(call, "function", Nil, Nil, tpe, targs, vargs, bargs, expected, None)
+    val Result(t, eff) = checkCallTo(call, "function", Nil, Nil, tpe, targs, vargs, bargs, expected, None, receiver)
     Result(t, eff ++ funEffs)
   }
 
@@ -1195,58 +1198,13 @@ object Typer extends Phase[NameResolved, Typechecked] {
     scope: Option[scopes.Scope]
   )(using Context, Captures): Result[ValueType] = sym match {
     case op: Operation =>
-      checkMethodCall(call, UnboxInference.asBlock(receiver), op, targs, vargs, bargs, expected, scope)
+      val (tpe, _) = findFunctionTypeFor(op)
+      checkCallTo(call, op.name.name, op.vparams, op.bparams, tpe, targs, vargs, bargs, expected, scope,
+        Some(Receiver.Object(UnboxInference.asBlock(receiver), op.appliedInterface)))
     case _ if UnboxInference.isBlockLike(receiver) =>
-      checkCallToCandidate(call, sym, targs, vargs, Many(receiver :: bargs.unspan, bargs.span), expected, scope)
+      checkCallToCandidate(call, sym, targs, vargs, bargs, expected, scope, Some(Receiver.Block(receiver)))
     case _ =>
-      checkCallToCandidate(call, sym, targs, Many(source.ValueArg.Unnamed(receiver) :: vargs.unspan, vargs.span), bargs, expected, scope)
-  }
-
-  def checkMethodCall(
-    call: source.CallLike,
-    receiver: source.Term,
-    op: Operation,
-    targs: List[ValueType],
-    vargs: Many[source.ValueArg],
-    bargs: Many[source.Term],
-    expected: Option[Expectation],
-    scope: Option[scopes.Scope]
-  )(using Context, Captures): Result[ValueType] = {
-    val Result(recvTpe, recvEffs) = checkExprAsBlock(receiver, None)
-
-    val interface = recvTpe.asInterfaceType
-    if (op.interface != interface.typeConstructor) Context.abort(TypeMismatch(op.appliedInterface, interface))
-
-    val (funTpe, capture) = findFunctionTypeFor(op)
-
-    // 1) check arity of explicitly provided type arguments
-
-    if (targs.nonEmpty && targs.size != funTpe.tparams.size)
-      Context.abort(s"Wrong number of type arguments, given ${targs.size} but expected ${funTpe.tparams.size}")
-
-    // 2)
-    // args present: check prefix against receiver
-    (targs zip interface.args).foreach { case (manual, inferred) =>
-      matchExpected(inferred, manual, None)
-    }
-
-    // args missing: synthesize args from receiver and unification variables (e.g. [Int, String, ?A, ?B])
-    def fillInTypeArguments(tparams: List[TypeParam], interfaceArgs: List[ValueType]): List[ValueType] =
-      (tparams, interfaceArgs) match {
-        // we have an argument, provided by the interface: use it
-        case (param :: params, arg :: args) => arg :: fillInTypeArguments(params, args)
-        // we don't have an argument, create fresh unification variable
-        case (param :: params, Nil) => ValueTypeRef(Context.freshTypeVar(param, call)) :: fillInTypeArguments(params, Nil)
-        case (Nil, _) => Nil
-      }
-
-    val synthTargs = if targs.nonEmpty then targs else fillInTypeArguments(funTpe.tparams, interface.args)
-
-    // TODO maybe type checking all calls should have a similar structure like above:
-    //   1. make up and annotate unification variables, if no type arguments are there
-    //   2. type check call with either existing or made up type arguments
-
-    checkCallTo(call, op.name.name, op.vparams, op.bparams, funTpe, synthTargs, vargs, bargs, expected, scope)
+      checkCallToCandidate(call, sym, targs, vargs, bargs, expected, scope, Some(Receiver.Value(receiver)))
   }
 
   // sorted by the name we report them by, then by where they are declared, so that their order does not depend on hashing
@@ -1304,36 +1262,38 @@ object Typer extends Phase[NameResolved, Typechecked] {
 
   def checkCallToCandidate(
     call: source.CallLike,
-    receiver: TermSymbol,
+    sym: TermSymbol,
     targs: List[ValueType],
     vargs: Many[source.ValueArg],
     bargs: Many[source.Term],
     expected: Option[Expectation],
-    scope: Option[scopes.Scope]
-  )(using Context, Captures): Result[ValueType] = receiver match {
+    scope: Option[scopes.Scope],
+    receiver: Option[Receiver] = None
+  )(using Context, Captures): Result[ValueType] = sym match {
     // a value is called as `f(…)` calls it
     case value: (ValueSymbol | RefBinder) =>
       val target = new source.IdTarget(source.IdRef(Nil, value.name.name, call.span.synthesized))
       Context.annotateSymbol(target.id, value)
-      checkCallOfExpr(call, UnboxInference.unboxCallee(target), targs, vargs, bargs, expected)
-    case block: BlockSymbol => checkCallToBlock(call, block, targs, vargs, bargs, expected, scope)
+      checkCallOfExpr(call, UnboxInference.unboxCallee(target), targs, vargs, bargs, expected, receiver)
+    case block: BlockSymbol => checkCallToBlock(call, block, targs, vargs, bargs, expected, scope, receiver)
   }
 
   def checkCallToBlock(
     call: source.CallLike,
-    receiver: BlockSymbol,
+    sym: BlockSymbol,
     targs: List[ValueType],
     vargs: Many[source.ValueArg],
     bargs: Many[source.Term],
     expected: Option[Expectation],
-    scope: Option[scopes.Scope]
+    scope: Option[scopes.Scope],
+    receiver: Option[Receiver] = None
   )(using Context, Captures): Result[ValueType] = {
-    val (funTpe, capture) = findFunctionTypeFor(receiver)
-    val (vps, bps) = receiver match {
+    val (funTpe, capture) = findFunctionTypeFor(sym)
+    val (vps, bps) = sym match {
       case c: Callable  => (c.vparams, c.bparams)
       case _ => (Nil, Nil)
     }
-    val Result(tpe, effs) = checkCallTo(call, receiver.name.name, vps, bps, funTpe, targs, vargs, bargs, expected, scope)
+    val Result(tpe, effs) = checkCallTo(call, sym.name.name, vps, bps, funTpe, targs, vargs, bargs, expected, scope, receiver)
     // This is different, compared to method calls:
     usingCapture(capture)
     Result(tpe, effs)
@@ -1548,6 +1508,13 @@ object Typer extends Phase[NameResolved, Typechecked] {
     }
   }
 
+  // The receiver of `x.f(...)`: the first value or block argument of `f`, or what the operation `f` is invoked on.
+  enum Receiver {
+    case Value(term: source.Term)
+    case Block(term: source.Term)
+    case Object(term: source.Term, interface: InterfaceType)
+  }
+
   def checkCallTo(
     call: source.CallLike,
     name: String,
@@ -1558,36 +1525,57 @@ object Typer extends Phase[NameResolved, Typechecked] {
     vargs: Many[source.ValueArg],
     bargs: Many[source.Term],
     expected: Option[Expectation],
-    scope: Option[scopes.Scope]
+    scope: Option[scopes.Scope],
+    receiver: Option[Receiver] = None
   )(using Context, Captures): Result[ValueType] = {
     val callsite = currentCapture
+
+    // The arguments as written in `f(x, ...)`, for counting and naming.
+    val allVargs = receiver.collect { case Receiver.Value(x) => source.ValueArg.Unnamed(x) }.toList ++ vargs.unspan
+    val allBargs = receiver.collect { case Receiver.Block(x) => x }.toList ++ bargs.unspan
 
     // (0) Check that arg & param counts align
     // implicit arguments are placed in the argument list they extend
     val atargs = Aligned(targs, funTpe.tparams)
-    val (avargs, implicitVargs) = Aligned(vargs.unspan, funTpe.vparams)
+    val (avargs, implicitVargs) = Aligned(allVargs, funTpe.vparams)
       .fillImplicit(knownVParams) { (i, p) => source.GenerateImplicitArgs.resolveImplicitValue(p, i, scope, vargs.span) }
-    val (abargs, implicitBargs) = Aligned(bargs.unspan, funTpe.bparams)
+    val (abargs, implicitBargs) = Aligned(allBargs, funTpe.bparams)
       .fillImplicit(knownBParams) { (i, p) => source.GenerateImplicitArgs.resolveImplicitBlock(p, i, scope, bargs.span) }
     assertArgsParamsAlign(name = Some(name), atargs, avargs, abargs)
 
     // (1) Instantiate blocktype
     // e.g. `[A, B] (A, A) => B` becomes `(?A, ?A) => ?B`
-    val (typeArgs, captArgs, (vps, bps, ret, retEffs)) = Context.instantiateFresh(CanonicalOrdering(funTpe))
+    val (typeArgs, allCaptArgs, (allVps, allBps, ret, retEffs)) = Context.instantiateFresh(CanonicalOrdering(funTpe))
 
     // provided type arguments flow into the fresh unification variables (i.e., Int <: ?A)
     if (targs.nonEmpty) (targs zip typeArgs).foreach { case (targ, tvar) => matchExpected(tvar, targ, None) }
 
-    // (2) check return type
+    // (2) check the receiver of `x.f(...)` first, so that its type arguments are known to the return type and the arguments
+    val (vps, bps, captArgs, receiverEffs) = receiver match {
+      case Some(Receiver.Value(x)) =>
+        val Result(t, eff) = checkExpr(x, Some(Expectation(allVps.head)))
+        (allVps.tail, allBps, allCaptArgs, eff.toEffects)
+      case Some(Receiver.Block(x)) =>
+        flowsInto(allCaptArgs.head, callsite)
+        val Result(t, eff) = flowingInto(allCaptArgs.head) { checkExprAsBlock(x, Some(allBps.head)) }
+        (allVps, allBps.tail, allCaptArgs.tail, eff.toEffects)
+      case Some(Receiver.Object(x, interface)) =>
+        val Result(t, eff) = checkExprAsBlock(x, None)
+        Context.at(x) { matchExpected(t, Substitutions.types(funTpe.tparams, typeArgs).substitute(interface)) }
+        (allVps, allBps, allCaptArgs, eff.toEffects)
+      case None => (allVps, allBps, allCaptArgs, Effects())
+    }
+
+    // (3) check return type
     expected.foreach { expected => matchExpected(ret, expected, Some(call)) }
 
     // Here the effects still can refer to unification variables (e.g., Scan[?T])
     // Keeping them unknown until the call to `provideCapabilities` enables the latter
     // to disambiguate based on the capabilities in scope.
-    var effs: Effects = Effects()
+    var effs: Effects = receiverEffs
 
     val vpnames = knownVParams.map { p => p.name.name }
-    (vpnames.map(Some.apply).zipAll(vargs.unspan, None, source.ValueArg.Unnamed(source.UnitLit(source.Span.missing)))) foreach {
+    (vpnames.map(Some.apply).zipAll(allVargs, None, source.ValueArg.Unnamed(source.UnitLit(source.Span.missing)))) foreach {
       case (Some(expName), source.ValueArg(Some(gotName), _, _)) if expName != gotName =>
         if (vpnames.contains(gotName)) {
           Context.error(s"Unexpected name in named argument: got ${gotName}, but expected ${expName} in this position. " ++
@@ -1614,7 +1602,7 @@ object Typer extends Phase[NameResolved, Typechecked] {
     (implicitVps zip implicitVargs).zipWithIndex foreach { case ((tpe, expr), ii) =>
       val inst = source.GenerateImplicitArgs.instantiateImplicitValue(expr, tpe, vargs.span)
       instImplicitVargs.append(inst)
-      val Result(t, eff) = source.GenerateImplicitArgs.recursionGuard(expr, "value argument", vargs.length + ii, inst, tpe) {
+      val Result(t, eff) = source.GenerateImplicitArgs.recursionGuard(expr, "value argument", allVargs.length + ii, inst, tpe) {
         checkExpr(inst.value, Some(Expectation(tpe)))
       }
       effs = effs ++ eff.toEffects
@@ -1648,7 +1636,7 @@ object Typer extends Phase[NameResolved, Typechecked] {
       flowingInto(capt) {
         val inst = source.GenerateImplicitArgs.instantiateImplicitBlock(expr, tpe, bargs.span)
         instImplicitBargs.append(inst)
-        val Result(t, eff) = source.GenerateImplicitArgs.recursionGuard(expr, "block argument", bargs.length + ii, inst, tpe){
+        val Result(t, eff) = source.GenerateImplicitArgs.recursionGuard(expr, "block argument", allBargs.length + ii, inst, tpe){
           checkExprAsBlock(inst, Some(tpe))
         }
         effs = effs ++ eff.toEffects
