@@ -72,8 +72,8 @@ object Parser extends Phase[Source, Parsed] {
 
 case class Fail(msg: String, position: Int, helps: List[String] = Nil) extends Throwable(null, null, false, false)
 object Fail {
-  def expectedButGot(expected: String, got: String, position: Int): Fail =
-    Fail(s"Expected ${expected} but got ${got}", position)
+  def expectedButGot(expected: String, got: String, position: Int, helps: List[String] = Nil): Fail =
+    Fail(s"Expected ${expected} but got ${got}", position, helps)
 }
 
 case class RecoverableDiagnostic(kind: Severity, message: String, positionStart: Int, positionEnd: Int, helps: List[String] = Nil)
@@ -1169,6 +1169,10 @@ class Parser(tokens: Seq[Token], source: Source) {
               left = assignExpr(left.asInstanceOf[Term.Var])
             case _ if (peek(`.`) || isArguments) =>
               left = callExpr(left)
+            // specific error message on `n-1` where the lexer read `-1` as a negative number
+            case Integer(_) | Float(_) if !sawNewlineLast && source.content.charAt(peek.start) == '-' =>
+              fail("an operator", peek.kind,
+                List("A `-` immediately before a digit starts a negative number. To subtract, put a space before and after the `-`."))
             case _ =>
               boundary.break()
           }
@@ -1801,8 +1805,10 @@ class Parser(tokens: Seq[Token], source: Source) {
   /**
    * Aborts parsing with the given message
    */
-  def fail(expected: String, got: TokenKind): Nothing =
-    throw Fail.expectedButGot(currentLabel.getOrElse { expected }, explain(got), position)
+  def fail(expected: String, got: TokenKind, helps: List[String]): Nothing =
+    throw Fail.expectedButGot(currentLabel.getOrElse { expected }, explain(got), position, helps)
+
+  def fail(expected: String, got: TokenKind): Nothing = fail(expected, got, Nil)
 
   def fail(msg: String, helps: List[String] = Nil): Nothing =
     throw Fail(msg, position, helps)
