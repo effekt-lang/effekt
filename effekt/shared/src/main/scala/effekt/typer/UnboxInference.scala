@@ -231,6 +231,9 @@ object UnboxInference extends Phase[NameResolved, NameResolved] {
     target
   }
 
+  def asBlock(receiver: Term)(using Context): Term =
+    if (isBlockLike(receiver)) receiver else Unbox(receiver, receiver.span.synthesized)
+
   /**
    * Determines if a term is inherently a block (computation) based on its syntactic form & definition.
    *
@@ -241,9 +244,6 @@ object UnboxInference extends Phase[NameResolved, NameResolved] {
    *
    * 2. [[BlockLiteral]] are skipped for the purposes of UFCS, see PR #1250
    */
-  def asBlock(receiver: Term)(using Context): Term =
-    if (isBlockLike(receiver)) receiver else Unbox(receiver, receiver.span.synthesized)
-
   def isBlockLike(e: Term)(using C: Context): Boolean = e match {
     case v: Var => v.definition match {
       case _: symbols.RefBinder => false   // VarBinder, RegBinder - treated as values!

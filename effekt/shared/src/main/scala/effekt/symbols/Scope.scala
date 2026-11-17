@@ -304,11 +304,6 @@ object scopes {
     def lookupOverloaded(id: IdRef, filter: TermSymbol => Boolean)(using ErrorReporter): List[Set[TermSymbol]] =
       all(id.path, scope) { _.terms.getOrElse(id.name, Set.empty).filter(filter) }
 
-    def lookupOverloadedMethod(id: IdRef, filter: TermSymbol => Boolean)(using ErrorReporter): List[Set[Operation]] =
-      all(id.path, scope) { namespace =>
-        namespace.terms.getOrElse(id.name, Set.empty).collect { case op: Operation if filter(op) => op }
-      }
-
     // the last element in the path can also be the type of the name.
     def lookupOperation(path: List[String], name: String)(using ErrorReporter): List[Set[Operation]] =
       all(path, scope) { namespace =>
