@@ -117,6 +117,25 @@ class LexerTests extends munit.FunSuite {
     )
   }
 
+  test("operators") {
+    val prog = "|| && | & ++ -- + - * / ^ ^^ << >> ~ ~> <~ .. ... += -= *= /= := :: == != < <= > >= => <> ! ?"
+    assertTokensEq(
+      prog,
+      `||`, `&&`, `|`, `&`, `++`, `--`, `+`, `-`, `*`, `/`, `^`, `^^`, `<<`, `>>`, `~`, `~>`, `<~`, `..`, `...`,
+      `+=`, `-=`, `*=`, `/=`, `:=`, `::`, `===`, `!==`, `<`, `<=`, `>`, `>=`, `=>`, `<>`, `!`, `?`, EOF
+    )
+  }
+
+  test("minus before a minus or a digit") {
+    assertTokensEq("a--1", Ident("a"), `--`, Integer(1), EOF)
+    assertTokensEq("a---1", Ident("a"), `--`, Integer(-1), EOF)
+    assertTokensEq("a----1", Ident("a"), `--`, `--`, Integer(1), EOF)
+    assertTokensEq("a---b", Ident("a"), `--`, `-`, Ident("b"), EOF)
+    assertTokensEq("a----b", Ident("a"), `--`, `--`, Ident("b"), EOF)
+    assertTokensEq("a - -1", Ident("a"), `-`, Integer(-1), EOF)
+    assertTokensEq("a -= 1", Ident("a"), `-=`, Integer(1), EOF)
+  }
+
   test("single line strings") {
     val prog = """ "hello, world" "" """
     assertTokensEq(
