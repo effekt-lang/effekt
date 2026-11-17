@@ -244,7 +244,7 @@ object scopes {
     // a specific heuristic first, then the closest of the candidates given by scope (nearest first)
     private def didYouMean(nameNotFound: String, candidates: => Seq[Seq[String]], specificHeuristic: String => Option[StructuredMessage] = _ => None)(using Subdiagnostics): Unit =
       specificHeuristic(nameNotFound) orElse {
-        suggestion(effekt.util.closest(nameNotFound, candidates)(identity))
+        suggestion(effekt.util.CloseMatches(nameNotFound, candidates)(identity).closest)
       } foreach { msg => help(msg) }
 
     def explainMissingTerm(id: IdRef)(using Subdiagnostics): Unit =

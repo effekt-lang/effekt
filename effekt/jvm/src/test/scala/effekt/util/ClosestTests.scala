@@ -3,7 +3,7 @@ package util
 
 class ClosestTests extends munit.FunSuite {
 
-  def closestName(name: String, candidates: String*): List[String] = closest(name, List(candidates))(identity)
+  def closestName(name: String, candidates: String*): List[String] = CloseMatches(name, List(candidates))(identity).closest
 
   test("a name equal up to case wins over a closer spelling") {
     assertEquals(closestName("Mytype", "Mytypes", "MyType"), List("MyType"))
@@ -26,11 +26,18 @@ class ClosestTests extends munit.FunSuite {
   }
 
   test("of equally close names, only those in the nearest scope that has any") {
-    assertEquals(closest("A", List(List("T"), List("B", "C")))(identity), List("T"))
-    assertEquals(closest("printn", List(Nil, List("print", "println")))(identity), List("print", "println"))
+    assertEquals(CloseMatches("A", List(List("T"), List("B", "C")))(identity).closest, List("T"))
+    assertEquals(CloseMatches("printn", List(Nil, List("print", "println")))(identity).closest, List("print", "println"))
   }
 
   test("a closer name in a farther scope wins over a farther name in a nearer one") {
-    assertEquals(closest("lenght", List(List("lengths"), List("length")))(identity), List("length"))
+    assertEquals(CloseMatches("lenght", List(List("lengths"), List("length")))(identity).closest, List("length"))
+  }
+
+  test("a filter is not called on matches farther than the closest that pass it") {
+    var asked = List.empty[String]
+    val kept = CloseMatches("abcdef", List(List("abcdgh", "abcdeg")))(identity).filter { c => asked = c :: asked; true }.closest
+    assertEquals(kept, List("abcdeg"))
+    assertEquals(asked, List("abcdeg"))
   }
 }

@@ -57,27 +57,37 @@ inline def levenshtein(s1: String, s2: String): Int = {
   d(n)(m)
 }
 
-/** The candidates closest to `name`, given by scope (nearest first), `accept` is asked only when close enough */
-def closest[A](name: String, scopes: Seq[Seq[A]], accept: A => Boolean = (_: A) => true)(nameOf: A => String): List[A] = {
-  val limit = (name.length max 3) / 3
+/**
+ * The candidates within the edit limit of a name, closest first:
+ * equal up to case, then fewer edits, then an earlier group of candidates
+ */
+final class CloseMatches[A] private (matches: LazyList[List[A]]) {
+  def filter(p: A => Boolean): CloseMatches[A] = new CloseMatches(matches.map { _.filter(p) })
+  def closest: List[A] = matches.find { _.nonEmpty }.getOrElse(Nil)
+}
 
-  // equal up to case is closer than any edit
-  def distance(candidate: A): Option[Int] =
-    if (nameOf(candidate).equalsIgnoreCase(name)) Some(-1)
-    else editDistance(name, nameOf(candidate), limit)
+object CloseMatches {
+  /** Candidates in groups, the preferred group first */
+  def apply[A](name: String, candidates: Iterable[Iterable[A]])(nameOf: A => String): CloseMatches[A] = {
+    val limit = (name.length max 3) / 3
 
-  // the candidates of one scope that are close enough, with their distance
-  def near(scope: Seq[A]): Seq[(Int, A)] = scope.flatMap { candidate =>
-    distance(candidate).filter { _ => accept(candidate) }.map { d => (d, candidate) }
-  }
+    def distance(candidate: A): Option[Int] =
+      // equal up to case is closer than any edit
+      if (nameOf(candidate).equalsIgnoreCase(name)) Some(-1)
+      else editDistance(name, nameOf(candidate), limit)
 
-  val nearByScope = scopes.map(near)
-  val distances = nearByScope.flatMap { scope => scope.map { case (d, _) => d } }
+    val ranked = for {
+      (group, preference) <- candidates.zipWithIndex.toList
+      candidate <- group
+      d <- distance(candidate)
+    } yield ((d, preference), candidate)
 
-  distances.minOption match {
-    case None => Nil
-    case Some(best) =>
-      val nearestScope = nearByScope.find { scope => scope.exists { case (d, _) => d == best } }.getOrElse(Nil)
-      nearestScope.collect { case (d, candidate) if d == best => candidate }.distinctBy(nameOf).toList
+    // matches at the same distance (and preference) together
+    new CloseMatches(
+      ranked.groupBy { case (rank, _) => rank }.toList
+            .sortBy { case (rank, _) => rank }
+            .map { case (_, ms) => ms.map { case (_, m) => m }.distinctBy(nameOf) }
+            .to(LazyList)
+    )
   }
 }

@@ -1350,7 +1350,7 @@ object Typer extends Phase[NameResolved, Typechecked] {
     def accepts(syms: Set[TermSymbol]): Boolean = tryEach(syms.toList)(checkCandidate)._1.nonEmpty
 
     val candidates = scope.toList.flatMap { s => scopes.visibleTerms(Nil, s) }
-    val closest = effekt.util.closest(id.name, candidates, { case (_, syms) => accepts(syms) }) { case (name, _) => name }
+    val closest = effekt.util.CloseMatches(id.name, candidates) { case (name, _) => name }.filter { case (_, syms) => accepts(syms) }.closest
     suggestion(closest.map { case (name, _) => name }).foreach(help)
   }
 
