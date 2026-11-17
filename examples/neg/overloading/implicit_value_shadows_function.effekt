@@ -3,5 +3,6 @@ def fmt(x: Int): String = "outer"
 def describe(x: Int) { ?fmt: Int => String }: String = fmt(x)
 def main() = {
   val fmt = 42
-  println(describe(1))
+  val s: String = describe(1)
+  ()
 }

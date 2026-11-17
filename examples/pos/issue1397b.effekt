@@ -1,0 +1,9 @@
+def foo(): Int = 377 // commenting this line fixes the error below.
+
+interface Foo {
+  def foo(): Bool
+}
+
+def main() = {
+  println((new Foo{ def foo() = true }).foo())
+}
