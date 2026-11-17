@@ -1,0 +1,8 @@
+// Typer: the receiver of a method call is checked first, so `p` in the argument is known to be a `P`
+record P(a: Int)
+record Q(a: Int)
+interface Cell[A] { def map(g: A => Int at {}): Int }
+def main() = {
+  def c = new Cell[P] { def map(g) = g(P(41)) }
+  println(c.map(box { p => p.a + 1 }))
+}

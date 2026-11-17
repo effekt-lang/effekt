@@ -1,0 +1,4 @@
+// Typer: an operation called on a value that is not boxed is reported once
+interface I { def op(): Int }
+def g(): Int = { val n = 5; n.op() }
+def main() = ()
