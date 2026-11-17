@@ -209,7 +209,7 @@ export Binder.*
  *
  * Refined by typer.
  */
-case class CallTarget(symbols: List[Set[BlockSymbol]], scope: Option[scopes.Scope]) extends BlockSymbol {
+case class CallTarget(symbols: List[Set[? <: TermSymbol]], scope: Option[scopes.Scope]) extends BlockSymbol {
   val name = NoName
   val decl = NoSource
 }

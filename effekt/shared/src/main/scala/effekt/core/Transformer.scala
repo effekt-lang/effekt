@@ -430,8 +430,9 @@ object Transformer extends Phase[Typechecked, CoreTransformed] {
       // TODO if we always just use .capt, then why annotate it?
       // val captArgs = blockArgs.map(_.capt) //bargs.map(b => transform(Context.inferredCapture(b)))
 
-      val receiverType = Context.inferredBlockTypeOf(receiver)
       val operation = c.definition.asOperation
+      // the type arguments of the interface come first
+      val receiverType = symbols.InterfaceType(operation.interface, Context.typeArguments(c).take(operation.interface.tparams.size))
       val opType = transform(operationAtCallsite(receiverType, operation))
 
       // Do not pass type arguments for the type constructor of the receiver.

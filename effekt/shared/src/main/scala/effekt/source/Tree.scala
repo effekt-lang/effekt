@@ -838,7 +838,7 @@ object Named {
     // CallLike
     case Do         => symbols.Operation
     case Select     => symbols.Field
-    case MethodCall => symbols.Operation | symbols.CallTarget | symbols.BlockParam
+    case MethodCall => symbols.TermSymbol
     case IdTarget   => symbols.TermSymbol
 
     // Others
