@@ -1,0 +1,33 @@
+def orZero(o: Option[Int]): Int = {
+  val Some(x) = { o } else { 0 }
+  x
+}
+
+def big(o: Option[Int]): Int = {
+  val Some(x) and x > 2 = {
+    o
+  } else { 0 }
+
+  x
+}
+
+def main() = {
+  val (x, y) = {
+    (1, 4)
+  }
+  println(x + y)
+
+  val (a, b) = { println("once"); (1, 2) }
+  println(a + b)
+
+  println(orZero(Some(1)))
+  println(orZero(None()))
+  println(big(Some(5)))
+  println(big(Some(1)))
+
+  val (c, d) = { 
+    val (p, q) = (1, 2)
+    (q, p)
+  }
+  println(c.show ++ " " ++ d.show)
+}
