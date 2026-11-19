@@ -592,13 +592,16 @@ class Parser(tokens: Seq[Token], source: Source) {
             DefStmt(valDef, { semi(); stmts(inBraces) }, span())
           case p ~ guards =>
             // matches do not support doc comments, so we ignore `info`
-            val sc = expr()
+            val binding = stmt()
             val default = when(`else`) { Some(stmt()) } { None }
             val endPos = pos()
             val body = semi() ~> stmts(inBraces)
-            val clause = MatchClause(p, guards, body, Span(source, p.span.from, sc.span.to))
-            val matching = Match(List(sc), List(clause), default, Span(source, startPos, endPos))
-            Return(matching, span().synthesized)
+            val bindingSpan = binding.span.synthesized
+            val name = IdDef("__valArg", bindingSpan) // TODO: make a proper fresh identifier here
+            val scrutinee = Var(IdRef(Nil, name.name, bindingSpan), bindingSpan)
+            val clause = MatchClause(p, guards, body, Span(source, p.span.from, binding.span.to))
+            val matching = Match(List(scrutinee), List(clause), default, Span(source, startPos, endPos))
+            DefStmt(ValDef(name, None, binding, Info.empty(bindingSpan), bindingSpan), Return(matching, span().synthesized), span())
         }
 
       simpleLhs() `getOrElse` matchLhs()
