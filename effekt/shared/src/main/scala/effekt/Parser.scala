@@ -601,7 +601,7 @@ class Parser(tokens: Seq[Token], source: Source) {
             val scrutinee = Var(IdRef(Nil, name.name, bindingSpan), bindingSpan)
             val clause = MatchClause(p, guards, body, Span(source, p.span.from, binding.span.to))
             val matching = Match(List(scrutinee), List(clause), default, Span(source, startPos, endPos))
-            DefStmt(ValDef(name, None, binding, Info.empty(bindingSpan), bindingSpan), Return(matching, span().synthesized), span())
+            DefStmt(ValDef(name, None, binding, Info.empty(bindingSpan), bindingSpan), Return(matching, span().synthesized), span().synthesized)
         }
 
       simpleLhs() `getOrElse` matchLhs()
