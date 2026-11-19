@@ -550,31 +550,33 @@ object Transformer {
     environment.map { case machine.Variable(_, typ) => typeSize(typ) }.sum
 
   /**
-   * Number of bytes reserved for a value of this type in objects and stack frames.
+   * Number of bytes reserved for a value of this type in objects and stack frames, rounded up to a full byte.
    */
   def typeSize(tpe: machine.Type): Int =
+    (valueSize(tpe) + 7) / 8 * 8
+
+  /**
+   * Number of bytes of a value of this type in memory.
+   */
+  def valueSize(tpe: machine.Type): Int =
     tpe match {
       case machine.Positive() => 16
       case machine.Negative() => 16
       case machine.Type.Prompt() => 8
       case machine.Type.Stack() => 8
       case machine.Type.Int() => 8
-      case machine.Type.Byte() => 8 // rounded up to full word
+      case machine.Type.Byte() => 1
       case machine.Type.Double() => 8
       case machine.Type.Reference(_) => 16
-      case CT@machine.Type.CTpe(_) => typeSize(CT)
+      case machine.Type.CTpe(tpe) => tpe match {
+        case machine.CType.Ptr => 8
+        case machine.CType.Obj => 8
+        case machine.CType.I64 => 8
+        case machine.CType.Double => 8
+        case machine.CType.Float => 4
+        case machine.CType.Void => 0
+      }
     }
-
-  def typeSize(tpe: machine.Type.CTpe): Int = tpe match {
-    case machine.Type.CTpe(tpe) => tpe match {
-      case machine.CType.Ptr => 8
-      case machine.CType.Obj => 8
-      case machine.CType.I64 => 8
-      case machine.CType.Double => 8
-      case machine.CType.Float => 8 // rounded up to full word
-      case machine.CType.Void => 0
-    }
-  }
 
   def defineFunction(name: String, parameters: List[Parameter])(prog: (FunctionContext, BlockContext) ?=> Terminator): ModuleContext ?=> Unit = {
     implicit val FC = FunctionContext();
@@ -787,15 +789,24 @@ object Transformer {
 
   def environmentType(environment: machine.Environment): Type =
     StructureType(environment.map {
-      case machine.Variable(_, tpe) => transform(tpe)
+      case machine.Variable(_, tpe) => padding(tpe) match {
+        case 0 => transform(tpe)
+        case bytes => StructureType(List(transform(tpe), ArrayType(bytes, IntegerType8())), packed = true)
+      }
     }, packed = true)
+
+  def padding(tpe: machine.Type): Int = typeSize(tpe) - valueSize(tpe)
+
+  // The indices of the `i`th value in an environment (see `environmentType`)
+  def environmentIndices(tpe: machine.Type, i: Int): List[Int] =
+    if padding(tpe) == 0 then List(0, i) else List(0, i, 0)
 
   def storeEnvironmentAt(pointer: Operand, environment: machine.Environment, alias: AliasInfo)(using ModuleContext, FunctionContext, BlockContext): Unit = {
     val `type` = environmentType(environment)
     environment.zipWithIndex.foreach {
       case (machine.Variable(name, tpe), i) =>
         val field = LocalReference(PointerType(), freshName(name + "_pointer"));
-        emit(GetElementPtr(field.name, `type`, pointer, List(0, i)));
+        emit(GetElementPtr(field.name, `type`, pointer, environmentIndices(tpe, i)));
         emit(Store(field, transform(machine.Variable(name, tpe)), alias))
     }
   }
@@ -805,7 +816,7 @@ object Transformer {
     environment.zipWithIndex.foreach {
       case (machine.Variable(name, tpe), i) =>
         val field = LocalReference(PointerType(), freshName(name + "_pointer"));
-        emit(GetElementPtr(field.name, `type`, pointer, List(0, i)));
+        emit(GetElementPtr(field.name, `type`, pointer, environmentIndices(tpe, i)));
         emit(Load(name, transform(tpe), field, alias))
     }
   }
