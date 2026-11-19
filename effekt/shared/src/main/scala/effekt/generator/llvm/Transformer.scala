@@ -550,7 +550,7 @@ object Transformer {
     environment.map { case machine.Variable(_, typ) => typeSize(typ) }.sum
 
   /**
-   * Number of bytes reserved for a value of this type in objects and stack frames, rounded up to a full byte.
+   * Number of bytes reserved for a value of this type in objects and stack frames, rounded up to a full word.
    */
   def typeSize(tpe: machine.Type): Int =
     (valueSize(tpe) + 7) / 8 * 8
