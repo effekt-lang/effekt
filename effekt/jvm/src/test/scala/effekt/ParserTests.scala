@@ -558,6 +558,14 @@ class ParserTests extends munit.FunSuite {
         |""".stripMargin)
 
     parseStmts("val (left, right) = list; return left")
+    parseStmts("val (left, right) = { list }; return left")
+    parseStmts(
+      """val (left, right) = {
+        |  val pair = list
+        |  pair
+        |} else { return 0 }
+        |return left
+        |""".stripMargin)
 
     parseStmts("val g: () => Unit / Exc at {exc} = box { closure() }; ()")
     parseStmts("val g: () => Unit / Exc at exc = box { closure() }; ()")
@@ -568,26 +576,32 @@ class ParserTests extends munit.FunSuite {
       raw"""val (left, right) = list; return left
            |    ↑↑   ↑ ↑    ↑↑  ↑   ↑ ↑      ↑   ↑
            |""".sourceAndPositions
-    val expected = Return(Match(
-      List(Var(IdRef(List(), "list", Span(source,pos(6),pos(7))),Span(source,pos(6),pos(7)))),
-      List(
-        MatchClause(
-          TagPattern(
-            IdRef(List("effekt"),"Tuple2",Span(source,pos(0),pos(5),Synthesized)),
-            List(AnyPattern(IdDef("left", Span(source,pos(1),pos(2))), Span(source,pos(1),pos(2))),
-              AnyPattern(IdDef("right",Span(source,pos(3),pos(4))), Span(source,pos(3),pos(4)))),
-            Span(source,pos(0),pos(5))
-          ),
-          List(),
-          Return(Var(IdRef(List(),"left",Span(source,pos(9),pos(10))),
-            Span(source,pos(9),pos(10))),
-            Span(source,pos(8),pos(10))),
-          Span(source,pos(0),pos(7))
-        )
-      ),
-      None,
-      Span(source,0,pos(7))
-    ),Span(source,0,pos.last, Synthesized));
+    val bindingSpan = Span(source,pos(6),pos(7),Synthesized)
+    val expected = DefStmt(
+      ValDef(IdDef("__valArg", bindingSpan), None,
+        Return(Var(IdRef(List(), "list", Span(source,pos(6),pos(7))),Span(source,pos(6),pos(7))),Span(source,pos(6),pos(7))),
+        Info.empty(bindingSpan), bindingSpan),
+      Return(Match(
+        List(Var(IdRef(List(), "__valArg", bindingSpan), bindingSpan)),
+        List(
+          MatchClause(
+            TagPattern(
+              IdRef(List("effekt"),"Tuple2",Span(source,pos(0),pos(5),Synthesized)),
+              List(AnyPattern(IdDef("left", Span(source,pos(1),pos(2))), Span(source,pos(1),pos(2))),
+                AnyPattern(IdDef("right",Span(source,pos(3),pos(4))), Span(source,pos(3),pos(4)))),
+              Span(source,pos(0),pos(5))
+            ),
+            List(),
+            Return(Var(IdRef(List(),"left",Span(source,pos(9),pos(10))),
+              Span(source,pos(9),pos(10))),
+              Span(source,pos(8),pos(10))),
+            Span(source,pos(0),pos(7))
+          )
+        ),
+        None,
+        Span(source,0,pos(7))
+      ),Span(source,0,pos.last, Synthesized)),
+    Span(source,0,pos.last, Synthesized))
     assertEquals(parseStmts(source.content), expected)
   }
 
@@ -596,37 +610,43 @@ class ParserTests extends munit.FunSuite {
       raw"""val (left, right) = list else { return 0 }; return left
            |    ↑↑   ↑ ↑    ↑↑  ↑   ↑     ↑ ↑      ↑↑ ↑ ↑      ↑   ↑
            |""".sourceAndPositions
-    val expected = Return(Match(
-      List(Var(IdRef(List(), "list", Span(source, pos(6), pos(7))), Span(source, pos(6), pos(7)))),
-      List(
-        MatchClause(
-          TagPattern(
-            IdRef(List("effekt"), "Tuple2", Span(source, pos(0), pos(5), Synthesized)),
-            List(
-              AnyPattern(IdDef("left", Span(source, pos(1), pos(2))), Span(source, pos(1), pos(2))),
-              AnyPattern(IdDef("right", Span(source, pos(3), pos(4))), Span(source, pos(3), pos(4)))
+    val bindingSpan = Span(source, pos(6), pos(7), Synthesized)
+    val expected = DefStmt(
+      ValDef(IdDef("__valArg", bindingSpan), None,
+        Return(Var(IdRef(List(), "list", Span(source, pos(6), pos(7))), Span(source, pos(6), pos(7))), Span(source, pos(6), pos(7))),
+        Info.empty(bindingSpan), bindingSpan),
+      Return(Match(
+        List(Var(IdRef(List(), "__valArg", bindingSpan), bindingSpan)),
+        List(
+          MatchClause(
+            TagPattern(
+              IdRef(List("effekt"), "Tuple2", Span(source, pos(0), pos(5), Synthesized)),
+              List(
+                AnyPattern(IdDef("left", Span(source, pos(1), pos(2))), Span(source, pos(1), pos(2))),
+                AnyPattern(IdDef("right", Span(source, pos(3), pos(4))), Span(source, pos(3), pos(4)))
+              ),
+              Span(source, pos(0), pos(5))
             ),
-            Span(source, pos(0), pos(5))
-          ),
-          List(),
-          Return(
-            Var(IdRef(List(), "left", Span(source, pos(14), pos(15))), Span(source, pos(14), pos(15))),
-            Span(source, pos(13), pos(15))
-          ),
-          Span(source, pos(0), pos(7))
-        )
-      ),
-      Some(
-        BlockStmt(
-          Return(
-            IntLit(0, Span(source, pos(10), pos(11))),
-            Span(source, pos(9), pos(11))
-          ),
-          Span(source, pos(8), pos(12))
-        )
-      ),
-      Span(source, 0, pos(12))
-    ), Span(source, 0, pos.last, Synthesized));
+            List(),
+            Return(
+              Var(IdRef(List(), "left", Span(source, pos(14), pos(15))), Span(source, pos(14), pos(15))),
+              Span(source, pos(13), pos(15))
+            ),
+            Span(source, pos(0), pos(7))
+          )
+        ),
+        Some(
+          BlockStmt(
+            Return(
+              IntLit(0, Span(source, pos(10), pos(11))),
+              Span(source, pos(9), pos(11))
+            ),
+            Span(source, pos(8), pos(12))
+          )
+        ),
+        Span(source, 0, pos(12))
+      ), Span(source, 0, pos.last, Synthesized)),
+    Span(source, 0, pos.last, Synthesized))
     assertEquals(parseStmts(source.content), expected)
   }
 
