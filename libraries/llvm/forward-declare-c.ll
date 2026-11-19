@@ -24,7 +24,7 @@ declare %Pos @c_array_set(%Pos, %Int, %Pos)
 declare %Pos @c_bytearray_new(%Int)
 declare %Int @c_bytearray_size(%Pos)
 declare %Byte @c_bytearray_get(%Pos, %Int)
-declare %Pos @c_bytearray_set(%Pos, %Int, %Byte)
+declare %Pos @c_bytearray_set(%Pos, %Int, %Byte zeroext)
 
 declare %Pos @c_bytearray_copy(%Pos, %Int, %Pos, %Int, %Int)
 declare ptr @c_bytearray_data(%Pos)

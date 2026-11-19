@@ -89,7 +89,12 @@ enum Terminator {
 }
 export Terminator.*
 
-case class Parameter(typ: Type, name: String)
+case class Parameter(typ: Type, name: String, attributes: List[ParameterAttribute] = Nil)
+
+enum ParameterAttribute {
+  case ZeroExt()
+}
+export ParameterAttribute.*
 
 // Operands cannot be an enum since we use the more specific types massively.
 // Scala 3 will perform widening way too often.

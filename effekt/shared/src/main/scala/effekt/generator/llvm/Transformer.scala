@@ -48,14 +48,13 @@ object Transformer {
 
         // Function name was already parsed in machine transformer
         val cFunctionName = contents.strings.head
-        val returnLLVMType = PrettyPrinter.show(transformedReturnType)
-        val parameterLLVMTypes = transformedParameters.map(param => PrettyPrinter.show(param.typ))
+        val declaredParameters = parameters.map { case machine.Variable(name, tpe) => Parameter(transform(tpe), name, extension(tpe).toList) }
 
-        emit(Verbatim(s"declare ${returnLLVMType} @${cFunctionName}(${parameterLLVMTypes.mkString(", ")})"))
+        emit(Function(External(), Ccc(), transformedReturnType, cFunctionName, declaredParameters, Nil))
         defineCWrapperFunction(functionName, transformedParameters, transformedReturnType) {
           emit(Comment(s"C wrapper function for '${cFunctionName}'"))
           // TODO: Check calling convention here
-          emit(Call("ccall", Ccc(), transformedReturnType, ConstantGlobal(cFunctionName), transformedParameters.map { case Parameter(typ, name) => LocalReference(typ, name) }))
+          emit(Call("ccall", Ccc(), transformedReturnType, ConstantGlobal(cFunctionName), transformedParameters.map { case Parameter(typ, name, _) => LocalReference(typ, name) }))
 
           transformedReturnType match {
             case VoidType() => RetVoid()
@@ -89,6 +88,13 @@ object Transformer {
       case machine.Include(ff, content) =>
         emit(Verbatim("; declaration include" ++ content))
     }
+
+  // Who extends a value narrower than a word (`Byte` is `uint8_t` in C) depends on the target,
+  // so _we_ extend what we pass to C to stop relying on what C returns
+  def extension(tpe: machine.Type): Option[ParameterAttribute] = tpe match {
+    case machine.Type.Byte() => Some(ZeroExt())
+    case _ => None
+  }
 
   def transform(body: machine.ExternBody[machine.Variable])(using ErrorReporter): String = body match {
     case machine.ExternBody.StringExternBody(_, contents) =>
