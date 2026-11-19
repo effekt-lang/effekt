@@ -1,5 +1,7 @@
 module bench
 
+import string
+
 type Nanos = Int
 
 /// The current time (since UNIX Epoch) in nanoseconds.
@@ -60,15 +62,5 @@ def measure(warmup: Int, iterations: Int) { block: => Unit }: Unit = {
   run(iterations, true)
 }
 
-/// Takes a duration in nanoseconds and formats it in milliseconds with precision of two decimal digits.
-def formatMs(nanos: Nanos): String = {
-  val micros = nanos / 1000000
-  val sub = (nanos.mod(1000000).toDouble / 10000.0).round
-
-  if (sub == 100) {
-    // overflow because of rounding
-    (micros + 1).show ++ ".0ms"
-  } else {
-    micros.show ++ "." ++ sub.show ++ "ms"
-  }
-}
+/// Takes a duration in nanoseconds and formats it in milliseconds with two decimal digits, truncated.
+def formatMs(nanos: Nanos): String = (nanos / 10000).showScaled(scale = 2) ++ "ms"

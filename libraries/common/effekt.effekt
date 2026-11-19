@@ -480,13 +480,28 @@ extern def exp(x: Double) at {}: Double =
 def pow(base: Double, exponent: Int): Double = {
   def loop(base: Double, exponent: Int, acc: Double): Double = {
     if (exponent == 0) acc
-    else if (exponent.mod(2) == 0) loop(base * base, exponent / 2, acc)  // even exponent
+    else if (exponent.rem(2) == 0) loop(base * base, exponent / 2, acc)  // even exponent (never negative here)
     else loop(base, exponent - 1, acc * base)  // odd exponent
   }
   if (exponent < 0) {
     loop(1.0 / base, 0 - exponent, 1.0)
   } else {
     loop(base, exponent, 1.0)
+  }
+}
+
+/// `base` raised to the power of `exponent`, by repeated squaring.
+def pow(base: Int, exponent: Int): Int = {
+  def loop(base: Int, exponent: Int, acc: Int): Int = {
+    if (exponent == 0) acc
+    else if (exponent.rem(2) == 0) loop(base * base, exponent / 2, acc)  // even exponent (never negative here)
+    else loop(base, exponent - 1, acc * base)  // odd exponent
+  }
+
+  if (exponent < 0) {
+    1 / loop(base, 0 - exponent, 1)
+  } else {
+    loop(base, exponent, 1)
   }
 }
 

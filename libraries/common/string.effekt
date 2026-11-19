@@ -71,15 +71,37 @@ def repeat(str: String, n: Int): String = {
   go(n, "")
 }
 
+/// Left-pad the given string with `fill` to length `n`
+def padLeft(str: String, n: Int, fill: Char): String =
+  if (str.length >= n) str else fill.toString.repeat(n - str.length) ++ str
+
+/// Right-pad the given string with `fill` to length `n`
+def padRight(str: String, n: Int, fill: Char): String =
+  if (str.length >= n) str else str ++ fill.toString.repeat(n - str.length)
+
 /// Left-pad the given string with spaces
-def padLeft(str: String, n: Int): String = {
-  " ".repeat(n - str.length) ++ str
-}
+def padLeft(str: String, n: Int): String = str.padLeft(n, ' ')
 
 /// Right-pad the given string with spaces
-def padRight(str: String, n: Int): String = {
-  str ++ " ".repeat(n - str.length)
-}
+def padRight(str: String, n: Int): String = str.padRight(n, ' ')
+
+/// Show the given `unscaled` number with 10^-`scale`.
+///
+/// Examples:
+/// ```
+/// > -105.showScaled(2)
+/// -1.05
+/// > 7.showScaled(3)
+/// 0.007
+/// ```
+def showScaled(unscaled: Int, scale: Int): String =
+  if (scale <= 0) (unscaled * pow(10, 0 - scale)).show
+  else {
+    val factor = pow(10, scale)
+    val magnitude = abs(unscaled)
+    val sign = if (unscaled < 0) "-" else ""
+    sign ++ (magnitude / factor).show ++ "." ++ magnitude.rem(factor).show.padLeft(scale, '0')
+  }
 
 // TODO use .split() in JS
 def split(str: String, sep: String): List[String] = {
