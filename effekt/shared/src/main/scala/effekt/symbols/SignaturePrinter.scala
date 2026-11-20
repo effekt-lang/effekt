@@ -52,7 +52,7 @@ object SignaturePrinter extends ParenPrettyPrinter {
       pp"{ ${r.name.name}: ${context.blockTypeOption(r).get} }"
 
     case t: TypeParam =>
-      pp"type ${t.name.name}"
+      "type" <+> t.name.name
 
     case TypeAlias(name, tparams, tpe, _) =>
       val tps = show(tparams)
