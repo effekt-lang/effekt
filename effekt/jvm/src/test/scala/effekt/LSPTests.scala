@@ -1949,6 +1949,9 @@ class LSPTests extends FunSuite {
         "n" -> Some("n: Int"),
         "resume" -> Some("{ resume: Unit => Unit }")
       ))
+
+      val resume = hole.scope.bindings.find(_.name == "resume").get
+      assertEquals(resume.definitionLocation, Some(LSPLocation("file://test.effekt", LSPRange(LSPPosition(8, 7), LSPPosition(9, 6)))))
     }
   }
 
