@@ -1955,6 +1955,40 @@ class LSPTests extends FunSuite {
     }
   }
 
+  test("Server publishes implicit parameters in signatures") {
+    withClientAndServer { (client, server) =>
+      val source =
+        """
+          |interface Ctx { def foo(?ctx: String): Unit }
+          |def withValue(x: Int, ?n: Int): Int = x + n
+          |def withBlock[A](a: A){ ?show: A => String }: String = show(a)
+          |def both[A](?v: A){ ?f: A => Unit }: Unit = <>
+          |""".textDocument
+      val initializeParams = new InitializeParams()
+      initializeParams.setInitializationOptions(JsonParser.parseString("""{"effekt": {"showHoles": true}}"""))
+      server.initialize(initializeParams).get()
+
+      val didOpenParams = new DidOpenTextDocumentParams()
+      didOpenParams.setTextDocument(source)
+      server.didOpen(didOpenParams)
+
+      val hole = client.receivedHoles().head.holes.head
+      def defined(scope: Intelligence.ScopeInfo): List[(String, Option[String])] =
+        scope.bindings.filter(_.origin == BindingOrigin.Defined).map { b => (b.name, b.signature) } ++ scope.outer.toList.flatMap(defined)
+
+      assertEquals(defined(hole.scope).toMap, Map(
+        "A" -> Some("type A"),
+        "v" -> Some("?v: A"),
+        "f" -> Some("{ ?f: A => Unit }"),
+        "Ctx" -> Some("interface Ctx"),
+        "foo" -> Some("effect foo(?ctx: String): Unit / {}"),
+        "withValue" -> Some("def withValue(x: Int, ?n: Int): Int / {}"),
+        "withBlock" -> Some("def withBlock[A](a: A){ ?show: A => String }: String / {}"),
+        "both" -> Some("def both[A](?v: A){ ?f: A => Unit }: Unit / {}")
+      ))
+    }
+  }
+
   test("Server publishes holes for literate Effekt") {
     withClientAndServer { (client, server) =>
       val source = new TextDocumentItem("file://path/to/test.effekt.md", "literate effekt", 0,

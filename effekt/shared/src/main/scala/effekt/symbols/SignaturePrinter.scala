@@ -24,8 +24,8 @@ object SignaturePrinter extends ParenPrettyPrinter {
 
     case o @ Operation(name, tparams, vparams, bparams, resultType, effects, interface, decl) =>
       val tps = show(tparams)
-      val vps = vparams.map { p => pp"${p.name.name}: ${p.tpe.get}" }.mkString(", ")
-      val bps = bparams.map { b => pp"{ ${b.name.name}: ${b.tpe.get} }" }.mkString("")
+      val vps = vparams.map(valueParam).mkString(", ")
+      val bps = bparams.map(blockParam).mkString("")
       val ps = if (vps.isEmpty && bps.isEmpty) "()" else s"($vps$bps)"
       val returnType = pp": ${resultType} / ${effects}"
       pp"effect ${name.name}$tps$ps$returnType"
@@ -34,13 +34,11 @@ object SignaturePrinter extends ParenPrettyPrinter {
       val tpe = context.valueTypeOption(b).getOrElse { b.tpe.get }
       pp"val ${name.name}: ${tpe}"
 
-    case p @ ValueParam(name, t, isImplicit, _) =>
-      val tpe = context.valueTypeOption(p).getOrElse { t.get }
-      pp"${if isImplicit then "?" else ""}${name.name}: ${tpe}"
+    case p: ValueParam =>
+      valueParam(p)
 
-    case p @ BlockParam(name, t, _, isImplicit, _) =>
-      val tpe = context.blockTypeOption(p).getOrElse { t.get }
-      pp"{ ${if isImplicit then "?" else ""}${name.name}: ${tpe} }"
+    case p: BlockParam =>
+      blockParam(p)
 
     case b: VarBinder =>
       pp"var ${b.name.name}: ${stateType(b, b.tpe)}"
@@ -99,12 +97,20 @@ object SignaturePrinter extends ParenPrettyPrinter {
       case None => annotated.get
     }
 
-  def format(kw: String, f: Callable, result: Option[ValueType], effects: Option[Effects]): Doc = {
+  private def valueParam(p: ValueParam)(using context: Context): String =
+    val tpe = context.valueTypeOption(p).getOrElse { p.tpe.get }
+    pp"${if p.isImplicit then "?" else ""}${p.name.name}: ${tpe}"
+
+  private def blockParam(p: BlockParam)(using context: Context): String =
+    val tpe = context.blockTypeOption(p).getOrElse { p.tpe.get }
+    pp"{ ${if p.isImplicit then "?" else ""}${p.name.name}: ${tpe} }"
+
+  def format(kw: String, f: Callable, result: Option[ValueType], effects: Option[Effects])(using Context): Doc = {
     val tps = if (f.tparams.isEmpty) "" else s"[${f.tparams.mkString(", ")}]"
 
-    val valueParams = f.vparams.map { p => pp"${p.name.name}: ${p.tpe.get}" }.mkString(", ")
+    val valueParams = f.vparams.map(valueParam).mkString(", ")
     val vps = if valueParams.isEmpty then "" else s"($valueParams)"
-    val bps = f.bparams.map { b => pp"{ ${b.name.name}: ${b.tpe.get} }" }.mkString("")
+    val bps = f.bparams.map(blockParam).mkString("")
 
     val ps = if (vps.isEmpty && bps.isEmpty) "()" else s"$vps$bps"
 
