@@ -12,15 +12,6 @@ declare void @hole(i8*) cold noreturn
 declare void @duplicated_prompt() cold noreturn
 declare void @unmatched_tag() cold noreturn
 
-declare %Pos @c_ref_fresh(%Pos)
-declare %Pos @c_ref_get(%Pos)
-declare %Pos @c_ref_set(%Pos, %Pos)
-
-declare %Pos @c_array_new(%Int)
-declare %Int @c_array_size(%Pos)
-declare %Pos @c_array_get(%Pos, %Int)
-declare %Pos @c_array_set(%Pos, %Int, %Pos)
-
 declare %Pos @c_bytearray_new(%Int)
 declare %Int @c_bytearray_size(%Pos)
 declare %Byte @c_bytearray_get(%Pos, %Int)
