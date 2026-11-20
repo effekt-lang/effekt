@@ -247,7 +247,7 @@ object GenerateImplicitArgs {
               // Doing this in a very specialized way here.
               // It annotates the correct concrete types for *this* invocation.
               val (ftpsyms, ftparams, ftargs) = tps.map { x =>
-                val sym = symbols.TypeParam(x.name)
+                val sym = symbols.TypeParam(x.name, x.decl)
                 val (p, a) = generateResolvedId(sym, span)
                 (sym, p,
                   source.TypeRef(a, Many(Nil, span.synthesized), span.synthesized))

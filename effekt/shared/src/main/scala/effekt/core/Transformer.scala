@@ -470,8 +470,7 @@ object Transformer extends Phase[Typechecked, CoreTransformed] {
   def transformAsExpr(tree: source.Term)(using Context): Expr = coercing(tree) {
     case v: source.Var => v.definition match {
       case sym: RefBinder =>
-        val stateType = Context.blockTypeOf(sym)
-        val tpe = TState.extractType(stateType)
+        val tpe = Context.stateTypeOf(sym)
         val stateId = Id("s")
         // emits `let s = !ref; return s`
         Context.emit(Binding.Get(stateId, transform(tpe), sym, transform(Context.captureOf(sym))))

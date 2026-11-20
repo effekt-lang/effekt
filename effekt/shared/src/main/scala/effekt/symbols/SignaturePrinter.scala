@@ -41,16 +41,18 @@ object SignaturePrinter extends ParenPrettyPrinter {
       blockParam(p)
 
     case b: VarBinder =>
-      pp"var ${b.name.name}: ${stateType(b, b.tpe)}"
+      val tpe = context.stateTypeOption(b).getOrElse { b.tpe.get }
+      pp"var ${b.name.name}: ${tpe}"
 
     case b: RegBinder =>
-      pp"var ${b.name.name}: ${stateType(b, b.tpe)} in ${b.region.name.name}"
+      val tpe = context.stateTypeOption(b).getOrElse { b.tpe.get }
+      pp"var ${b.name.name}: ${tpe} in ${b.region.name.name}"
 
     case r: ResumeParam =>
       pp"{ ${r.name.name}: ${context.blockTypeOption(r).get} }"
 
     case t: TypeParam =>
-      pp"type ${t.name.name}"
+      "type" <+> t.name.name
 
     case TypeAlias(name, tparams, tpe, _) =>
       val tps = show(tparams)
@@ -89,13 +91,6 @@ object SignaturePrinter extends ParenPrettyPrinter {
       val tpe = context.blockTypeOption(d).getOrElse { d.tpe.get }
       pp"def ${ d.name.name }: ${ tpe }"
   }
-
-  /** Type of a value held by a mutable variable */
-  private def stateType(b: RefBinder, annotated: Option[ValueType])(using context: Context): ValueType =
-    context.blockTypeOption(b) match {
-      case Some(state) => builtins.TState.extractType(state)
-      case None => annotated.get
-    }
 
   private def valueParam(p: ValueParam)(using context: Context): String =
     val tpe = context.valueTypeOption(p).getOrElse { p.tpe.get }
