@@ -12,9 +12,9 @@ object SignaturePrinter extends ParenPrettyPrinter {
   override val defaultIndent = 2
 
   def apply(t: Symbol)(implicit context: Context): String =
-    pretty(toDoc(t, context)).layout
+    pretty(toDoc(t)).layout
 
-  def toDoc(t: Symbol, context: Context): Doc = t match {
+  def toDoc(t: Symbol)(using context: Context): Doc = t match {
     case e @ Interface(name, tparams, List(op), _) if op.name.name == name.name =>
       format("effect", op, op.annotatedResult, op.annotatedEffects)
 
@@ -24,8 +24,8 @@ object SignaturePrinter extends ParenPrettyPrinter {
 
     case o @ Operation(name, tparams, vparams, bparams, resultType, effects, interface, decl) =>
       val tps = show(tparams)
-      val vps = vparams.map { p => pp"${p.name.name}: ${p.tpe.get}" }.mkString(", ")
-      val bps = bparams.map { b => pp"{ ${b.name.name}: ${b.tpe.get} }" }.mkString("")
+      val vps = vparams.map(valueParam).mkString(", ")
+      val bps = bparams.map(blockParam).mkString("")
       val ps = if (vps.isEmpty && bps.isEmpty) "()" else s"($vps$bps)"
       val returnType = pp": ${resultType} / ${effects}"
       pp"effect ${name.name}$tps$ps$returnType"
@@ -34,17 +34,23 @@ object SignaturePrinter extends ParenPrettyPrinter {
       val tpe = context.valueTypeOption(b).getOrElse { b.tpe.get }
       pp"val ${name.name}: ${tpe}"
 
-    case p @ ValueParam(name, t, isImplicit, _) =>
-      val tpe = context.valueTypeOption(p).getOrElse { t.get }
-      pp"${if isImplicit then "?" else ""}${name.name}: ${tpe}"
+    case p: ValueParam =>
+      valueParam(p)
 
-    case p @ BlockParam(name, t, _, isImplicit, _) =>
-      val tpe = context.blockTypeOption(p).getOrElse { t.get }
-      pp"{ ${if isImplicit then "?" else ""}${name.name}: ${tpe} }"
+    case p: BlockParam =>
+      blockParam(p)
 
     case b: VarBinder =>
-      val tpe = context.valueTypeOption(b).getOrElse { b.tpe.get }
-      pp"var ${b.name.name}: ${tpe}"
+      pp"var ${b.name.name}: ${stateType(b, b.tpe)}"
+
+    case b: RegBinder =>
+      pp"var ${b.name.name}: ${stateType(b, b.tpe)} in ${b.region.name.name}"
+
+    case r: ResumeParam =>
+      pp"{ ${r.name.name}: ${context.blockTypeOption(r).get} }"
+
+    case t: TypeParam =>
+      pp"type ${t.name.name}"
 
     case TypeAlias(name, tparams, tpe, _) =>
       val tps = show(tparams)
@@ -84,12 +90,27 @@ object SignaturePrinter extends ParenPrettyPrinter {
       pp"def ${ d.name.name }: ${ tpe }"
   }
 
-  def format(kw: String, f: Callable, result: Option[ValueType], effects: Option[Effects]): Doc = {
+  /** Type of a value held by a mutable variable */
+  private def stateType(b: RefBinder, annotated: Option[ValueType])(using context: Context): ValueType =
+    context.blockTypeOption(b) match {
+      case Some(state) => builtins.TState.extractType(state)
+      case None => annotated.get
+    }
+
+  private def valueParam(p: ValueParam)(using context: Context): String =
+    val tpe = context.valueTypeOption(p).getOrElse { p.tpe.get }
+    pp"${if p.isImplicit then "?" else ""}${p.name.name}: ${tpe}"
+
+  private def blockParam(p: BlockParam)(using context: Context): String =
+    val tpe = context.blockTypeOption(p).getOrElse { p.tpe.get }
+    pp"{ ${if p.isImplicit then "?" else ""}${p.name.name}: ${tpe} }"
+
+  def format(kw: String, f: Callable, result: Option[ValueType], effects: Option[Effects])(using Context): Doc = {
     val tps = if (f.tparams.isEmpty) "" else s"[${f.tparams.mkString(", ")}]"
 
-    val valueParams = f.vparams.map { p => pp"${p.name.name}: ${p.tpe.get}" }.mkString(", ")
+    val valueParams = f.vparams.map(valueParam).mkString(", ")
     val vps = if valueParams.isEmpty then "" else s"($valueParams)"
-    val bps = f.bparams.map { b => pp"{ ${b.name.name}: ${b.tpe.get} }" }.mkString("")
+    val bps = f.bparams.map(blockParam).mkString("")
 
     val ps = if (vps.isEmpty && bps.isEmpty) "()" else s"$vps$bps"
 

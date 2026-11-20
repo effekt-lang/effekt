@@ -124,9 +124,8 @@ object TrackedParam {
 export TrackedParam.*
 
 // Resume is transparent
-case class ResumeParam(module: Module) extends Param, BlockSymbol {
+case class ResumeParam(module: Module, decl: source.Tree) extends Param, BlockSymbol {
   val name = Name.local("resume")
-  val decl = NoSource
 }
 
 trait Callable extends BlockSymbol {
