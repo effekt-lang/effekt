@@ -36,5 +36,5 @@ declare %Pos @c_bytearray_equal(%Pos, %Pos)
 declare %Int @c_bytearray_compare(%Pos, %Pos)
 
 declare %Pos @c_bytearray_substring(%Pos, i64 zeroext, i64 zeroext)
-declare %Int @c_bytearray_character_at(%Pos, i64 zeroext)
+declare i32 @c_bytearray_character_at(%Pos, i64 zeroext)
 

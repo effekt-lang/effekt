@@ -281,7 +281,8 @@ extern def unsafeCharAt(str: String, n: Int) at {}: Char =
   js "${str}.codePointAt(${n})"
   chez "(char->integer (string-ref ${str} ${n}))"
   llvm """
-    %x = call %Int @c_bytearray_character_at(%Pos ${str}, %Int ${n})
+    %c = call i32 @c_bytearray_character_at(%Pos ${str}, %Int ${n})
+    %x = zext i32 %c to %Int
     ret %Int %x
   """
 
