@@ -588,7 +588,7 @@ object Typer extends Phase[NameResolved, Typechecked] {
             (expectedCallHint, unresolved) match {
               case (Some(arity, retTpe), ValueTypeRef(_: UnificationVar)) =>
                 val freshVps = List.fill(arity) {
-                  ValueTypeRef(Context.freshTypeVar(TypeParam(Name.local("_")), u))
+                  ValueTypeRef(Context.freshTypeVar(TypeParam(Name.local("_"), NoSource), u))
                 }
                 val partialFn = FunctionType(Nil, Nil, freshVps, Nil, retTpe, Effects.empty)
                 val captVar = Context.freshCaptVar(CaptUnificationVar.InferredUnbox(u))
@@ -663,7 +663,7 @@ object Typer extends Phase[NameResolved, Typechecked] {
       // create fresh unification variables
       val freshUniversals   = universals.map { t => Context.freshTypeVar(t, pattern) }
       // create fresh **bound** variables
-      val freshExistentials = existentials.map { t => TypeVar.TypeParam(t.name) }
+      val freshExistentials = existentials.map { t => TypeVar.TypeParam(t.name, t.decl) }
 
       Context.annotate(Annotations.TypeParameters, p, freshExistentials)
 

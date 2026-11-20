@@ -251,21 +251,19 @@ sealed trait BlockTypeSymbol extends TypeSymbol
  * - [[TypeParam]] type variables in user programs
  * - [[UnificationVar]] type variables inserted by the type checker.
  */
-enum TypeVar(val name: Name) extends ValueTypeSymbol {
+enum TypeVar(val name: Name, val decl: source.Tree) extends ValueTypeSymbol {
 
   /**
    * Type parameters that show up in user programs
    */
-  case TypeParam(n: Name) extends TypeVar(n)
+  case TypeParam(n: Name, d: source.Tree) extends TypeVar(n, d)
 
   /**
    * Introduced when instantiating type schemes
    *
    * Should neither occur in source programs, nor in inferred types
    */
-  case UnificationVar(underlying: TypeVar.TypeParam, call: source.Tree) extends TypeVar(underlying.name)
-
-  val decl = NoSource
+  case UnificationVar(underlying: TypeVar.TypeParam, call: source.Tree) extends TypeVar(underlying.name, NoSource)
 }
 export TypeVar.*
 

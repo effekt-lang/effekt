@@ -1952,6 +1952,11 @@ class LSPTests extends FunSuite {
 
       val resume = hole.scope.bindings.find(_.name == "resume").get
       assertEquals(resume.definitionLocation, Some(LSPLocation("file://test.effekt", LSPRange(LSPPosition(8, 7), LSPPosition(9, 6)))))
+
+      def bindings(scope: Intelligence.ScopeInfo): List[Intelligence.BindingInfo] =
+        scope.bindings ++ scope.outer.toList.flatMap(bindings)
+      val typeParam = bindings(hole.scope).find(_.name == "A").get
+      assertEquals(typeParam.definitionLocation, Some(LSPLocation("file://test.effekt", LSPRange(LSPPosition(1, 10), LSPPosition(1, 11)))))
     }
   }
 

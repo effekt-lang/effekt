@@ -918,7 +918,7 @@ object Namer extends Phase[Parsed, NameResolved] {
    * Resolves type variables, term vars are resolved as part of resolve(tree: Tree)
    */
   def resolve(id: Id)(using Context): TypeParam = Context.at(id) {
-    val sym: TypeParam = TypeParam(Name(id))
+    val sym: TypeParam = TypeParam(Name(id), id)
     Context.define(id, sym)
     sym
   }
