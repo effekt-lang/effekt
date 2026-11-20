@@ -89,11 +89,15 @@ object Transformer {
         emit(Verbatim("; declaration include" ++ content))
     }
 
-  // Who extends a value narrower than a word (`Byte` is `uint8_t` in C) depends on the target,
-  // so _we_ extend what we pass to C to stop relying on what C returns
+  // Who extends an integer narrower than a word depends on the target,
+  // so we extend every integer we pass to C as per its sign.
   def extension(tpe: machine.Type): Option[ParameterAttribute] = tpe match {
-    case machine.Type.Byte() => Some(ZeroExt())
-    case _ => None
+    case machine.Type.Int() => Some(SignExt()) // int64_t
+    case machine.Type.Byte() => Some(ZeroExt()) // uint8_t
+    case machine.Type.CTpe(machine.CType.I64) => Some(SignExt()) // int64_t
+
+    case machine.Type.CTpe(machine.CType.Ptr | machine.CType.Obj | machine.CType.Double | machine.CType.Float | machine.CType.Void) => None
+    case machine.Type.Double() | machine.Type.Positive() | machine.Type.Negative() | machine.Type.Prompt() | machine.Type.Stack() | machine.Type.Reference(_) => None
   }
 
   def transform(body: machine.ExternBody[machine.Variable])(using ErrorReporter): String = body match {

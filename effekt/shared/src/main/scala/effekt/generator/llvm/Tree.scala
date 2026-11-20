@@ -93,6 +93,7 @@ case class Parameter(typ: Type, name: String, attributes: List[ParameterAttribut
 
 enum ParameterAttribute {
   case ZeroExt()
+  case SignExt()
 }
 export ParameterAttribute.*
 

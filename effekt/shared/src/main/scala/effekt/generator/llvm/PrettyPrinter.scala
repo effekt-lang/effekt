@@ -173,6 +173,7 @@ ${indentedLines(instructions.map(show).mkString("\n"))}
 
   def show(attribute: ParameterAttribute): LLVMString = attribute match {
     case ZeroExt() => "zeroext"
+    case SignExt() => "signext"
   }
 
   def show(parameter: Parameter): LLVMString = parameter match {
