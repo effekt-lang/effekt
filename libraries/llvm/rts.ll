@@ -808,7 +808,7 @@ define private ptr @frameDescriptorEntry(%StackPointer %header, i64 %index) alwa
     %returnAddressPointer = getelementptr %FrameHeader, %StackPointer %header, i64 0, i32 0
     %returnAddress = load %ReturnAddress, ptr %returnAddressPointer, !alias.scope !12, !noalias !22
     %offsetPointer = getelementptr i64, ptr %returnAddress, i64 %index
-    %offset = load i64, ptr %offsetPointer
+    %offset = load i64, ptr %offsetPointer, align 1
     %entry = getelementptr i8, ptr %returnAddress, i64 %offset
     ret ptr %entry
 }

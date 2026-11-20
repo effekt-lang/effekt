@@ -1,0 +1,25 @@
+effect flip(): Bool
+
+// keep a `Byte` and a `String` in its frame across `flip`s
+def flips(b: Byte, s: String, n: Int): String / { flip, stop } = {
+  val r = do flip()
+  val t = if (r) { s ++ "+" } else { s ++ "-" }
+  if (n == 0) {
+    if (r) { do stop() } else { t ++ b.toInt.show }
+  } else {
+    flips(b, t, n - 1)
+  }
+}
+
+def main() = {
+  val s = "ab" ++ "c"
+
+  // the continuation is copied (resumed twice) _and_ dropped (`stop` aborts)
+  val res =
+    try {
+      try flips(0x07, s, 2)
+      with flip { resume(true) ++ "|" ++ resume(false) }
+    } with stop { "stopped" }
+
+  println(res)
+}

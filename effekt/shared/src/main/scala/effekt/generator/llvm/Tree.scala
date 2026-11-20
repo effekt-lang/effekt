@@ -66,8 +66,8 @@ export AliasInfo.*
  */
 enum Instruction {
   case Call(result: String, callingConvention: CallingConvention, resultType: Type, function: Operand, arguments: List[Operand], musttail: Boolean = false)
-  case Load(result: String, tpe: Type, address: Operand, alias: AliasInfo)
-  case Store(address: Operand, value: Operand, alias: AliasInfo)
+  case Load(result: String, tpe: Type, address: Operand, alignment: Int, alias: AliasInfo)
+  case Store(address: Operand, value: Operand, alignment: Int, alias: AliasInfo)
   case GetElementPtr(result: String, tpe: Type, address: Operand, indices: List[Int])
   case BitCast(result: String, operand: Operand, typ: Type)
   case Add(result: String, operand0: Operand, operand1: Operand)
