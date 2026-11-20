@@ -99,11 +99,11 @@
 
 ; Foreign imports
 
-declare ptr @malloc(i64)
+declare ptr @malloc(i64 zeroext)
 declare void @free(ptr)
-declare ptr @realloc(ptr, i64)
-declare noalias ptr @calloc(i64, i64)
-declare ptr @memcpy(ptr, ptr, i64)
+declare ptr @realloc(ptr, i64 zeroext)
+declare noalias ptr @calloc(i64 zeroext, i64 zeroext)
+declare ptr @memcpy(ptr, ptr, i64 zeroext)
 declare i64 @llvm.ctlz.i64 (i64 , i1)
 declare i64 @llvm.cttz.i64 (i64 , i1)
 declare i64 @llvm.fshr.i64(i64, i64, i64)
@@ -120,7 +120,7 @@ declare double @log1p(double)
 ; Intrinsic versions of the following two only added in LLVM 19
 declare double @atan(double)
 declare double @tan(double)
-declare void @exit(i32)
+declare void @exit(i32 signext)
 declare void @llvm.assume(i1)
 
 

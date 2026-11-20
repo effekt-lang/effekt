@@ -1,7 +1,7 @@
 ; forward-declared from primitives.c
 
 declare i64 @c_get_argc()
-declare %Pos @c_get_arg(i64)
+declare %Pos @c_get_arg(i64 zeroext)
 
 declare void @c_io_print(%Pos)
 declare void @c_io_println(%Pos)
@@ -12,29 +12,29 @@ declare void @hole(i8*) cold noreturn
 declare void @duplicated_prompt() cold noreturn
 declare void @unmatched_tag() cold noreturn
 
-declare %Pos @c_bytearray_new(%Int)
+declare %Pos @c_bytearray_new(%Int signext)
 declare %Int @c_bytearray_size(%Pos)
-declare %Byte @c_bytearray_get(%Pos, %Int)
-declare %Pos @c_bytearray_set(%Pos, %Int, %Byte zeroext)
+declare %Byte @c_bytearray_get(%Pos, %Int signext)
+declare %Pos @c_bytearray_set(%Pos, %Int signext, %Byte zeroext)
 
-declare %Pos @c_bytearray_copy(%Pos, %Int, %Pos, %Int, %Int)
+declare %Pos @c_bytearray_copy(%Pos, %Int signext, %Pos, %Int signext, %Int signext)
 declare ptr @c_bytearray_data(%Pos)
-declare %Pos @c_bytearray_construct(i64, ptr)
+declare %Pos @c_bytearray_construct(i64 zeroext, ptr)
 declare void @c_bytearray_erase_noop(ptr)
 declare %Pos @c_bytearray_copy_shared(%Pos)
 
 declare %Pos @c_bytearray_from_nullterminated_string(ptr)
 declare ptr @c_bytearray_into_nullterminated_string(%Pos)
 
-declare %Pos @c_bytearray_show_Int(i64)
-declare %Pos @c_bytearray_show_Char(i32)
-declare %Pos @c_bytearray_show_Byte(i8)
+declare %Pos @c_bytearray_show_Int(i64 signext)
+declare %Pos @c_bytearray_show_Char(i64 zeroext)
+declare %Pos @c_bytearray_show_Byte(i8 zeroext)
 declare %Pos @c_bytearray_show_Double(double)
 
 declare %Pos @c_bytearray_concatenate(%Pos, %Pos)
 declare %Pos @c_bytearray_equal(%Pos, %Pos)
 declare %Int @c_bytearray_compare(%Pos, %Pos)
 
-declare %Pos @c_bytearray_substring(%Pos, i64, i64)
-declare %Int @c_bytearray_character_at(%Pos, i64)
+declare %Pos @c_bytearray_substring(%Pos, i64 zeroext, i64 zeroext)
+declare %Int @c_bytearray_character_at(%Pos, i64 zeroext)
 
