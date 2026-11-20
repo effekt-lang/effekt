@@ -80,6 +80,9 @@ class LLVMTests extends EffektTests {
     examplesDir / "pos" / "bidirectional" / "higherorderobject.effekt",
     examplesDir / "pos" / "bidirectional" / "res_obj_boxed.effekt",
     examplesDir / "pos" / "bidirectional" / "effectfulobject.effekt",
+
+    // a frame with a `Byte` in a copied or dropped continuation
+    examplesDir / "pos" / "byte_in_copied_frame.effekt",
   )
 
   override lazy val ignored: Set[File] = missingFeatures ++ noValgrind(examplesDir) ++ super.ignored

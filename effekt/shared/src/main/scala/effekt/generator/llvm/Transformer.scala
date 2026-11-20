@@ -684,7 +684,7 @@ object Transformer {
             emit(Comment(s"${kind} eraser, ${freshEnvironment.length} free variables"))
 
             val nextStackPointer = LocalReference(stackPointerType, freshName("stackPointer"));
-            emit(GetElementPtr(nextStackPointer.name, environmentType(freshEnvironment), LocalReference(stackPointerType, "stackPointer"), List(-1)));
+            emit(GetElementPtr(nextStackPointer.name, IntegerType8(), LocalReference(stackPointerType, "stackPointer"), List(-environmentSize(freshEnvironment))));
             loadEnvironmentAt(nextStackPointer, freshEnvironment, StackPointer);
 
             eraseValues(freshEnvironment, Set());
@@ -709,7 +709,7 @@ object Transformer {
         emit(Comment(s"${kind} sharer, ${freshEnvironment.length} free variables"))
 
         val nextStackPointer = LocalReference(stackPointerType, freshName("stackPointer"));
-        emit(GetElementPtr(nextStackPointer.name, environmentType(freshEnvironment), LocalReference(stackPointerType, "stackPointer"), List(-1)));
+        emit(GetElementPtr(nextStackPointer.name, IntegerType8(), LocalReference(stackPointerType, "stackPointer"), List(-environmentSize(freshEnvironment))));
         loadEnvironmentAt(nextStackPointer, freshEnvironment, StackPointer);
 
         shareValues(freshEnvironment, Set.from(freshEnvironment));
