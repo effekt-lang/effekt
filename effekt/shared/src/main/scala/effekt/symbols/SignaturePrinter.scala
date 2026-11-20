@@ -12,9 +12,9 @@ object SignaturePrinter extends ParenPrettyPrinter {
   override val defaultIndent = 2
 
   def apply(t: Symbol)(implicit context: Context): String =
-    pretty(toDoc(t, context)).layout
+    pretty(toDoc(t)).layout
 
-  def toDoc(t: Symbol, context: Context): Doc = t match {
+  def toDoc(t: Symbol)(using context: Context): Doc = t match {
     case e @ Interface(name, tparams, List(op), _) if op.name.name == name.name =>
       format("effect", op, op.annotatedResult, op.annotatedEffects)
 
@@ -43,8 +43,16 @@ object SignaturePrinter extends ParenPrettyPrinter {
       pp"{ ${if isImplicit then "?" else ""}${name.name}: ${tpe} }"
 
     case b: VarBinder =>
-      val tpe = context.valueTypeOption(b).getOrElse { b.tpe.get }
-      pp"var ${b.name.name}: ${tpe}"
+      pp"var ${b.name.name}: ${stateType(b, b.tpe)}"
+
+    case b: RegBinder =>
+      pp"var ${b.name.name}: ${stateType(b, b.tpe)} in ${b.region.name.name}"
+
+    case r: ResumeParam =>
+      pp"{ ${r.name.name}: ${context.blockTypeOption(r).get} }"
+
+    case t: TypeParam =>
+      pp"type ${t.name.name}"
 
     case TypeAlias(name, tparams, tpe, _) =>
       val tps = show(tparams)
@@ -83,6 +91,13 @@ object SignaturePrinter extends ParenPrettyPrinter {
       val tpe = context.blockTypeOption(d).getOrElse { d.tpe.get }
       pp"def ${ d.name.name }: ${ tpe }"
   }
+
+  /** Type of a value held by a mutable variable */
+  private def stateType(b: RefBinder, annotated: Option[ValueType])(using context: Context): ValueType =
+    context.blockTypeOption(b) match {
+      case Some(state) => builtins.TState.extractType(state)
+      case None => annotated.get
+    }
 
   def format(kw: String, f: Callable, result: Option[ValueType], effects: Option[Effects]): Doc = {
     val tps = if (f.tparams.isEmpty) "" else s"[${f.tparams.mkString(", ")}]"
