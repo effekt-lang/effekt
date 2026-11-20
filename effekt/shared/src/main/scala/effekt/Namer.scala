@@ -644,7 +644,7 @@ object Namer extends Phase[Parsed, NameResolved] {
             val bps = bparams.map(resolve)
             Context.bindValues(vps)
             Context.bindBlocks(bps)
-            Context.define(resumeId, ResumeParam(Context.module, clause))
+            Context.define(resumeId, ResumeParam(clause))
             resolve(body)
           }
         }
