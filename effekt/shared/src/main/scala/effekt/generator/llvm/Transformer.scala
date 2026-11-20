@@ -234,7 +234,7 @@ object Transformer {
         emit(ExtractValue(vtableName, transform(value), 0));
         emit(ExtractValue(objectName, transform(value), 1));
         emit(GetElementPtr(pointerName, methodType, LocalReference(PointerType(), vtableName), List(tag)))
-        emit(Load(functionName, methodType, LocalReference(PointerType(), pointerName), VTable))
+        emit(Load(functionName, methodType, LocalReference(PointerType(), pointerName), 8, VTable))
         emit(callLabel(LocalReference(methodType, functionName), LocalReference(objectType, objectName) +: arguments))
         RetVoid()
 
@@ -273,10 +273,10 @@ object Transformer {
 
         // TODO why do we need this?
         val oldVal = machine.Variable(freshName(ref.name + "_old"), name.tpe)
-        emit(Load(oldVal.name, transform(oldVal.tpe), ptrRef, StackPointer))
+        emit(Load(oldVal.name, transform(oldVal.tpe), ptrRef, 1, StackPointer))
         shareValue(oldVal)
 
-        emit(Load(name.name, transform(name.tpe), ptrRef, StackPointer))
+        emit(Load(name.name, transform(name.tpe), ptrRef, 1, StackPointer))
         eraseValues(List(name), freeVariables(rest))
         transform(rest)
 
@@ -288,10 +288,10 @@ object Transformer {
         emit(Call(ptr, Ccc(), PointerType(), getVarPointer, stackArguments :+ transform(ref)))
 
         val oldVal = machine.Variable(freshName(ref.name + "_old"), value.tpe)
-        emit(Load(oldVal.name, transform(oldVal.tpe), ptrRef, StackPointer))
+        emit(Load(oldVal.name, transform(oldVal.tpe), ptrRef, 1, StackPointer))
         eraseValue(oldVal)
 
-        emit(Store(ptrRef, transform(value), StackPointer))
+        emit(Store(ptrRef, transform(value), 1, StackPointer))
         shareValues(List(value), freeVariables(rest))
         transform(rest)
 
@@ -770,7 +770,7 @@ object Transformer {
     val returnAddressPointer = LocalReference(PointerType(), freshName("returnAddress_pointer"));
     emit(GetElementPtr(returnAddressPointer.name, frameHeaderType, headerPointer, List(0, 0)));
 
-    emit(Store(returnAddressPointer, ConstantGlobal(returnAddressName), StackPointer));
+    emit(Store(returnAddressPointer, ConstantGlobal(returnAddressName), 8, StackPointer));
   }
 
   def popEnvironmentFrom(environment: machine.Environment)(using ModuleContext, FunctionContext, BlockContext): Unit = {
@@ -796,7 +796,7 @@ object Transformer {
       case (machine.Variable(name, tpe), i) =>
         val field = LocalReference(PointerType(), freshName(name + "_pointer"));
         emit(GetElementPtr(field.name, `type`, pointer, List(0, i)));
-        emit(Store(field, transform(machine.Variable(name, tpe)), alias))
+        emit(Store(field, transform(machine.Variable(name, tpe)), 1, alias))
     }
   }
 
@@ -806,7 +806,7 @@ object Transformer {
       case (machine.Variable(name, tpe), i) =>
         val field = LocalReference(PointerType(), freshName(name + "_pointer"));
         emit(GetElementPtr(field.name, `type`, pointer, List(0, i)));
-        emit(Load(name, transform(tpe), field, alias))
+        emit(Load(name, transform(tpe), field, 1, alias))
     }
   }
 
@@ -862,7 +862,7 @@ object Transformer {
     val returnAddressPointer = LocalReference(PointerType(), freshName("returnAddress_pointer"));
     emit(GetElementPtr(returnAddressPointer.name, frameHeaderType, stackPointer, List(0, 0)));
 
-    emit(Load(returnAddressName, returnAddressType, returnAddressPointer, StackPointer));
+    emit(Load(returnAddressName, returnAddressType, returnAddressPointer, 8, StackPointer));
   }
 
   val newObject = ConstantGlobal("newObject");
