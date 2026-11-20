@@ -1907,6 +1907,51 @@ class LSPTests extends FunSuite {
     }
   }
 
+  test("Server publishes a signature for every binding in scope of a typed hole") {
+    withClientAndServer { (client, server) =>
+      val source =
+        """
+          |def kinds[A](v: Int) { f: Int => Unit }: Unit = region r {
+          |  val w = 1
+          |  var x = 2
+          |  var y: Int = 3
+          |  var z in r = 4
+          |  def d() = 5
+          |  try { do emit(6) }
+          |  with emit[Int] { n =>
+          |    <>
+          |  }
+          |}
+          |""".textDocument
+      val initializeParams = new InitializeParams()
+      initializeParams.setInitializationOptions(JsonParser.parseString("""{"effekt": {"showHoles": true}}"""))
+      server.initialize(initializeParams).get()
+
+      val didOpenParams = new DidOpenTextDocumentParams()
+      didOpenParams.setTextDocument(source)
+      server.didOpen(didOpenParams)
+
+      val hole = client.receivedHoles().head.holes.head
+      def local(scope: Intelligence.ScopeInfo): List[(String, Option[String])] =
+        if scope.kind == ScopeKind.Global then Nil
+        else scope.bindings.map { b => (b.name, b.signature) } ++ scope.outer.toList.flatMap(local)
+
+      assertEquals(local(hole.scope).toMap, Map(
+        "A" -> Some("type A"),
+        "v" -> Some("v: Int"),
+        "f" -> Some("{ f: Int => Unit }"),
+        "r" -> Some("{ r: Region }"),
+        "w" -> Some("val w: Int"),
+        "x" -> Some("var x: Int"),
+        "y" -> Some("var y: Int"),
+        "z" -> Some("var z: Int in r"),
+        "d" -> Some("def d(): Int / {}"),
+        "n" -> Some("n: Int"),
+        "resume" -> Some("{ resume: Unit => Unit }")
+      ))
+    }
+  }
+
   test("Server publishes holes for literate Effekt") {
     withClientAndServer { (client, server) =>
       val source = new TextDocumentItem("file://path/to/test.effekt.md", "literate effekt", 0,
