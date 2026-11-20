@@ -1,7 +1,7 @@
 package effekt
 package context
 
-import effekt.symbols.{BlockSymbol, BlockType, ResumeParam, Symbol, ValueSymbol}
+import effekt.symbols.{BlockSymbol, BlockType, RefBinder, ResumeParam, Symbol, ValueSymbol, builtins}
 import effekt.util.messages.ErrorReporter
 
 import java.util
@@ -602,6 +602,16 @@ trait SymbolAnnotations { self: Context =>
 
   def blockTypeOf(s: symbols.Symbol): symbols.BlockType =
     blockTypeOption(s).getOrElse(panic(s"Cannot find block type for ${s}"))
+
+  // Retrieve the type of the value a mutable variable holds.
+  def stateTypeOption(s: RefBinder): Option[symbols.ValueType] =
+    blockTypeOption(s) match {
+      case Some(state) => Some(builtins.TState.extractType(state)(using this))
+      case None => None
+    }
+
+  def stateTypeOf(s: RefBinder): symbols.ValueType =
+    stateTypeOption(s).getOrElse(panic(s"Cannot find state type for ${s}"))
 
   // Retrieve the function type of a block symbol.
   def functionTypeOption(s: symbols.Symbol): Option[symbols.FunctionType] = s match {

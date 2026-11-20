@@ -179,7 +179,7 @@ object ExplicitCapabilities extends Phase[Typechecked, Typechecked], Rewrite {
     val ref: Var = Var(id, Span.missing)
     val tpe = value match {
       case v: ValueSymbol => C.valueTypeOf(v)
-      case r: RefBinder => builtins.TState.extractType(C.blockTypeOf(r))
+      case r: RefBinder => C.stateTypeOf(r)
     }
     C.annotate(Annotations.InferredValueType, ref, tpe)
     ref

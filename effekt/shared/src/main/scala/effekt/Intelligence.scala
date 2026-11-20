@@ -13,7 +13,6 @@ import effekt.Intelligence.{ getDefinitionOf, getDefinitionNameOf }
 trait Intelligence {
 
   import effekt.symbols._
-  import builtins.TState
   import Intelligence._
 
   type EffektTree = kiama.relation.Tree[AnyRef & Product, ModuleDecl]
@@ -427,7 +426,7 @@ trait Intelligence {
 
     case c: VarBinder =>
       val doc = getDocumentationOf(c)
-      val signature = C.blockTypeOption(c).map(TState.extractType).orElse(c.tpe).map { tpe => pp"${c.name}: ${tpe}" }
+      val signature = C.stateTypeOption(c).orElse(c.tpe).map { tpe => pp"${c.name}: ${tpe}" }
 
       val ex =
         s"""|Like in other languages, mutable variable binders like `${c.name}`
@@ -443,7 +442,7 @@ trait Intelligence {
 
     case s: RegBinder =>
       val doc = getDocumentationOf(s)
-      val signature = C.blockTypeOption(s).map(TState.extractType).orElse(s.tpe).map { tpe => pp"${s.name}: ${tpe}" }
+      val signature = C.stateTypeOption(s).orElse(s.tpe).map { tpe => pp"${s.name}: ${tpe}" }
 
       val ex =
         s"""|The region `${s.region.name}` the variable `${s.name}` is allocated into
