@@ -1678,6 +1678,86 @@ class VMTests extends munit.FunSuite {
       shifts = 0,
       resumes = 0
     )),
+
+    examplesDir / "pos" / "show" / "empty_type.effekt" -> Some(Summary(
+      staticDispatches = 0,
+      dynamicDispatches = 0,
+      patternMatches = 0,
+      branches = 0,
+      pushedFrames = 0,
+      poppedFrames = 0,
+      allocations = 0,
+      closures = 0,
+      variableReads = 0,
+      variableWrites = 0,
+      resets = 0,
+      shifts = 0,
+      resumes = 0
+    )),
+
+    examplesDir / "pos" / "show" / "nested_type.effekt" -> Some(Summary(
+      staticDispatches = 7,
+      dynamicDispatches = 0,
+      patternMatches = 7,
+      branches = 0,
+      pushedFrames = 7,
+      poppedFrames = 7,
+      allocations = 6,
+      closures = 0,
+      variableReads = 0,
+      variableWrites = 0,
+      resets = 0,
+      shifts = 0,
+      resumes = 0
+    )),
+
+    examplesDir / "pos" / "show" / "unused_block_argument.effekt" -> Some(Summary(
+      staticDispatches = 0,
+      dynamicDispatches = 0,
+      patternMatches = 0,
+      branches = 0,
+      pushedFrames = 0,
+      poppedFrames = 0,
+      allocations = 0,
+      closures = 0,
+      variableReads = 0,
+      variableWrites = 0,
+      resets = 0,
+      shifts = 0,
+      resumes = 0
+    )),
+
+    examplesDir / "pos" / "show" / "user_data.effekt" -> Some(Summary(
+      staticDispatches = 0,
+      dynamicDispatches = 0,
+      patternMatches = 0,
+      branches = 0,
+      pushedFrames = 0,
+      poppedFrames = 0,
+      allocations = 0,
+      closures = 0,
+      variableReads = 0,
+      variableWrites = 0,
+      resets = 0,
+      shifts = 0,
+      resumes = 0
+    )),
+
+    examplesDir / "pos" / "show" / "wrapper.effekt" -> Some(Summary(
+      staticDispatches = 3,
+      dynamicDispatches = 0,
+      patternMatches = 3,
+      branches = 0,
+      pushedFrames = 3,
+      poppedFrames = 3,
+      allocations = 3,
+      closures = 0,
+      variableReads = 0,
+      variableWrites = 0,
+      resets = 0,
+      shifts = 0,
+      resumes = 0
+    )),
   )
 
   val testFiles: Seq[(File, Option[Summary])] =
