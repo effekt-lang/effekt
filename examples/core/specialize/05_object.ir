@@ -1,0 +1,59 @@
+// An object passes itself from one of its operations. The copy for its code makes the object anew, and the operation
+// calls the copy we are in.
+
+interface Counter {
+  count: (Bool) => Int
+}
+
+def apply(b: Bool){c: Counter} = {
+  (c: Counter @ {c}).count: (Bool) => Int(b: Bool)
+}
+
+def main() = {
+  def counter = new Counter {
+    def count(b: Bool) = {
+      if (b: Bool) {
+        (apply: (Bool){c: Counter} => Int @ {})(false){counter: Counter @ {}}
+      } else {
+        return 0
+      }
+    }
+  }
+  (apply: (Bool){c: Counter} => Int @ {})(true){counter: Counter @ {}}
+}
+
+/// RECURSIVE
+
+/// SPECIALIZE
+
+interface Counter {
+  count: (Bool) => Int
+}
+
+def apply(b: Bool){c @ c: Counter} = {
+  c: Counter @ {c}.count: (Bool) => Int(b: Bool)
+}
+def main() = {
+  def counter = new Counter {
+    def count(b: Bool) = {
+      if (b: Bool) {
+        apply_counter: (Bool) => Int @ {}(false)
+      } else {
+        return 0
+      }
+    }
+  }
+  apply_counter: (Bool) => Int @ {}(true)
+}
+def apply_counter(b: Bool) = {
+  def counter = new Counter {
+    def count(b: Bool) = {
+      if (b: Bool) {
+        apply_counter: (Bool) => Int @ {}(false)
+      } else {
+        return 0
+      }
+    }
+  }
+  counter: Counter @ {}.count: (Bool) => Int(b: Bool)
+}

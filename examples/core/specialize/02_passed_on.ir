@@ -1,0 +1,65 @@
+// A block passed on flows into the next callee too. Each code gets its own copy of both callees. The copies for the
+// local `const` make it anew and take the value it closes over as a parameter.
+
+def apply(x: Int){f: (Int) => Int} = {
+  (f: (Int) => Int @ {f})(x: Int)
+}
+
+def twice(x: Int){g: (Int) => Int} = {
+  val y: Int = (apply: (Int){f: (Int) => Int} => Int @ {})(x: Int){g: (Int) => Int @ {g}};
+  (apply: (Int){f: (Int) => Int} => Int @ {})(y: Int){g: (Int) => Int @ {g}}
+}
+
+def id(x: Int) = {
+  return x: Int
+}
+
+def main() = {
+  val a: Int = (twice: (Int){g: (Int) => Int} => Int @ {})(1){id: (Int) => Int @ {}};
+  def const(x: Int) = {
+    return a: Int
+  }
+  (twice: (Int){g: (Int) => Int} => Int @ {})(2){const: (Int) => Int @ {}}
+}
+
+/// RECURSIVE
+
+/// SPECIALIZE
+
+def apply(x: Int){f @ f: (Int) => Int} = {
+  f: (Int) => Int @ {f}(x: Int)
+}
+def twice(x: Int){g @ g: (Int) => Int} = {
+  val y = apply: (Int){f: (Int) => Int} => Int @ {}(x: Int){g: (Int) => Int @ {g}};
+  apply: (Int){f: (Int) => Int} => Int @ {}(y: Int){g: (Int) => Int @ {g}}
+}
+def id(x: Int) = {
+  return x: Int
+}
+def main() = {
+  val a = twice_id: (Int) => Int @ {}(1);
+  def const(x: Int) = {
+    return a: Int
+  }
+  twice_const: (Int, Int) => Int @ {}(2, a: Int)
+}
+def apply_id(x: Int) = {
+  id: (Int) => Int @ {}(x: Int)
+}
+def twice_id(x: Int) = {
+  val y = apply_id: (Int) => Int @ {}(x: Int);
+  apply_id: (Int) => Int @ {}(y: Int)
+}
+def apply_const(x: Int, a: Int) = {
+  def const(x: Int) = {
+    return a: Int
+  }
+  const: (Int) => Int @ {}(x: Int)
+}
+def twice_const(x: Int, a: Int) = {
+  def const(x: Int) = {
+    return a: Int
+  }
+  val y = apply_const: (Int, Int) => Int @ {}(x: Int, a: Int);
+  apply_const: (Int, Int) => Int @ {}(y: Int, a: Int)
+}
