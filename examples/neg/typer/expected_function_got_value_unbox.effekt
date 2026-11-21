@@ -1,0 +1,6 @@
+def apply(): Int = {
+  val v = 1
+  (unbox v)(2)
+}
+
+def main() = ()

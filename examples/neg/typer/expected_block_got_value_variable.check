@@ -1,0 +1,6 @@
+[error] examples/neg/typer/expected_block_got_value_variable.effekt:5:8: Expected () => Int, but got a value of type Int. [typer]
+5    run {v}
+          ^
+[error] examples/neg/typer/expected_block_got_value_variable.effekt:5:8: Expected () => Int at ?C but got Int. [typer]
+5    run {v}
+          ^

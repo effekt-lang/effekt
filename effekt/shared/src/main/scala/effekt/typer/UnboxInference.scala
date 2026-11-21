@@ -130,8 +130,19 @@ object UnboxInference extends Phase[NameResolved, NameResolved] {
     u
   }
 
+  // The callee `block`, rewritten from `term`. An unbox inserted for it is as [[Annotations.UnboxParent]].
+  def asCallee(term: Term, block: Term)(using C: Context): source.ExprTarget = {
+    val callee = new source.ExprTarget(block)
+    (term, block) match {
+      case (Unbox(_, _), _) => ()
+      case (_, u @ Unbox(_, _)) => C.annotate(Annotations.UnboxParent, u, callee)
+      case (_, _) => ()
+    }
+    callee
+  }
+
   def rewrite(target: source.CallTarget)(using C: Context): source.CallTarget = visit(target) {
-    case source.ExprTarget(receiver) => source.ExprTarget(rewriteAsBlock(receiver))
+    case source.ExprTarget(receiver) => asCallee(receiver, rewriteAsBlock(receiver))
     case t: source.IdTarget => t.definition match {
       case sym: (ValueSymbol | symbols.RefBinder) =>
         source.ExprTarget(unboxCallee(t)).inheritPosition(t)

@@ -1,0 +1,5 @@
+record Person(age: Int)
+
+def ageNext(p: Person): Int = (p.age)(1)
+
+def main() = ()

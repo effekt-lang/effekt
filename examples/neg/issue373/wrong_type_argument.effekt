@@ -8,5 +8,5 @@ def myPrintLine(b: Bool): Unit = println(b)
 def myPrintLine(s: String): Unit = println(s)
 
 def main() =
-  try { myPrintLine(eff.op[Bool]("hello")) } // ERROR Expected Bool but got Int
+  try { myPrintLine(eff.op[Bool]("hello")) } // ERROR Expected Eff[Bool] but got Eff[Int]
   with eff: Eff[Int] { def op(x) = resume(x / 1) }
