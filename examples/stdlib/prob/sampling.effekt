@@ -1,0 +1,38 @@
+import probs
+import pile
+
+// pseudo random nuber generator
+def linearCongruentialGenerator[R](seed: Int) { prog: => R / random } : R = {
+  // parameters from Numerical Recipes (https://en.wikipedia.org/wiki/Linear_congruential_generator)
+  val a = 1664525
+  val c = 1013904223
+  val m = 1073741824
+  var x: Int = seed;
+  def next() = { x = mod((a * x + c), m); x }
+  try { prog() }
+  with random {
+    resume(next().toDouble / m.toDouble)
+  }
+}
+
+def main() = {
+  with linearCongruentialGenerator(1)
+  println("gaussian(0,2) sample observed in uniform(0,2) distribution")
+  for[Double]{do emit(
+    rejectionSampling{
+    val x = sampleGaussian(0.0, 2.0)
+    observeUniform(x, 0.0, 2.0)
+    return x})
+  }{x => println(x)}
+
+  println("\n")
+
+  println("uniform(1,10) samples observed in categorical(0.2, 0.2, 0.2, 0.2, 0.2) distribution ")
+  for[Int] {
+    with limit[Int](10)
+    with markovChainSampling
+    val x = floor(sampleUniform(0.0, 10.0))
+    observeCategorical(x,[0.2, 0.2, 0.2, 0.2, 0.2])
+    return x
+  }{x => println(x)}
+}

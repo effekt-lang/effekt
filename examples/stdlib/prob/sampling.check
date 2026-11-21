@@ -1,0 +1,16 @@
+gaussian(0,2) sample observed in uniform(0,2) distribution
+0.37348866567601896
+
+
+uniform(1,10) samples observed in categorical(0.2, 0.2, 0.2, 0.2, 0.2) distribution
+0
+3
+1
+3
+4
+3
+0
+3
+1
+3
+()

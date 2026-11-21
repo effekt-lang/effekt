@@ -1,0 +1,130 @@
+module pile
+
+import stream
+
+record Weighted[A](value: A, weight: Double)
+
+type Heap[A]{
+  Heap( value: A, weight: Double, subheaps: List[Heap[A]] )
+  Empty()
+}
+
+def isEmpty[A](heap: Heap[A]): Bool = {
+  heap match {
+    case Empty() => true
+    case Heap(x, w, heaps) => false
+  }
+}
+
+// collect all weighted values of a program in Heap
+def collectHeap[A] { stream: () => Unit / emit[Weighted[A]] }: Heap[A] = {
+  var heap = Empty()
+  try{
+    stream()
+  } with emit[Weighted[A]] { case Weighted(value, weight) =>
+    heap = heap match{
+      case Empty() => single(value, weight)
+      case heap => insert(heap, value, weight)
+    } 
+    resume(())
+  }
+  return heap
+}
+
+def empty[A](): Heap[A] =
+  Empty()
+
+// creates Heap with single element
+def single[A](value: A, weight: Double): Heap[A] =
+  Heap(value, weight, Nil())
+
+
+// emit every element in heap as stream in ascending order usign extract untill done
+def each[A](heap: Heap[A]): Unit / emit[Weighted[A]] = 
+  extract(heap) match {
+    case None() => ()
+    case Some((element, heap)) => 
+      do emit(element)
+      each(heap)
+  }
+
+def insert[A](heap: Heap[A], value: A, weight: Double): Heap[A] =
+  meld(Heap(value, weight, Nil()), heap)
+
+// merge the list of heaps into one heap using meld
+// NOTE: had to change the return type of this function because it is recursive and therfore doesn't work with Option return
+def mergePairs[A](heap: Heap[A], heaps: List[Heap[A]]): Heap[A] = {
+  heaps match {
+    case Nil() => heap
+    case Cons(heap1, Nil()) => meld(heap, heap1)
+    case Cons(heap1, Cons(heap2, hs)) => meld(meld(heap, heap1), mergePairs(heap2, hs))
+  }
+}
+
+// " minimum of the two root elements as its root element 
+//   and just adds the heap with the larger root to the list of subheaps" ~Wikipedia
+def meld[A](heap1: Heap[A], heap2: Heap[A]): Heap[A] =
+  (heap1, heap2) match {
+    case (Empty(), Empty()) => Empty()
+    case (heap1, Empty()) => heap1
+    case (Empty(), heap2) => heap2
+    case (Heap(x1, w1, subheaps1), Heap(x2, w2, subheaps2)) => 
+      if (w1 < w2)
+        Heap(x1, w1, Cons(Heap(x2, w2, subheaps2), subheaps1))
+      else
+        Heap(x2, w2, Cons(Heap(x1, w1, subheaps1), subheaps2))
+  }
+
+// if extract last element -> None
+// extract min element of heap (find + delete min)
+def extract[A](heap: Heap[A]): Option[(Weighted[A], Heap[A])] = {
+  heap match {
+    case Empty() => None()
+    case Heap(x, weight, Nil()) => Some((Weighted(x, weight), Empty()))
+    case Heap(x, weight, Cons(heap, heaps)) => Some((Weighted(x, weight), mergePairs(heap, heaps)))
+  }
+}
+
+// extract + insert extracts min element and inserts new element value
+def exchange[A](heap: Heap[A], value: A, weight: Double): (Weighted[A], Heap[A]) =
+  heap match {
+    case Empty() => (Weighted(value, weight), Empty())
+    case Heap(x, w, heaps) => (Weighted(x, w), mergePairs(single(value, weight), heaps))
+  }
+
+def main() = {
+  // This returns correct minimums in heap
+  val h1 = Heap[Int](1, 0.5, [Heap[Int](2, 0.6, Nil()), Heap[Int](3, 0.7, Nil())])
+
+  val (Weighted(minel, minw), heaps) = extract(h1).getOrElse{panic("hallo")}
+
+  println(minel.show)
+  println(minw.show)
+
+  println(genericShow(heaps))
+
+  // after inserting the min element is again at root
+  val inserted = insert(heaps, minel, minw)
+  println(genericShow(inserted))
+  
+  inserted match {
+    case Empty() => println("empty heap")
+    case Heap(value, weight, heaps) => println(value); println(weight)}
+
+  // inserting different element with higher weight
+  // this results in the 2 element with now smallest weight at root
+  val inserted2 = insert(heaps, 4, 0.9)
+
+  println(genericShow(inserted2))
+  
+  inserted2 match {
+    case Empty() => println("empty heap")
+    case Heap(value, weight, heaps1) => println(value); println(weight)}
+
+  val (Weighted(x, w), heaps) = extract(inserted2).getOrElse{panic("hallo")}
+
+  println(x)
+  println(w)
+  println(genericShow(heaps))
+
+}
