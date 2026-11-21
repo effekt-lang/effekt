@@ -532,15 +532,15 @@ class VMTests extends munit.FunSuite {
       dynamicDispatches = 17,
       patternMatches = 0,
       branches = 33,
-      pushedFrames = 8,
-      poppedFrames = 8,
+      pushedFrames = 7,
+      poppedFrames = 7,
       allocations = 0,
       closures = 4,
       variableReads = 0,
       variableWrites = 0,
-      resets = 2,
-      shifts = 9,
-      resumes = 9
+      resets = 0,
+      shifts = 0,
+      resumes = 0
     )),
 
     examplesDir / "benchmarks" / "effect_handlers_bench" / "iterator.effekt" -> Some(Summary(
@@ -658,35 +658,35 @@ class VMTests extends munit.FunSuite {
 
   val casestudies: Seq[(File, Option[Summary])] = Seq(
     examplesDir / "casestudies" / "ad.effekt.md" -> Some(Summary(
-      staticDispatches = 114,
+      staticDispatches = 113,
       dynamicDispatches = 0,
       patternMatches = 0,
       branches = 243,
-      pushedFrames = 98,
-      poppedFrames = 98,
+      pushedFrames = 95,
+      poppedFrames = 95,
       allocations = 0,
       closures = 0,
       variableReads = 0,
       variableWrites = 0,
-      resets = 14,
-      shifts = 305,
-      resumes = 305
+      resets = 10,
+      shifts = 26,
+      resumes = 26
     )),
 
     examplesDir / "casestudies" / "buildsystem.effekt.md" -> Some(Summary(
-      staticDispatches = 36,
+      staticDispatches = 39,
       dynamicDispatches = 28,
       patternMatches = 17,
       branches = 40,
-      pushedFrames = 23,
-      poppedFrames = 22,
+      pushedFrames = 20,
+      poppedFrames = 19,
       allocations = 6,
       closures = 24,
       variableReads = 3,
       variableWrites = 1,
       resets = 8,
-      shifts = 12,
-      resumes = 11
+      shifts = 9,
+      resumes = 8
     )),
 
     examplesDir / "casestudies" / "scheduler.effekt.md" -> Some(Summary(
@@ -717,8 +717,8 @@ class VMTests extends munit.FunSuite {
       variableReads = 110,
       variableWrites = 24,
       resets = 12,
-      shifts = 13,
-      resumes = 13
+      shifts = 8,
+      resumes = 8
     )),
 
     examplesDir / "casestudies" / "parser.effekt.md" -> Some(Summary(
@@ -733,40 +733,40 @@ class VMTests extends munit.FunSuite {
       variableReads = 4858,
       variableWrites = 956,
       resets = 54,
-      shifts = 1036,
-      resumes = 1035
+      shifts = 723,
+      resumes = 722
     )),
 
     examplesDir / "casestudies" / "anf.effekt.md" -> Some(Summary(
-      staticDispatches = 6924,
+      staticDispatches = 6907,
       dynamicDispatches = 0,
-      patternMatches = 4095,
+      patternMatches = 4082,
       branches = 7823,
-      pushedFrames = 1920,
-      poppedFrames = 1872,
+      pushedFrames = 1907,
+      poppedFrames = 1859,
       allocations = 1671,
       closures = 0,
       variableReads = 3084,
       variableWrites = 845,
       resets = 297,
-      shifts = 1020,
-      resumes = 1016
+      shifts = 568,
+      resumes = 564
     )),
 
     examplesDir / "casestudies" / "inference.effekt.md" -> Some(Summary(
-      staticDispatches = 2365065,
+      staticDispatches = 2076620,
       dynamicDispatches = 0,
       patternMatches = 1198171,
       branches = 304507,
-      pushedFrames = 888016,
-      poppedFrames = 888016,
+      pushedFrames = 888004,
+      poppedFrames = 888004,
       allocations = 2915002,
       closures = 0,
-      variableReads = 2930440,
-      variableWrites = 1466032,
-      resets = 578138,
-      shifts = 2646745,
-      resumes = 2069479
+      variableReads = 2930416,
+      variableWrites = 1466014,
+      resets = 1239,
+      shifts = 419,
+      resumes = 13
     )),
 
     examplesDir / "pos" / "raytracer.effekt" -> Some(Summary(
@@ -1289,8 +1289,8 @@ class VMTests extends munit.FunSuite {
       variableReads = 24579,
       variableWrites = 4096,
       resets = 4,
-      shifts = 4097,
-      resumes = 4097
+      shifts = 0,
+      resumes = 0
     )),
 
     examplesDir / "benchmarks" / "other" / "wordfreq_dictionary.effekt" -> Some(Summary(
@@ -1305,8 +1305,8 @@ class VMTests extends munit.FunSuite {
       variableReads = 810141,
       variableWrites = 201571,
       resets = 13,
-      shifts = 201569,
-      resumes = 201567
+      shifts = 94732,
+      resumes = 94730
     )),
 
     examplesDir / "benchmarks" / "other" / "tracking_map.effekt" -> Some(Summary(
@@ -1353,8 +1353,8 @@ class VMTests extends munit.FunSuite {
       variableReads = 47,
       variableWrites = 18,
       resets = 3,
-      shifts = 19,
-      resumes = 19
+      shifts = 4,
+      resumes = 4
     )),
 
     examplesDir / "stdlib" / "stream" / "fix.effekt" -> Some(Summary(
@@ -1369,8 +1369,8 @@ class VMTests extends munit.FunSuite {
       variableReads = 10,
       variableWrites = 9,
       resets = 1,
-      shifts = 9,
-      resumes = 9
+      shifts = 0,
+      resumes = 0
     )),
 
 
