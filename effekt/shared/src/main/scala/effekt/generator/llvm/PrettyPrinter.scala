@@ -12,6 +12,8 @@ object PrettyPrinter {
     definitions.map(show).mkString("\n\n")
 
   def show(definition: Definition)(using C: Context): LLVMString = definition match {
+    case Function(linkage, callingConvention, returnType, name, parameters, Nil, None) =>
+      s"declare ${show(linkage)} ${show(callingConvention)} ${show(returnType)} ${globalName(name)}(${commaSeparated(parameters.map(show))})${attributes(callingConvention)}"
     case Function(linkage, callingConvention, returnType, name, parameters, basicBlocks, prefix) =>
       s"""
 define ${show(linkage)} ${show(callingConvention)} ${show(returnType)} ${globalName(name)}(${commaSeparated(parameters.map(show))})${attributes(callingConvention)}${prefix.map(p => s" prefix ${show(p)}").getOrElse("")} {
@@ -169,8 +171,13 @@ ${indentedLines(instructions.map(show).mkString("\n"))}
     case NamedType(name) => localName(name)
   }
 
+  def show(attribute: ParameterAttribute): LLVMString = attribute match {
+    case ZeroExt() => "zeroext"
+    case SignExt() => "signext"
+  }
+
   def show(parameter: Parameter): LLVMString = parameter match {
-    case Parameter(tpe, name) => s"${show(tpe)} ${localName(name)}"
+    case Parameter(tpe, name, attributes) => ((show(tpe) :: attributes.map(show)) :+ localName(name)).mkString(" ")
   }
 
   def sanitize(name: String): String = name.replace("?", "Q").replace("!", "B")

@@ -48,14 +48,13 @@ object Transformer {
 
         // Function name was already parsed in machine transformer
         val cFunctionName = contents.strings.head
-        val returnLLVMType = PrettyPrinter.show(transformedReturnType)
-        val parameterLLVMTypes = transformedParameters.map(param => PrettyPrinter.show(param.typ))
+        val declaredParameters = parameters.map { case machine.Variable(name, tpe) => Parameter(transform(tpe), name, extension(tpe).toList) }
 
-        emit(Verbatim(s"declare ${returnLLVMType} @${cFunctionName}(${parameterLLVMTypes.mkString(", ")})"))
+        emit(Function(External(), Ccc(), transformedReturnType, cFunctionName, declaredParameters, Nil))
         defineCWrapperFunction(functionName, transformedParameters, transformedReturnType) {
           emit(Comment(s"C wrapper function for '${cFunctionName}'"))
           // TODO: Check calling convention here
-          emit(Call("ccall", Ccc(), transformedReturnType, ConstantGlobal(cFunctionName), transformedParameters.map { case Parameter(typ, name) => LocalReference(typ, name) }))
+          emit(Call("ccall", Ccc(), transformedReturnType, ConstantGlobal(cFunctionName), transformedParameters.map { case Parameter(typ, name, _) => LocalReference(typ, name) }))
 
           transformedReturnType match {
             case VoidType() => RetVoid()
@@ -89,6 +88,17 @@ object Transformer {
       case machine.Include(ff, content) =>
         emit(Verbatim("; declaration include" ++ content))
     }
+
+  // Who extends an integer narrower than a word depends on the target,
+  // so we extend every integer we pass to C as per its sign.
+  def extension(tpe: machine.Type): Option[ParameterAttribute] = tpe match {
+    case machine.Type.Int() => Some(SignExt()) // int64_t
+    case machine.Type.Byte() => Some(ZeroExt()) // uint8_t
+    case machine.Type.CTpe(machine.CType.I64) => Some(SignExt()) // int64_t
+
+    case machine.Type.CTpe(machine.CType.Ptr | machine.CType.Obj | machine.CType.Double | machine.CType.Float | machine.CType.Void) => None
+    case machine.Type.Double() | machine.Type.Positive() | machine.Type.Negative() | machine.Type.Prompt() | machine.Type.Stack() | machine.Type.Reference(_) => None
+  }
 
   def transform(body: machine.ExternBody[machine.Variable])(using ErrorReporter): String = body match {
     case machine.ExternBody.StringExternBody(_, contents) =>
