@@ -1,0 +1,6 @@
+def f() = {
+  region r { () }
+  var y in r = 2
+  y
+}
+def main() = println(f())

@@ -1,0 +1,7 @@
+[error] examples/neg/namer/out_of_scope_region.effekt:3:12: Could not resolve term r [namer]
+3    var y in r = 2
+              ^
+
+   * note: There is a `r` bound here, but not in the current scope.
+2  |    region r { () }
+   |           ^
