@@ -524,7 +524,7 @@ object Namer extends Phase[Parsed, NameResolved] {
     case tree @ source.Region(name, body, _) =>
       val regionName = Name.local(name.name)
       val reg = BlockParam(regionName, Some(builtins.TRegion), CaptureParam(regionName), isImplicit = false, tree)
-      Context.define(name, reg)
+      Context.assignSymbol(name, reg)
       Context scoped {
         Context.bindBlock(reg)
         resolve(body)
