@@ -22,6 +22,8 @@ object ErrorContext {
   enum Because {
     /** The result of a handler clause, which could [[resume]], has the type of the [[handled]] statement */
     case HandlerClauseResult(resume: symbols.FunctionType, handled: source.Stmt)
+    /** An effect is used at the type of the closest capability in scope for it */
+    case ClosestCapability
   }
 
   /**
@@ -146,6 +148,9 @@ object ErrorContext {
           note(pretty"${exp} is the type of the handled statement.", Some(handled.span))
           note(pretty"In this handler clause, `resume` has type ${resume}.")
       }
+    case Expected(got, exp, _, _, Some(Because.ClosestCapability)) =>
+      issue.foreach { i => note(pretty"${i}.") }
+      note(pretty"${exp} is the closest one in scope and shadows all others: an effect can only be used at one type at a time.")
     case _ =>
       issue.foreach { i => note(pretty"${i}.") }
   }

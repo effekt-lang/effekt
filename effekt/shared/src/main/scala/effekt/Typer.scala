@@ -36,10 +36,9 @@ import scala.annotation.tailrec
  *
  * Invariants:
  * -----------
- * All effects inferred by Typer are concrete and dealiased. This is established by
- * type [[ConcreteEffects]] and constructor [[Typer.asConcrete]].
+ * In all effects inferred by Typer, each effect occurs at most once (see [[symbols.Effects]]).
  */
-case class Result[+T](tpe: T, effects: ConcreteEffects)
+case class Result[+T](tpe: T, effects: Effects)
 
 /**
  * The type something is checked against and why (see [[ErrorContext.Because]])
@@ -74,7 +73,7 @@ object Typer extends Phase[NameResolved, Typechecked] {
               tree.defs.foreach { d => precheckDef(d) }
               tree.defs.foreach { d =>
                 val Result(_, effs) = synthDef(d)
-                val unhandled = effs.toEffects
+                val unhandled = Context.unification(effs)
                 if (unhandled.nonEmpty)
                   Context.at(d) {
                     Context.error(pretty"Unhandled effects ${unhandled}")
@@ -153,7 +152,7 @@ object Typer extends Phase[NameResolved, Typechecked] {
         val Result(bodyTpe, bodyEffs) = checkStmt(body, expectedType)
         val Result(defaultTpe, defaultEffs) = default.map { s =>
           checkStmt(s, expectedType)
-        }.getOrElse(Result(TUnit, ConcreteEffects.empty))
+        }.getOrElse(Result(TUnit, Effects.empty))
 
         Result(join(expected, List(bodyTpe -> ErrorContext.Arm.WhileBranch(Some(body)), defaultTpe -> ErrorContext.Arm.WhileBranch(default))), defaultEffs ++ bodyEffs ++ guardEffs)
 
@@ -202,21 +201,16 @@ object Typer extends Phase[NameResolved, Typechecked] {
       case c @ source.Do(op, targs, vargs, bargs, _) =>
         // (1) first check the call
         val Result(tpe, effs) = checkOverloadedFunctionCall(c, op, targs map { _.resolveValueType }, vargs, bargs, expected)
-        // (2) now we need to find a capability as the receiver of this effect operation
-        // (2a) compute substitution for inferred type arguments
-        val typeArgs = Context.annotatedTypeArgs(c)
-        val operation = c.definition
-        val subst = Substitutions.types(operation.tparams, typeArgs)
-
-        // (2b) substitute into effect type of operation
-        val effect = subst.substitute(operation.appliedInterface)
-        // (2c) search capability
+        // (2) the effect is the interface of the operation, applied to the leading type arguments of the call
+        val interface = c.definition.interface
+        val effect: InterfaceType = InterfaceType(interface, Context.annotatedTypeArgs(c).take(interface.tparams.size))
+        // (2a) find a capability as the receiver of this effect operation
         val capability = Context.capabilityReceiver(c, effect)
-        // (2d) register capability as being used
+        // (2b) register capability as being used
         usingCapture(CaptureSet(capability.capture))
 
         // (3) add effect to used effects
-        Result(tpe, effs ++ ConcreteEffects(List(Context.unification(effect))))
+        Result(tpe, effs ++ Effects(List(effect)))
 
       case c @ source.Call(t: source.IdTarget, targs, vargs, bargs, _) =>
         checkOverloadedFunctionCall(c, t.id, targs map { _.resolveValueType }, vargs, bargs, expected)
@@ -265,7 +259,7 @@ object Typer extends Phase[NameResolved, Typechecked] {
         // (3) Check the handlers
         // Also all capabilities used by the handler flow into the capture of the continuation
 
-        var handlerEffs: ConcreteEffects = Pure
+        var handlerEffs: Effects = Pure
 
         handlers foreach Context.withFocus { h =>
           flowingInto(continuationCaptHandled) {
@@ -276,40 +270,36 @@ object Typer extends Phase[NameResolved, Typechecked] {
 
         // (4) Wellformedness checks
         val handlerFor = providedCapabilities.map { cap =>
-          // all effects have to be concrete at this point in time
           // safety: (1) ensures there's a type annotation
-          val concreteEffect = Context.unification(cap.tpe.getOrElse { INTERNAL_ERROR("Block type annotation required") }.asInterfaceType)
-          (concreteEffect, cap)
+          (cap.tpe.getOrElse { INTERNAL_ERROR("Block type annotation required") }.asInterfaceType, cap)
         }
 
         // Helper definitions:
         // - capabilities that are bound explicitly by the user
         val explicitCapabilities = handlers.flatMap { _.capability.map(_.symbol) }.toSet
         // - all effects that are handled
-        val handled = ConcreteEffects(handlerFor.map(_._1))
-        // - capabilities grouped by effect
-        val capabilityGroups = handlerFor.groupBy(_._1).view.mapValues(_.map(_._2)).toList
+        val handled = Effects(handlerFor.map(_._1))
+        // - handlers grouped by effect
+        val handlerGroups = handlerFor.groupBy(_._1.typeConstructor).values.toList
 
-        // Compute groups of capabilities that handle the same effects, then
-        //  1) check whether all are bound explicitly (which would be fine)
-        //  2) it is only a singleton set (which is fine)
-        capabilityGroups.foreach {
-          case (effect, capabilities) if capabilities.size > 1 =>
-            val allExplicit = capabilities.forall { c => explicitCapabilities contains c }
+        handlerGroups.foreach { group =>
+          val effect = Context.unification(group.head._1)
+          val capabilities = group.map(_._2)
+          val allExplicit = capabilities.forall { c => explicitCapabilities contains c }
+          val allImplicit = capabilities.forall { c => !(explicitCapabilities contains c) }
+          val used = effs.exists(e => e.typeConstructor == effect.typeConstructor)
 
-            if (!allExplicit)
-              Context.warning(pretty"There are multiple handlers for effect ${effect}; this might not be intended.") {
-                help(pretty"Maybe bind capabilities explicitly (e.g. `try { ... } with c: MyEffect { ... }`)?")
-              }
-          case _ => ()
-        }
-        capabilityGroups.foreach {
-          case (effect, capabilities) =>
-            val allImplicit = capabilities.forall { c => !(explicitCapabilities contains c) }
-            val used = effs.exists(e => e == effect)
+          if (group.map { case (tpe, cap) => Context.unification(tpe) }.distinct.size > 1 && !allExplicit)
+            Context.error(pretty"There are handlers for effect ${effect.typeConstructor.name} at different types, but an effect can only be used at one type at a time.") {
+              help(pretty"Maybe bind capabilities explicitly (e.g. `try { ... } with c: MyEffect { ... }`)?")
+            }
+          else if (capabilities.size > 1 && !allExplicit)
+            Context.warning(pretty"There are multiple handlers for effect ${effect}; this might not be intended.") {
+              help(pretty"Maybe bind capabilities explicitly (e.g. `try { ... } with c: MyEffect { ... }`)?")
+            }
 
-            if (allImplicit && !used)
-              Context.warning(pp"Handling effect ${effect}, which seems not to be used by the program.")
+          if (allImplicit && !used)
+            Context.warning(pp"Handling effect ${effect}, which seems not to be used by the program.")
         }
 
         // The captures of the handler continue flowing into the outer scope
@@ -323,7 +313,7 @@ object Typer extends Phase[NameResolved, Typechecked] {
         // for example. tpe = List[Int]
         val results = scs.map{ sc => checkExpr(sc, None) }
 
-        var resEff = ConcreteEffects.union(results.map { case Result(tpe, effs) => effs })
+        var resEff = Effects.union(results.map { case Result(tpe, effs) => effs })
 
         // check that number of patterns matches number of scrutinees
         val arity = scs.length
@@ -389,7 +379,7 @@ object Typer extends Phase[NameResolved, Typechecked] {
 
   // Sideeffect: binds names in the current scope
   def checkGuards(guards: List[MatchGuard])(using Context, Captures): Result[Unit] =
-    var effs = ConcreteEffects.empty
+    var effs = Effects.empty
     guards foreach { g =>
       val Result(bindings, guardEffs) = checkGuard(g)
       Context.bind(bindings)
@@ -404,7 +394,7 @@ object Typer extends Phase[NameResolved, Typechecked] {
   def checkImplementation(impl: source.Implementation, continuationDetails: Option[(ValueType, CaptUnificationVar, source.Stmt)])(using Context, Captures): Result[InterfaceType] = Context.focusing(impl) {
     case source.Implementation(sig, clauses, _) =>
 
-      var handlerEffects: ConcreteEffects = Pure
+      var handlerEffects: Effects = Pure
 
       // Extract interface and type arguments from annotated effect
       val tpe @ InterfaceType(constructor, targs) = sig.resolveBlockRef
@@ -848,7 +838,7 @@ object Typer extends Phase[NameResolved, Typechecked] {
             (sym.annotatedType: @unchecked) match {
               case Some(annotated) =>
                 // the declared effects are considered as bound
-                val bound: ConcreteEffects = annotated.effects
+                val bound: Effects = annotated.effects
                 val capabilities = bound.canonical.map { tpe => Context.freshCapabilityFor(tpe) }
                 val captures = capabilities.map { _.capture }
 
@@ -857,7 +847,7 @@ object Typer extends Phase[NameResolved, Typechecked] {
                    Context in { body `checkAgainst` annotated.result }
                 }
                 Context.annotateInferredType(d, tpe)
-                Context.annotateInferredEffects(d, effs.toEffects)
+                Context.annotateInferredEffects(d, effs)
 
                 // TODO also annotate the capabilities
                 flowsIntoWithout(inferredCapture, functionCapture) {
@@ -873,12 +863,12 @@ object Typer extends Phase[NameResolved, Typechecked] {
                 }
 
                 // We do no longer use the order annotated on the function, but always the canonical ordering.
-                val capabilities = effs.canonical.map { caps.apply }
+                val capabilities = effs.canonical.map { tpe => caps(tpe.typeConstructor) }
                 val captures = capabilities.map(_.capture)
 
                 Context.bindCapabilities(d, capabilities)
                 Context.annotateInferredType(d, tpe)
-                Context.annotateInferredEffects(d, effs.toEffects)
+                Context.annotateInferredEffects(d, effs)
 
                 // we subtract all capabilities introduced by this function to compute its capture
                 flowsIntoWithout(inferredCapture, functionCapture) {
@@ -886,7 +876,7 @@ object Typer extends Phase[NameResolved, Typechecked] {
                 }
 
                 // TODO also add capture parameters for inferred capabilities
-                val funType = sym.toType(tpe, effs.toEffects, captures)
+                val funType = sym.toType(tpe, effs, captures)
                 Result(funType, Pure)
             }
           }
@@ -1052,7 +1042,7 @@ object Typer extends Phase[NameResolved, Typechecked] {
       }
 
       // (4) Bind capabilities for all effects "handled" by this function
-      val effects: ConcreteEffects = typeSubst `substitute` effs
+      val effects: Effects = typeSubst `substitute` effs
       val capabilities = effects.canonical.map { tpe => Context.freshCapabilityFor(tpe) }
 
       // (5) Substitute capture params
@@ -1073,7 +1063,7 @@ object Typer extends Phase[NameResolved, Typechecked] {
 
       usingCaptureWithout(bodyRegion) { captParams }
 
-      val tpe = FunctionType(typeParams, captParams, valueTypes, blockTypes, bodyType, effects.toEffects)
+      val tpe = FunctionType(typeParams, captParams, valueTypes, blockTypes, bodyType, effects)
 
       Result(tpe, bodyEffs -- effects)
   }
@@ -1112,12 +1102,12 @@ object Typer extends Phase[NameResolved, Typechecked] {
       }
 
       // The order of effects annotated to the function is the canonical ordering for capabilities
-      val capabilities = effs.canonical.map { caps.apply }
+      val capabilities = effs.canonical.map { tpe => caps(tpe.typeConstructor) }
       Context.bindCapabilities(arg, capabilities)
 
       val cps = (bparams.map(_.symbol) ++ capabilities).map(_.capture)
 
-      val funType = FunctionType(tps, cps, vps, bps, tpe, effs.toEffects)
+      val funType = FunctionType(tps, cps, vps, bps, tpe, effs)
 
       // Like with functions, bound parameters and capabilities are not closed over
       usingCaptureWithout(inferredCapture) {
@@ -1581,9 +1571,6 @@ object Typer extends Phase[NameResolved, Typechecked] {
     // (2) check return type
     expected.foreach { expected => matchExpected(ret, expected, Some(call)) }
 
-    // Here the effects still can refer to unification variables (e.g., Scan[?T])
-    // Keeping them unknown until the call to `provideCapabilities` enables the latter
-    // to disambiguate based on the capabilities in scope.
     var effs: Effects = Effects()
 
     val vpnames = knownVParams.map { p => p.name.name }
@@ -1606,7 +1593,7 @@ object Typer extends Phase[NameResolved, Typechecked] {
 
     (explicitVps zip vargs.unspan) foreach { case (tpe, expr) =>
       val Result(t, eff) = checkExpr(expr.value, Some(Expectation(tpe)))
-      effs = effs ++ eff.toEffects
+      effs = effs ++ eff
     }
 
     // implicit arguments work like normal ones, except that we first have to instantiate them,
@@ -1617,26 +1604,18 @@ object Typer extends Phase[NameResolved, Typechecked] {
       val Result(t, eff) = source.GenerateImplicitArgs.recursionGuard(expr, "value argument", vargs.length + ii, inst, tpe) {
         checkExpr(inst.value, Some(Expectation(tpe)))
       }
-      effs = effs ++ eff.toEffects
+      effs = effs ++ eff
     }
 
-    // To improve inference, we first type check block arguments that DO NOT subtract effects,
-    // since those need to be fully known.
     val (explicitBps, implicitBps) = bps.splitAt(bargs.length)
     val (explicitCaptArgs, implicitCaptArgs) = captArgs.splitAt(bargs.length)
 
-    val (withoutEffects, withEffects) = (explicitBps zip (bargs.unspan zip explicitCaptArgs)).partitionMap {
-      // TODO refine and check that eff.args refers to (inferred) type arguments of this application (`typeArgs`)
-      case (tpe : FunctionType, rest) if tpe.effects.exists { eff => eff.args.nonEmpty } => Right((tpe, rest))
-      case (tpe, rest) => Left((tpe, rest))
-    }
-
-    (withoutEffects ++ withEffects) foreach { case (tpe, (expr, capt)) =>
+    (explicitBps zip (bargs.unspan zip explicitCaptArgs)) foreach { case (tpe, (expr, capt)) =>
       flowsInto(capt, callsite)
       // capture of block <: ?C
       flowingInto(capt) {
         val Result(t, eff) = checkExprAsBlock(expr, Some(tpe))
-        effs = effs ++ eff.toEffects
+        effs = effs ++ eff
       }
     }
 
@@ -1651,25 +1630,20 @@ object Typer extends Phase[NameResolved, Typechecked] {
         val Result(t, eff) = source.GenerateImplicitArgs.recursionGuard(expr, "block argument", bargs.length + ii, inst, tpe){
           checkExprAsBlock(inst, Some(tpe))
         }
-        effs = effs ++ eff.toEffects
+        effs = effs ++ eff
       }
     }
 
     // ... annotate them to be inserted by [[ExplicitCapabilites]]
     Context.annotateImplicits(call, instImplicitVargs.toList, instImplicitBargs.toList)
 
-    // We add return effects last to have more information at this point to
-    // concretize the effect.
     effs = effs ++ Effects(retEffs)
 
     // annotate call node with inferred type arguments
     Context.annotateTypeArgs(call, typeArgs)
 
     // Annotate the call target tree with the additional capabilities
-    // The canonical ordering of capabilities is defined by the ordering of the definition site,
-    // not the callsite, so we need to be careful to not use `distinct` on `retEffs`
-    // since this might conflate State[A] and State[B] after A -> Int, B -> Int.
-    val capabilities = Context.provideCapabilities(call, retEffs.map(Context.unification.apply))
+    val capabilities = Context.provideCapabilities(call, retEffs)
 
     val captParams = captArgs.drop(bargs.size + implicitBargs.size)
     (captParams zip capabilities) foreach { case (param, cap) =>
@@ -1795,6 +1769,7 @@ object Typer extends Phase[NameResolved, Typechecked] {
     val coerce = coercible.map(t => c => Context.coerce(t, c))
     val because = expected.because.map { // substitute into the reason if there is one
       case ErrorContext.Because.HandlerClauseResult(resume, handled) => ErrorContext.Because.HandlerClauseResult(Context.unification(resume), handled)
+      case ErrorContext.Because.ClosestCapability => ErrorContext.Because.ClosestCapability
     }
     Context.requireSubtype(got, expected.tpe, ErrorContext.Expected(gotNow, expectedNow, Context.focus, coerce, because))
 
@@ -1841,10 +1816,10 @@ object Typer extends Phase[NameResolved, Typechecked] {
     Context.at(t) {
       val Result(got, effs) = f(t)
       wellformed(got)
-      wellformed(effs.toEffects)
+      wellformed(effs)
       expected foreach { matchExpected(got, _, Some(t)) }
       Context.annotateInferredType(t, got)
-      Context.annotateInferredEffects(t, effs.toEffects)
+      Context.annotateInferredEffects(t, effs)
       Result(got, effs)
     }
 
@@ -1852,9 +1827,9 @@ object Typer extends Phase[NameResolved, Typechecked] {
     Context.at(t) {
       val Result(got, effs) = f(t)
       wellformed(got)
-      wellformed(effs.toEffects)
+      wellformed(effs)
       Context.annotateInferredType(t, got)
-      Context.annotateInferredEffects(t, effs.toEffects)
+      Context.annotateInferredEffects(t, effs)
       Result(got, effs)
     }
   //</editor-fold>
@@ -1932,7 +1907,7 @@ trait TyperOps extends ContextOps { self: Context =>
     bindCapabilities(binder, caps)
     capabilityScope = BindSome(
       binder,
-      caps.map { c => c.tpe.getOrElse { INTERNAL_ERROR("Capability type needs to be know.") }.asInterfaceType -> c }.toMap,
+      caps.map { c => c.tpe.getOrElse { INTERNAL_ERROR("Capability type needs to be know.") }.asInterfaceType.typeConstructor -> c }.toMap,
       capabilityScope
     )
     val result = f
@@ -1941,13 +1916,9 @@ trait TyperOps extends ContextOps { self: Context =>
   }
 
   private [typer] def bindCapabilities[R](binder: source.Tree, caps: List[symbols.BlockParam]): Unit =
-    val capabilities = caps map { cap =>
-      assertConcreteEffect(cap.tpe.getOrElse { INTERNAL_ERROR("Capability type needs to be know.") }.asInterfaceType)
-      cap
-    }
-    annotations.update(Annotations.BoundCapabilities, binder, capabilities)
+    annotations.update(Annotations.BoundCapabilities, binder, caps)
 
-  private [typer] def bindingAllCapabilities[R](binder: source.Tree)(f: => R): (R, Map[InterfaceType, symbols.BlockParam]) = {
+  private [typer] def bindingAllCapabilities[R](binder: source.Tree)(f: => R): (R, Map[BlockTypeConstructor, symbols.BlockParam]) = {
     capabilityScope = BindAll(binder, Map.empty, capabilityScope)
     val result = f
     val caps = capabilityScope.asInstanceOf[BindAll].capabilities
@@ -1960,12 +1931,8 @@ trait TyperOps extends ContextOps { self: Context =>
    */
   private [typer] def capabilityFor(tpe: InterfaceType): symbols.BlockParam =
     val cap = capabilityScope.capabilityFor(tpe)
-    assertConcreteEffect(unification(tpe), hints = capabilityScope.relevantInScopeFor(tpe))
     annotations.update(Annotations.Captures, cap, CaptureSet(cap.capture))
     cap
-
-  def requireConcrete(eff: InterfaceType, ctx: ErrorContext): Unit =
-    assertConcreteEffect(unification(eff))
 
   private [typer] def freshCapabilityFor(tpe: InterfaceType): symbols.BlockParam =
     freshCapabilityFor(tpe, CaptureParam(tpe.name))

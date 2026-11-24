@@ -192,7 +192,7 @@ trait Unification extends TypeUnifier, TypeMerger, TypeInstantiator, ErrorReport
       pp"Type argument and parameter size mismatch: ${targs.size} vs ${tparams.size} ($targs, $tparams)")
     assert(cargs.size == cparams.size,
       pp"Capture arguments and parameter size mismatch: ${cargs.size} vs ${cparams.size} ($cargs, $cparams)")
-    assert(cparams.size == (bparams.size + eff.distinct.size),
+    assert(cparams.size == (bparams.size + eff.toList.size),
       pp"Capture param count ${cparams.size} is not equal to bparam ${bparams.size} + controleffects ${eff.size}.\n  ${tpe}")
 
     given Instantiation = Instantiation((tparams zip targs).toMap, (cparams zip cargs).toMap)

@@ -903,7 +903,16 @@ object Namer extends Phase[Parsed, NameResolved] {
   }
 
   def resolve(tpe: source.Effects)(using Context): Effects =
-    Effects(tpe.effs.flatMap(resolveWithAliases).toSeq*) // TODO this otherwise is calling the wrong apply
+    val resolved = Effects(tpe.effs.flatMap(resolveWithAliases).toSeq*) // TODO this otherwise is calling the wrong apply
+    resolved.effects.distinct.groupBy(_.typeConstructor).foreach {
+      case (interface, instances) if instances.size > 1 =>
+        val shown = instances.map(symbols.TypePrinter.show).sorted.mkString(", ")
+        Context.at(tpe) {
+          Context.error(s"Effect ${interface.name.name} occurs more than once: ${shown}. An effect can occur only once in a set of effects.")
+        }
+      case _ => ()
+    }
+    resolved
 
   def resolve(e: source.Effectful)(using Context): (ValueType, Effects) =
     (resolveValueType(e.tpe), resolve(e.eff))

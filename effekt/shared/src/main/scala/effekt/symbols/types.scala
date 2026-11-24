@@ -71,21 +71,16 @@ extension (i: BlockType.InterfaceType) {
 /**
  * Represents effect _sets_ (no order, no duplicates) on function types.
  *
- * All effects are dealiased by namer. Effects are inferred via [[typer.ConcreteEffects]] so
- * by construction all entries in the set of effects here should be concrete (no unification variables).
+ * All effects are dealiased by namer. Each effect occurs at most once: entries are identified by their
+ * interface, the type arguments of an effect are determined by unification.
  *
  * Effect sets are themselves *not* symbols, they are just aggregates.
  *
- * We do not enforce entries to be distinct. This way we can substitute types and keep duplicate entries.
- * For instances { State[S], State[T] }[S -> Int, T -> Int] then becomes { State[Int], State[Int] }.
- * This is important since we need to pass two capabilities in this case.
- *
  * Member [[canonical]] computes the canonical ordering of capabilities for this set of effects.
- * Disjointness needs to be ensured manually when constructing effect sets (for instance via [[typer.ConcreteEffects]]).
  */
 case class Effects(effects: List[BlockType.InterfaceType]) {
 
-  lazy val toList: List[InterfaceType] = effects.distinct
+  lazy val toList: List[InterfaceType] = effects.distinctBy(_.typeConstructor)
 
   def isEmpty: Boolean = effects.isEmpty
   def nonEmpty: Boolean = effects.nonEmpty
@@ -96,10 +91,14 @@ case class Effects(effects: List[BlockType.InterfaceType]) {
   def forall(p: InterfaceType => Boolean): Boolean = effects.forall(p)
   def exists(p: InterfaceType => Boolean): Boolean = effects.exists(p)
   def ++(other: Effects): Effects = Effects(this.effects ++ other.effects)
+  def --(other: Effects): Effects =
+    filterNot { eff => other.exists { removed => removed.typeConstructor == eff.typeConstructor } }
 
   def size: Int = effects.size
 
-  def distinct: Effects = Effects(effects.distinct)
+  def distinct: Effects = Effects(toList)
+
+  def canonical: List[InterfaceType] = CanonicalOrdering(toList)
 }
 object Effects {
 
@@ -111,6 +110,9 @@ object Effects {
 
   def empty: Effects = new Effects(Nil)
   val Pure = empty
+
+  def union(effs: IterableOnce[Effects]): Effects =
+    new Effects(effs.iterator.flatMap { e => e.effects }.toList)
 }
 
 /**
@@ -120,22 +122,8 @@ object Effects {
  * Bugs with the canonical ordering can lead to runtime errors as observed in ticket #108
  */
 object CanonicalOrdering extends Ordering[InterfaceType] {
-  def compare(tpe1: InterfaceType, tpe2: InterfaceType): Int = compareStructural(tpe1, tpe2)
-
-  def compareStructural(tpe1: Any, tpe2: Any): Int = (tpe1, tpe2) match {
-    case (_: UnificationVar, _) | (_, _: UnificationVar) =>
-      effekt.util.messages.INTERNAL_ERROR("Cannot compute canonical ordering, since type still contains unification variables.")
-    case (sym1: Symbol, sym2: Symbol) =>
-      sym1.id - sym2.id
-    case (p1: Product, p2: Product) if p1.getClass == p2.getClass =>
-      (p1.productIterator zip p2.productIterator).collectFirst {
-        case (child1, child2) if compareStructural(child1, child2) != 0 => compareStructural(child1, child2)
-      }.getOrElse(fallback(tpe1, tpe2))
-    case _ =>
-      fallback(tpe1, tpe2)
-  }
-
-  def fallback(tpe1: Any, tpe2: Any): Int = tpe1.hashCode - tpe2.hashCode
+  def compare(tpe1: InterfaceType, tpe2: InterfaceType): Int =
+    tpe1.typeConstructor.id - tpe2.typeConstructor.id
 
   def apply(l: List[InterfaceType]): List[InterfaceType] = l.sorted(using this)
 

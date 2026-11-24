@@ -2,17 +2,17 @@ package effekt
 package typer
 
 import effekt.context.Context
+import effekt.context.assertions.*
 import effekt.{ source, symbols }
-import effekt.util.messages.{ErrorMessageReifier, StructuredMessage}
+import effekt.util.messages.ErrorMessageReifier
 
 /**
- * Invariant: Like the result effects of Typer, all types of bound capabilities need to be concrete!
+ * Capabilities are found by the interface of the effect: the closest capability for an interface shadows all others.
  */
 sealed trait CapabilityScope {
   def copy: CapabilityScope
   def capabilityFor(tpe: symbols.InterfaceType)(using C: Context): symbols.BlockParam
   def parent: CapabilityScope
-  def relevantInScopeFor(tpe: symbols.InterfaceType)(using C: Context): Set[symbols.InterfaceType]
 }
 case object GlobalCapabilityScope extends CapabilityScope {
   def copy: CapabilityScope = this
@@ -21,80 +21,34 @@ case object GlobalCapabilityScope extends CapabilityScope {
   // potentially handle it, then we raise an error.
   def capabilityFor(tpe: symbols.InterfaceType)(using C: Context): symbols.BlockParam =
     C.abort(pretty"Effect ${tpe} is not allowed in this context.")
-  def relevantInScopeFor(tpe: symbols.InterfaceType)(using C: Context): Set[symbols.InterfaceType] = Set.empty
 }
 
-object DummyUnifier extends TypeUnifier {
-  private case object UnificationFailed extends Exception with scala.util.control.NoStackTrace
+def unifyCapability(tpe: symbols.InterfaceType, capability: symbols.BlockParam)(using C: Context): Unit =
+  val bound = capability.tpe.getOrElse { effekt.util.messages.INTERNAL_ERROR("Capability type needs to be know.") }.asInterfaceType
+  C.requireSubtype(tpe, bound, ErrorContext.Expected(C.unification(tpe), C.unification(bound), C.focus, None, Some(ErrorContext.Because.ClosestCapability)))
 
-  def checkSubtype(t1: effekt.symbols.ValueType, t2: effekt.symbols.ValueType)(using C: Context): Boolean = try {
-    unifyValueTypes(
-      C.substitution.substitute(t1),
-      C.substitution.substitute(t2),
-      ErrorContext.Expected(t1, t2, C.focus, None))
-    true
-  } catch {
-    case UnificationFailed => false
-  }
-
-  override def requireLowerBound(x: symbols.UnificationVar, tpe: symbols.ValueType, ctx: ErrorContext): Unit = ()
-  override def requireUpperBound(x: symbols.UnificationVar, tpe: symbols.ValueType, ctx: ErrorContext): Unit = ()
-  override def requireEqual(x: symbols.UnificationVar, tpe: symbols.ValueType, ctx: ErrorContext): Unit = ()
-  override def requireSubregion(lower: symbols.Captures, upper: symbols.Captures, ctx: ErrorContext): Unit = ()
-  override def requireConcrete(eff: symbols.InterfaceType, ctx: ErrorContext): Unit = ()
-  override def unification(effs: symbols.Effects): symbols.Effects = effs
-
-  override def abort(issue: StructuredMessage, ctx: ErrorContext): Nothing = throw UnificationFailed
-  override def abort(left: symbols.Type, right: symbols.Type, ctx: ErrorContext): Nothing = throw UnificationFailed
-
-  override def error(issue: StructuredMessage, ctx: ErrorContext): Unit = throw UnificationFailed
-  override def error(left: symbols.Type, right: symbols.Type, ctx: ErrorContext): Unit = throw UnificationFailed
-}
-
-class BindSome(binder: source.Tree, capabilities: Map[symbols.InterfaceType, symbols.BlockParam], val parent: CapabilityScope) extends CapabilityScope {
+class BindSome(binder: source.Tree, capabilities: Map[symbols.BlockTypeConstructor, symbols.BlockParam], val parent: CapabilityScope) extends CapabilityScope {
   def copy: CapabilityScope = BindSome(binder, capabilities, parent.copy)
   def capabilityFor(tpe: symbols.InterfaceType)(using C: Context): symbols.BlockParam =
-    capabilities.get(tpe).orElse {
-      tryLexicalCapabilityFor(tpe)
-    }.getOrElse(parent.capabilityFor(tpe))
-
-  // If the requested type has unbound type parameters, try lexical resolution (see PR #1194)
-  private def tryLexicalCapabilityFor(tpe: symbols.InterfaceType)(using C: Context): Option[symbols.BlockParam] = {
-    if (unknowns(tpe).isEmpty) return None
-
-    // Is `handlerTpe` a valid concrete interface for the `tpe` at hand?
-    def isCompatible(handlerTpe: symbols.InterfaceType): Boolean =
-      tpe.typeConstructor == handlerTpe.typeConstructor &&
-        (tpe.args zip handlerTpe.args).forall { case (inferred, concrete) =>
-          DummyUnifier.checkSubtype(inferred, concrete)
-        }
-
-    val compatible = capabilities.filter { case (handlerTpe, cap) => isCompatible(handlerTpe) }.toList
-    compatible match {
-      case List((handlerTpe, cap)) =>
-        (tpe.args zip handlerTpe.args).foreach { case (inferred, concrete) =>
-          // Enforce subtype constraints for the type params of the chosen handler
-          C.requireSubtype(inferred, concrete, ErrorContext.Expected(inferred, concrete, C.focus, None))
-        }
-        Some(cap)
-      case _ => None // no compatible match or multiple (ambiguous)
+    capabilities.get(tpe.typeConstructor) match {
+      case Some(capability) =>
+        unifyCapability(tpe, capability)
+        capability
+      case None => parent.capabilityFor(tpe)
     }
-  }
-
-
-  def relevantInScopeFor(tpe: symbols.InterfaceType)(using C: Context): Set[symbols.InterfaceType] =
-    capabilities.collect { case (handlerTpe, _) if handlerTpe.typeConstructor == tpe.typeConstructor && unknowns(handlerTpe).isEmpty => handlerTpe }.toSet ++ parent.relevantInScopeFor(tpe)
   override def toString: String = s"BindSome(${binder.getClass.getSimpleName}, ${capabilities}, ${parent})"
 }
-class BindAll(binder: source.Tree, var capabilities: Map[symbols.InterfaceType, symbols.BlockParam], val parent: CapabilityScope) extends CapabilityScope {
+class BindAll(binder: source.Tree, var capabilities: Map[symbols.BlockTypeConstructor, symbols.BlockParam], val parent: CapabilityScope) extends CapabilityScope {
   def copy: CapabilityScope = BindAll(binder, capabilities, parent.copy)
   def capabilityFor(tpe: symbols.InterfaceType)(using C: Context): symbols.BlockParam =
-    capabilities.getOrElse(tpe, {
-      val freshCapability = C.freshCapabilityFor(tpe)
-      capabilities = capabilities.updated(tpe, freshCapability)
-      freshCapability
-    })
-  def relevantInScopeFor(tpe: symbols.InterfaceType)(using C: Context): Set[symbols.InterfaceType] =
-    capabilities.collect { case (handlerTpe, _) if handlerTpe.typeConstructor == tpe.typeConstructor && unknowns(handlerTpe).isEmpty => handlerTpe }.toSet ++ parent.relevantInScopeFor(tpe)
+    capabilities.get(tpe.typeConstructor) match {
+      case Some(capability) =>
+        unifyCapability(tpe, capability)
+        capability
+      case None =>
+        val freshCapability = C.freshCapabilityFor(tpe)
+        capabilities = capabilities.updated(tpe.typeConstructor, freshCapability)
+        freshCapability
+    }
   override def toString: String = s"BindAll(${binder.getClass.getSimpleName}, ${capabilities}, ${parent})"
 }
