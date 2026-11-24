@@ -1086,3 +1086,6 @@ define ccc %CObject @coercePosObj(%Pos %input) {
 
 ; Ranges
 !41 = !{i64 0, i64 9223372036854775807} ; positive i64
+
+; Empty node shared by !invariant.group and !invariant.load
+!60 = !{}

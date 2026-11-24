@@ -22,11 +22,11 @@ extern type Array[T] =
 ///    +--------------+------+------------+
 /// ```
 extern llvm """
-define void @array_erase_fields(ptr %object) {
+define private void @array_erase_fields(ptr noalias noundef nonnull align 8 dereferenceable(24) captures(none) %object) unnamed_addr alwaysinline mustprogress nounwind {
 entry:
     %array_pointer = getelementptr %Header, ptr %object, i64 1
     %data_pointer = getelementptr inbounds i64, ptr %array_pointer, i64 1
-    %size = load i64, ptr %array_pointer, align 8
+    %size = load i64, ptr %array_pointer, align 8, !invariant.group !60
     %size_eq_0 = icmp eq i64 %size, 0
     br i1 %size_eq_0, label %exit, label %loop
 loop:
@@ -56,8 +56,8 @@ extern def unsafeAllocate[T](size: Int) at global: Array[T] =
     %calloc = tail call noalias ptr @calloc(i64 %size1, i64 1)
     %eraser_pointer = getelementptr ptr, ptr %calloc, i64 1
     %size_pointer = getelementptr ptr, ptr %calloc, i64 2
-    store i64 0, ptr %calloc
-    store ptr @array_erase_fields, ptr %eraser_pointer
+    store i64 0, ptr %calloc, !invariant.group !60
+    store ptr @array_erase_fields, ptr %eraser_pointer, !invariant.group !60
     store i64 ${size}, ptr %size_pointer
     %ret_pos = insertvalue %Pos { i64 0, ptr poison }, ptr %calloc, 1
     ret %Pos %ret_pos
@@ -96,7 +96,7 @@ extern def size[T](arr: Array[T]) at {}: Int =
   llvm """
     %pos_data = extractvalue %Pos ${arr}, 1
     %size_pointer = getelementptr inbounds i64, ptr %pos_data, i64 2
-    %size = load i64, ptr %size_pointer
+    %size = load i64, ptr %size_pointer, !invariant.group !60
 
     tail call void @erasePositive(%Pos ${arr})
     ret i64 %size
@@ -106,7 +106,7 @@ extern llvm """
 define void @assertInbounds(i64 %index, %Pos %arr) alwaysinline {
   %pos_data = extractvalue %Pos %arr, 1
   %size_pointer = getelementptr inbounds i64, ptr %pos_data, i64 2
-  %size = load i64, ptr %size_pointer
+  %size = load i64, ptr %size_pointer, !invariant.group !60
   %in_bounds = icmp ult i64 %index, %size
   br i1 %in_bounds, label %ok, label %out
 out:
