@@ -13,8 +13,7 @@ namespace internal {
     u.rawElements.get(s) < 0
   }
   def parent(u: UnionFind, s: Int): Int / Exception[MissingValue] = {
-    with on[OutOfBounds].default { do raise(MissingValue(), "No node " ++ s.show) }
-    val c = u.rawElements.get(s)
+    val c: Int = on[OutOfBounds].default { do raise(MissingValue(), "No node " ++ s.show) } { u.rawElements.get(s) }
     if (c < 0) {
       do raise(MissingValue(), "Root node " ++ s.show ++ " has no parent.")
     } else {
@@ -22,8 +21,7 @@ namespace internal {
     }
   }
   def rank(u: UnionFind, s: Int): Int / Exception[MissingValue] = {
-    with on[OutOfBounds].default { do raise(MissingValue(), "No node " ++ s.show) }
-    val c = u.rawElements.get(s)
+    val c: Int = on[OutOfBounds].default { do raise(MissingValue(), "No node " ++ s.show) } { u.rawElements.get(s) }
     if (c < 0) {
       -1 * c - 1
     } else {

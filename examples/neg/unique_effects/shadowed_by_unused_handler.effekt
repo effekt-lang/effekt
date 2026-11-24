@@ -2,9 +2,9 @@ import exception
 
 def g[E](x: Int) { act: Int => Int / Exception[E] }: Int / Exception[E] = act(x)
 
-// `E` is `RuntimeError`, from `act`, and not `MissingValue` from the closer handler
+// the closer handler for `Exception[MissingValue]` shadows the `Exception[RuntimeError]` that `act` needs
 def outer { act: Int => Int / Exception[RuntimeError] }: Int / Exception[RuntimeError] = {
-  with on[MissingValue].panic
+  with on[MissingValue].panic // ERROR Cannot typecheck call
   g(1) {act}
 }
 

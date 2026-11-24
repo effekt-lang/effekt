@@ -1,3 +1,9 @@
-[error] examples/neg/issue1399.effekt:14:7: Effect Queue[() => Unit at ?C] is not allowed in this context. [typer]
+[error] examples/neg/issue1399.effekt:14:7: Expected type [typer]
+  Queue[Unit => Unit at {}]
+but got type
+  Queue[() => Unit at ?C]
 14        do enqueue (box { () => resume(()) })
           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+    * note: Expected 1 value parameter but got 0.
+    * note: Queue[Unit => Unit at {}] is the closest one in scope and shadows all others: an effect can only be used at one type at a time.

@@ -1,7 +1,9 @@
-[error] examples/neg/lexical_capability_selection_all_bad.effekt:10:3: Effects need to be fully known, but effect Greet[Int, U]'s type parameter(s) U could not be inferred. [typer]
+[error] examples/neg/lexical_capability_selection_all_bad.effekt:10:3: Expected type [typer]
+  Greet[String, String]
+but got type
+  Greet[Int, U]
 10    Proxy[Int].greet()
       ^^^^^^^^^^^^^^^^^^
 
-    * help: Maybe try annotating them?
-    * help: Did you mean to use an operation of the concrete interface Greet[String, Int]?
-    * help: Did you mean to use an operation of the concrete interface Greet[String, String]?
+    * note: Expected String but got Int.
+    * note: Greet[String, String] is the closest one in scope and shadows all others: an effect can only be used at one type at a time.

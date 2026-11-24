@@ -5,4 +5,4 @@ but got type
 9    try { g(1) {act} } with emit[String] { def emit(s) = resume(()) }
                  ^^^
 
-   * note: Expected the effects { Exception[E], emit[String] } but got { Exception[RuntimeError], emit[Int] }.
+   * note: Expected String but got Int.

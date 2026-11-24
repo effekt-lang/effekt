@@ -203,10 +203,12 @@ def source[A] { stream: () => Unit / emit[A] } { driver: () => Unit / next[A] }:
 /// Terminates when either of them terminates.
 def zip[A, B] { stream1: () => Unit / emit[A] } { stream2: () => Unit / emit[B] } { action: (A, B) => Unit }: Unit = {
   with source[A] { stream1 }
+  def first = new next[A] { def next() = do next() }
   with source[B] { stream2 }
+  def second = new next[B] { def next() = do next() }
 
   loop {
-    action(do next[A](), do next[B]())
+    action(first.next(), second.next())
   }
 }
 
@@ -214,19 +216,21 @@ def zip[A, B] { stream1: () => Unit / emit[A] } { stream2: () => Unit / emit[B] 
 /// Terminates when both of them terminated.
 def zipLongest[A, B] { stream1: () => Unit / emit[A] } { stream2: () => Unit / emit[B] } { action: OneOrBoth[A, B] => Unit }: Unit = {
   with source[A] { stream1 }
+  def first = new next[A] { def next() = do next() }
   with source[B] { stream2 }
+  def second = new next[B] { def next() = do next() }
 
   loop {
      try {
-      val a = do next[A]()
+      val a = first.next()
       try {
-        val b = do next[B]()
+        val b = second.next()
         action(Both(a, b))
       } with stop { () =>
         action(This(a))
       }
     } with stop{ () =>
-      val b = do next[B]()
+      val b = second.next()
       action(That(b))
     }
   }

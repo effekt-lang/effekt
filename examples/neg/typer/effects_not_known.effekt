@@ -1,7 +1,7 @@
 effect emit[A](a: A): Unit
 
 // handles both effects itself, so a call needs no capabilities for them
-def gather[A, B] { act: () => Unit / { emit[A], emit[B] } }: (List[A], List[B]) = {
+def gather[A, B] { act: () => Unit / { emit[A], emit[B] } }: (List[A], List[B]) = { // ERROR Effect emit occurs more than once
   var as: List[A] = Nil()
   var bs: List[B] = Nil()
   try { 
@@ -12,7 +12,7 @@ def gather[A, B] { act: () => Unit / { emit[A], emit[B] } }: (List[A], List[B]) 
   (as, bs)
 }
 
-def outer { act: () => Unit / { emit[Int], emit[String] } }: Unit = {
+def outer { act: () => Unit / { emit[Int], emit[String] } }: Unit = { // ERROR Effect emit occurs more than once
   // two `emit`s on each side, and which is which is only known below
   val r = gather {act}
 

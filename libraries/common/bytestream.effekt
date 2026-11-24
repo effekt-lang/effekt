@@ -29,17 +29,31 @@ def not(b: Bit): Bit = b match {
   case B1() => B0()
 }
 
-/// Splices allowed in hex/byte stream literals
-effect HexSplices = {
-  splice[Char], splice[String], 
-  splice[Unit], 
-  splice[Int],
-  splice[Byte],
-  splice[BE[Int]], splice[LE[Int]],
-  splice[LE[Signed[Int]]], splice[OfWidth[LE[Int]]], splice[OfWidth[LE[Signed[Int]]]],
-  splice[BE[Signed[Int]]], splice[OfWidth[BE[Int]]], splice[OfWidth[BE[Signed[Int]]]],
-  splice[ByteArray]
+/// Everything that can be spliced into hex/byte stream literals
+type HexSplice {
+  HexByte(byte: Byte)
+  HexChar(char: Char)
+  HexString(string: String)
+  HexByteArray(array: ByteArray)
+  HexLE(value: Int, width: Int)
+  HexBE(value: Int, width: Int)
+  HexSignedLE(value: Int, width: Int)
+  HexSignedBE(value: Int, width: Int)
 }
+
+def bytes(b: Byte): HexSplice = HexByte(b)
+def bytes(c: Char): HexSplice = HexChar(c)
+def bytes(s: String): HexSplice = HexString(s)
+def bytes(array: ByteArray): HexSplice = HexByteArray(array)
+def bytes(n: Int): HexSplice = HexBE(n, 4)
+def bytes(w: LE[Int]): HexSplice = HexLE(w.raw, 4)
+def bytes(w: BE[Int]): HexSplice = HexBE(w.raw, 4)
+def bytes(w: LE[Signed[Int]]): HexSplice = HexSignedLE(w.raw.raw, 4)
+def bytes(w: BE[Signed[Int]]): HexSplice = HexSignedBE(w.raw.raw, 4)
+def bytes(w: OfWidth[LE[Int]]): HexSplice = HexLE(w.raw.raw, w.width)
+def bytes(w: OfWidth[BE[Int]]): HexSplice = HexBE(w.raw.raw, w.width)
+def bytes(w: OfWidth[LE[Signed[Int]]]): HexSplice = HexSignedLE(w.raw.raw.raw, w.width)
+def bytes(w: OfWidth[BE[Signed[Int]]]): HexSplice = HexSignedBE(w.raw.raw.raw, w.width)
 
 // Splitting
 // ---------
@@ -97,48 +111,36 @@ def signedBytesBE(int: Int): Unit / emit[Byte] = signedBytesBE(int, 4)
 
 /// Splicer to emit the bytes in hex notation given, plus eventual splices
 /// Ignores whitespace
-def hex{ body: => Unit / { write, HexSplices } }: Unit / emit[Byte] = {
+def hex{ body: => Unit / { write, splice[HexSplice] } }: Unit / emit[Byte] =
   try {
-    try {
-      body()
-    }
-    with splice[String] { s =>
-      feed(s){ loop { do splice[Char](do next[Char]()) } }
-      resume(())
-    }
-    with splice[ByteArray] { ba =>
-      ba.foreach{ b => do splice[Byte](b) }
-      resume(())
-    }
-  }
-  with write { s =>
-      feed(s){
-        loop {
-          attempt {
-            val upper: Int = hexDigitValue(do next[Char]())
-            val lower: Int = hexDigitValue(do next[Char]())
-            do emit[Byte]((16 * upper + lower).toByte)
-          } { () }
-        }
+    body()
+  } with write { s =>
+    feed(s){
+      loop {
+        attempt {
+          val upper: Int = hexDigitValue(do next[Char]())
+          val lower: Int = hexDigitValue(do next[Char]())
+          do emit[Byte]((16 * upper + lower).toByte)
+        } { () }
       }
-      resume(())
     }
-  with splice[Char] { c => do emit[Byte](c.toInt.toByte); resume(()) }
-  with splice[Byte] { b => do emit(b); resume(()) }
-  with splice[Unit] { u => resume(()) }
-  with splice[Int] { n => bytesBE(n); resume(()) }
-  with splice[LE[Int]] { w => bytesLE(w.raw); resume(()) }
-  with splice[BE[Int]] { v => bytesBE(v.raw); resume(()) }
-  with splice[LE[Signed[Int]]] { w => signedBytesLE(w.raw.raw); resume(()) }
-  with splice[OfWidth[LE[Int]]] { w => bytesLE(w.raw.raw, w.width); resume(()) }
-  with splice[OfWidth[LE[Signed[Int]]]] { w => signedBytesLE(w.raw.raw.raw, w.width); resume(()) }
-  with splice[BE[Signed[Int]]] { w => signedBytesBE(w.raw.raw); resume(()) }
-  with splice[OfWidth[BE[Int]]] { w => bytesBE(w.raw.raw, w.width); resume(()) }
-  with splice[OfWidth[BE[Signed[Int]]]] { w => signedBytesBE(w.raw.raw.raw, w.width); resume(()) }
-}
+    resume(())
+  } with splice[HexSplice] { spliced =>
+    spliced match {
+      case HexByte(byte) => do emit(byte)
+      case HexChar(char) => do emit(char.toInt.toByte)
+      case HexString(string) => feed(string) { loop { do emit(do next[Char]().toInt.toByte) } }
+      case HexByteArray(array) => array.foreach { byte => do emit(byte) }
+      case HexLE(value, width) => bytesLE(value, width)
+      case HexBE(value, width) => bytesBE(value, width)
+      case HexSignedLE(value, width) => signedBytesLE(value, width)
+      case HexSignedBE(value, width) => signedBytesBE(value, width)
+    }
+    resume(())
+  }
 
 /// convert the given hex notation to an integer (big-endian)
-def x{ body: => Unit / { write, HexSplices } }: Int = {
+def x{ body: => Unit / { write, splice[HexSplice] } }: Int = {
   var res = 0
   for[Byte]{ hex{body} }{ v => res = res * 256 + v.toInt }
   res
@@ -270,30 +272,37 @@ def groupBytesLE{ body: => Unit / emit[Bit] }: Unit / emit[Byte] = {
 
 // Literals/splices
 // ----------------
-/// Splices allowed in bit stream literals
-effect BitSplices = {
-  splice[Unit], splice[Bit],
-  splice[Byte],
-  splice[LE[Int]], splice[BE[Int]],
-  splice[LE[Signed[Int]]], splice[BE[Signed[Int]]],
-  splice[OfWidth[LE[Int]]], splice[OfWidth[BE[Int]]],
-  splice[OfWidth[LE[Signed[Int]]]], splice[OfWidth[BE[Signed[Int]]]]
+/// Everything that can be spliced into bit stream literals
+type BitSplice {
+  BitBit(bit: Bit)
+  BitByte(byte: Byte)
+  BitBytesLE(value: Int)
+  BitBytesBE(value: Int)
+  BitSignedBytesLE(value: Int)
+  BitSignedBytesBE(value: Int)
+  BitLE(value: Int, width: Int)
+  BitBE(value: Int, width: Int)
+  BitSignedLE(value: Int, width: Int)
+  BitSignedBE(value: Int, width: Int)
 }
+
+def bits(b: Bit): BitSplice = BitBit(b)
+def bits(b: Byte): BitSplice = BitByte(b)
+def bits(w: LE[Int]): BitSplice = BitBytesLE(w.raw)
+def bits(w: BE[Int]): BitSplice = BitBytesBE(w.raw)
+def bits(w: LE[Signed[Int]]): BitSplice = BitSignedBytesLE(w.raw.raw)
+def bits(w: BE[Signed[Int]]): BitSplice = BitSignedBytesBE(w.raw.raw)
+def bits(w: OfWidth[LE[Int]]): BitSplice = BitLE(w.raw.raw, w.width)
+def bits(w: OfWidth[BE[Int]]): BitSplice = BitBE(w.raw.raw, w.width)
+def bits(w: OfWidth[LE[Signed[Int]]]): BitSplice = BitSignedLE(w.raw.raw.raw, w.width)
+def bits(w: OfWidth[BE[Signed[Int]]]): BitSplice = BitSignedBE(w.raw.raw.raw, w.width)
+
 /// Splicer to emit the bits in binary notation given, plus evenutal splices
 /// Ignores whitespace
-def bit{ body: => Unit / { write, BitSplices } }: Unit / emit[Bit] = {
+def bit{ body: => Unit / { write, splice[BitSplice] } }: Unit / emit[Bit] =
   try {
-    ungroupBytesBE{
-      try {
-        body()
-      }
-      with splice[LE[Int]] { i => bytesLE(i.raw); resume(()) }
-      with splice[BE[Int]] { i => bytesBE(i.raw); resume(()) }
-      with splice[LE[Signed[Int]]] { i => signedBytesLE(i.raw.raw); resume(()) }
-      with splice[BE[Signed[Int]]] { i => signedBytesBE(i.raw.raw); resume(()) }
-    }
-  }
-  with write { s =>
+    body()
+  } with write { s =>
     feed(s){
       loop {
         do next[Char]() match {
@@ -304,34 +313,30 @@ def bit{ body: => Unit / { write, BitSplices } }: Unit / emit[Bit] = {
       }
     }
     resume(())
-  }
-  with splice[Unit] { _ => resume(()) }
-  with splice[Bit] { b => do emit(b); resume(()) }
-  with splice[Byte] { b => bitsBE(b); resume(()) }
-  with splice[OfWidth[LE[Int]]] { i =>
-    bitsLE(i.raw.raw, i.width)
-    resume(())
-  }
-  with splice[OfWidth[LE[Signed[Int]]]] { i =>
-    if(i.raw.raw.raw < 0){
-      twoscomplementLE{ bitsLE(0 - i.raw.raw.raw, i.width) }
-    } else {
-      bitsLE(i.raw.raw.raw, i.width)
+  } with splice[BitSplice] { spliced =>
+    spliced match {
+      case BitBit(bit) => do emit(bit)
+      case BitByte(byte) => bitsBE(byte)
+      case BitBytesLE(value) => ungroupBytesBE { bytesLE(value) }
+      case BitBytesBE(value) => ungroupBytesBE { bytesBE(value) }
+      case BitSignedBytesLE(value) => ungroupBytesBE { signedBytesLE(value) }
+      case BitSignedBytesBE(value) => ungroupBytesBE { signedBytesBE(value) }
+      case BitLE(value, width) => bitsLE(value, width)
+      case BitBE(value, width) => bitsBE(value, width)
+      case BitSignedLE(value, width) =>
+        if (value < 0) {
+          twoscomplementLE { bitsLE(0 - value, width) }
+        } else {
+          bitsLE(value, width)
+        }
+      case BitSignedBE(value, width) =>
+        list::collect[Bit] {
+          if (value < 0) {
+            twoscomplementLE { bitsLE(0 - value, width) }
+          } else {
+            bitsLE(value, width)
+          }
+        }.reverse.each
     }
     resume(())
   }
-  with splice[OfWidth[BE[Int]]] { i =>
-    bitsBE(i.raw.raw, i.width)
-    resume(())
-  }
-  with splice[OfWidth[BE[Signed[Int]]]] { i =>
-    list::collect[Bit]{
-      if(i.raw.raw.raw < 0){
-        twoscomplementLE{ bitsLE(0 - i.raw.raw.raw, i.width) }
-      } else {
-        bitsLE(i.raw.raw.raw, i.width)
-      }
-    }.reverse.each
-    resume(())
-  }
-}

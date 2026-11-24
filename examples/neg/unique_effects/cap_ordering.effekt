@@ -5,7 +5,7 @@ module cap_ordering
 
 effect flip[A](): A
 
-def subsets[A](list: List[A]): List[A] / {flip[A], flip[Bool]} = list match {
+def subsets[A](list: List[A]): List[A] / {flip[A], flip[Bool]} = list match { // ERROR Effect flip occurs more than once
   case Nil() => Nil()
   case Cons(head, tail) =>
     val rest = subsets(tail)

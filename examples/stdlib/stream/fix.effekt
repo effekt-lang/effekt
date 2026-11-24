@@ -5,25 +5,28 @@ type Message {
   Complex(msgs: List[Message])
 }
 
-def solveOne(m: Message): Unit / { emit[Int], emit[Message] } = m match {
-  case Primitive(n) => do emit(n)
+def solveOne(m: Message) { results: emit[Int] }: Unit / emit[Message] = m match {
+  case Primitive(n) => results.emit(n)
   case Complex(msgs) => msgs.each
 }
 
 def main() = {
-  def solved() = fix[Message] { msg => solveOne(msg) } {
-    do emit(
-      Complex([
-        Primitive(1),
-        Complex([Primitive(2), Primitive(3), Primitive(4)]),
-        Complex([]),
-        Complex([Complex([Primitive(0)]), Primitive(100)])
-      ])
-    )
-    do emit(Primitive(-60))
-    do emit(Complex([]))
-    do emit(Complex([Complex([]), Primitive(42)]))
-    do emit(Primitive(-50))
+  def solved() = {
+    def results = new emit[Int] { def emit(item) = do emit(item) }
+    fix[Message] { msg => solveOne(msg) {results} } {
+      do emit(
+        Complex([
+          Primitive(1),
+          Complex([Primitive(2), Primitive(3), Primitive(4)]),
+          Complex([]),
+          Complex([Complex([Primitive(0)]), Primitive(100)])
+        ])
+      )
+      do emit(Primitive(-60))
+      do emit(Complex([]))
+      do emit(Complex([Complex([]), Primitive(42)]))
+      do emit(Primitive(-50))
+    }
   }
 
   var sum = 0

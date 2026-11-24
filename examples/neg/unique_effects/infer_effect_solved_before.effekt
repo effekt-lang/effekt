@@ -1,6 +1,6 @@
 effect emit[A](a: A): Unit
 
-def each[A, B](x: A) { act: A => Unit / { emit[A], emit[B] } }: List[B] = {
+def each[A, B](x: A) { act: A => Unit / { emit[A], emit[B] } }: List[B] = { // ERROR Effect emit occurs more than once
   var bs: List[B] = Nil()
   try { 
     try { act(x) } with emit[A] { a => resume(()) } 
@@ -11,7 +11,7 @@ def each[A, B](x: A) { act: A => Unit / { emit[A], emit[B] } }: List[B] = {
 }
 
 // comparing `act`'s type solves `A !-> Int` from its parameter before we compare the effects
-def outer { act: Int => Unit / { emit[Int], emit[String] } }: Unit = {
+def outer { act: Int => Unit / { emit[Int], emit[String] } }: Unit = { // ERROR Effect emit occurs more than once
   val bs = each(0) {act}
   println(bs.size)
 }

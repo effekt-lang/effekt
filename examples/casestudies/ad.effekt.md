@@ -66,13 +66,15 @@ def forwards(in: Double) { prog: NumF => NumF / AD[NumF] }: Double =
 
 
 record NumH[N](value: N, d: N)
-def forwardsHigher[N](in: N) { prog: NumH[N] => NumH[N] / AD[NumH[N]] }: N / AD[N] =
-  try { prog(NumH(in, do num(1.0))).d } with AD[NumH[N]] {
+def forwardsHigher[N](in: N) { prog: NumH[N] => NumH[N] / AD[NumH[N]] }: N / AD[N] = {
+  val one = do num(1.0)
+  try { prog(NumH(in, one)).d } with AD[NumH[N]] {
     def num(v)    = resume(NumH(do num(v), do num(0.0)))
     def add(x, y) = resume(NumH(do add(x.value, y.value), do add(x.d, y.d)))
     def mul(x, y) = resume(NumH(do mul(x.value, y.value), do add(do mul(x.d, y.value), do mul(y.d, x.value))))
     def exp(x) = resume(NumH(do exp(x.value), do mul(x.d, do exp(x.value))))
   }
+}
 
 def showString { prog: String => String / AD[String] } =
   try { prog("x") } with AD[String] {

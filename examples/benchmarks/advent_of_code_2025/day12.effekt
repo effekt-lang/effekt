@@ -10,7 +10,9 @@ record Region(size0: Int, size1: Int, quantities: Array[Int])
 
 def parseProblem(): (Array[Array2[Bool]], List[Region]) / { Scan[Char], fail } = {
   list::returning::collect {
+    def regions = new emit[Region] { def emit(item) = do emit(item) }
     array::collect {
+      def shapes = new emit[Array2[Bool]] { def emit(item) = do emit(item) }
       loop {
         do peek()
         val number = readDecimal()
@@ -40,7 +42,7 @@ def parseProblem(): (Array[Array2[Bool]], List[Region]) / { Scan[Char], fail } =
               }
             }
             skip()
-            do emit(Array2(size0, size1, fields))
+            shapes.emit(Array2(size0, size1, fields))
           case 'x' =>
             val size0 = number
             val size1 = readDecimal()
@@ -49,7 +51,7 @@ def parseProblem(): (Array[Array2[Bool]], List[Region]) / { Scan[Char], fail } =
             val quantities = array::collect[Int] {
               line { list(' ') { readDecimal() } }
             }
-            do emit(Region(size0, size1, quantities))
+            regions.emit(Region(size0, size1, quantities))
           case _ => do fail()
         }
       }
