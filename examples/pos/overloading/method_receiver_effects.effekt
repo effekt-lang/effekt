@@ -1,0 +1,8 @@
+// Typer: the effects of a method call's receiver are the call's (`make` is inferred for `f`)
+interface Counter { def peekCount(): Int }
+effect make(): Counter at {}
+def f() = (do make()).peekCount()
+def main() = {
+  val n = try { f() } with make { () => resume(box new Counter { def peekCount() = 7 }) }
+  println(n)
+}

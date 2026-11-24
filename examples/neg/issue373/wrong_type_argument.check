@@ -1,6 +1,8 @@
-[error] examples/neg/issue373/wrong_type_argument.effekt:11:21: Expected Bool but got Int. [typer]
-11    try { myPrintLine(eff.op[Bool]("hello")) } // ERROR Expected Bool but got Int
-                        ^^^^^^^^^^^^^^^^^^^^^
+[error] examples/neg/issue373/wrong_type_argument.effekt:11:21: Expected Eff[Bool] but got Eff[Int]. [typer]
+11    try { myPrintLine(eff.op[Bool]("hello")) } // ERROR Expected Eff[Bool] but got Eff[Int]
+                        ^^^
+
+    * note: Expected Bool but got Int.
 [error] examples/neg/issue373/wrong_type_argument.effekt:11:34: Expected Bool but got String. [typer]
-11    try { myPrintLine(eff.op[Bool]("hello")) } // ERROR Expected Bool but got Int
+11    try { myPrintLine(eff.op[Bool]("hello")) } // ERROR Expected Eff[Bool] but got Eff[Int]
                                      ^^^^^^^
