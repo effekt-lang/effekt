@@ -71,29 +71,23 @@ extension (i: BlockType.InterfaceType) {
 /**
  * The effects of a function type, as declared, being the capabilities a call passes.
  *
- * All effects are dealiased by Namer. This is a list, not a set: entries are not made distinct after substitution,
- * since { State[?S], State[?T] }[?S !-> Int, ?T !-> Int] becomes { State[Int], State[Int] },
+ * All effects are dealiased and made distinct by Namer. This is a list, not a set: entries are not made distinct after
+ * substitution, since { State[?S], State[?T] }[?S !-> Int, ?T !-> Int] becomes { State[Int], State[Int] },
  * and a call then still passes two capabilities. The effects of a term, as _inferred_, are [[typer.InferredEffects]].
  *
  * Effect sets are themselves *not* symbols, they are just aggregates.
  */
 case class Effects(effects: List[BlockType.InterfaceType]) {
 
-  lazy val toList: List[InterfaceType] = distinctTypes(effects)
+  def toList: List[InterfaceType] = effects
 
   def isEmpty: Boolean = effects.isEmpty
   def nonEmpty: Boolean = effects.nonEmpty
 
-  def filterNot(p: InterfaceType => Boolean): Effects =
-    Effects(effects.filterNot(p))
-
   def forall(p: InterfaceType => Boolean): Boolean = effects.forall(p)
   def exists(p: InterfaceType => Boolean): Boolean = effects.exists(p)
-  def ++(other: Effects): Effects = Effects(this.effects ++ other.effects)
 
   def size: Int = effects.size
-
-  def distinct: Effects = Effects(distinctTypes(effects))
 }
 object Effects {
 
