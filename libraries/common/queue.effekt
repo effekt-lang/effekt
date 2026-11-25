@@ -21,7 +21,7 @@ interface Queue[T] {
 
 
 def emptyQueue[T](): Queue[T] at global =
-  emptyQueue[T](64)
+  emptyQueue(64)
 
 def emptyQueue[T](initialCapacity: Int): Queue[T] at global = {
 
@@ -49,7 +49,7 @@ def emptyQueue[T](initialCapacity: Int): Queue[T] at global = {
       val oldSize = capacity.get
       val newSize = capacity.get * 2
       val oldContents = contents.get
-      val newContents = array[Option[T]](newSize, None())
+      val newContents = array(newSize, None())
 
       if (head.get < tail.get) {
         // The queue does not wrap around; direct copy is possible.

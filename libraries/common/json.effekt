@@ -99,9 +99,9 @@ def readQuotedString(): Unit / { Scan[Char], emit[Char], Exception[WrongFormat] 
   with expect("Unexpected end of input while reading a string")
   skipWhitespace()
   expect("Expected \"") { must { readIf('"') } }
-  while(must { do next[Char]() } is c and c != '"') {
+  while(must { do next() } is c and c != '"') {
     c match {
-      case '\\' => must { do next[Char]() } match {
+      case '\\' => must { do next() } match {
         case '"' => do emit('\"')
         case '\\' => do emit('\\')
         case '/' => do emit('/')
@@ -332,7 +332,7 @@ namespace test {
       println("")
 
       // format with intermediate value
-      val j = feed[JsonValue]("""{
+      val j = feed("""{
                   "a": null,
                   "b": [true, false, false, true], "f": 12.532
                 } """){

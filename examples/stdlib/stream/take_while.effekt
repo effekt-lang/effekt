@@ -1,13 +1,13 @@
 def main() = {
   println(
-    list::collect { takeWhile[Int] { x => x < 3 } { [1, 2, 3, 4, 1].each } }
+    list::collect { takeWhile { x => x < 3 } { [1, 2, 3, 4, 1].each } }
   )
 
   println(
-    list::collect { takeWhile[Int] { x => x < 10 } { [1, 2, 3].each } }
+    list::collect { takeWhile { x => x < 10 } { [1, 2, 3].each } }
   )
 
   println(
-    list::collect { takeWhile[Int] { x => x < 0 } { [1, 2, 3].each } }
+    list::collect { takeWhile { x => x < 0 } { [1, 2, 3].each } }
   )
 }

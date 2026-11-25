@@ -22,19 +22,19 @@ effect next[A](): A / stop
 ///
 /// e.g. for[Int] { prog() } { el => println(el) }
 def for[A] { stream: () => Unit / emit[A] } { action: A => Unit }: Unit =
-  returning::for[A, Unit]{stream}{action}
+  returning::for{stream}{action}
 
 /// Applies the given function on each emitted element and reemits the result.
 ///
 /// e.g. map[Int,String]{ x => x.show } { range(0, 5) }
 def map[A, B] { function: A => B } { stream: () => Unit / emit[A] }: Unit / emit[B] =
-  returning::map[A, B, Unit]{function}{stream}
+  returning::map{function}{stream}
 
 /// Runs the given action whenever the given driver reads an element.
 ///
 /// e.g. var i = -1; with tap { i = i + 1; i }; driver()
 def tap[A] { action: () => A / stop } { driver: () => Unit / next[A] }: Unit =
-  returning::tap[A, Unit]{action}{driver}
+  returning::tap{action}{driver}
 
 /// Runs the stream as a message queue,
 /// handling each of its elements that can produce new elements ("messages"),
@@ -75,12 +75,12 @@ def rangeFrom(lower: Int): Unit / emit[Int] = {
 }
 
 def index[A] { stream: () => Unit / emit[A] }: Unit / emit[Indexed[A]] =
-  returning::index[A, Unit]{stream}
+  returning::index{stream}
 
 
 /// If `number` is zero or negative it does nothing
 def limit[A](number: Int) { stream: () => Unit / emit[A] }: Unit / emit[A] =
-  boundary { returning::limit[A, Unit](number){stream} }
+  boundary { returning::limit(number){stream} }
 
 
 /// If `number` is zero or negative it does nothing
@@ -122,10 +122,10 @@ def takeWhile[A] { predicate: A => Bool } { stream: () => Unit / emit[A] }: Unit
 
 
 def sum { stream: () => Unit / emit[Int] }: Int =
-  returning::sum[Unit]{stream}.second
+  returning::sum{stream}.second
 
 def product { stream: () => Unit / emit[Int] }: Int =
-  returning::product[Unit]{stream}.second
+  returning::product{stream}.second
 
 /// Returns true if all elements in the stream satisfy the given predicate,
 /// false otherwise. Short-circuits as soon as a non-matching element is found.
@@ -290,7 +290,7 @@ def manyTee[A]{ body: { { { => Unit / emit[A] } => Unit }{ => Unit / emit[A] } =
   try {
     body{ {hnd}{prod} =>
       running = running + 1
-      teeing[A]{ {b} => hnd{b}; running = running - 1 }{prod}
+      teeing{ {b} => hnd{b}; running = running - 1 }{prod}
     }
   } with emit[A] { _ =>
     if(running > 0) resume(())
@@ -358,7 +358,7 @@ effect peek[A](): A / stop
 
 /// Provide the ability to peek when consuming a stream.
 def peeking[A] { peeker: () => Unit / {next[A], peek[A]} }: Unit / next[A] =
-  returning::peeking[A, Unit]{peeker}
+  returning::peeking{peeker}
 
 // Counting and padding
 // --------------------
@@ -371,21 +371,21 @@ effect getPos(): Int
 def tracking[A](init: Int){ body: => Unit / { emit[A], getPos } }: Unit / emit[A] = {
   var n = init
   try body()
-  with emit[A] { b => n = n + 1; resume(do emit[A](b)) }
+  with emit[A] { b => n = n + 1; resume(do emit(b)) }
   with getPos{ resume(n) }
 }
 
 /// Pad to a multiple of fac emitted values, by emitting gen repeatedly
 def pad[A](fac: Int){ gen: => A }: Unit  / {getPos, emit[A]} = {
   while(mod(do getPos(), fac) != 0) {
-    do emit[A](gen())
+    do emit(gen())
   }
 }
 
 /// Track how many bytes were emitted (in the body)
 /// Handles getPos
 def tracking[A]{ body: => Unit / { emit[A], getPos } }: Unit / emit[A] =
-  tracking[A](0){body}
+  tracking(0){body}
 
 namespace returning {
 

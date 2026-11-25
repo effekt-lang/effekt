@@ -80,7 +80,7 @@ def main() = {
   val c4 = connect("127.0.0.1", port4)
   var total = 0
   streaming(c4) {
-    loop { total = total + do next[ByteArray]().size }
+    loop { total = total + do next().size }
   }
   println("streamed " ++ total.show ++ " bytes, then end of stream")
   close(c4)

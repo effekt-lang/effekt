@@ -4,7 +4,7 @@ import list
 
 // used to circumvent missing universal `show` & `println` on some backends
 def printListOfPairs(list: List[Tuple2[Int, Int]]): Unit = {
-  val strings: List[String] = list.map {
+  val strings = list.map {
     case (fst, snd) => "(" ++ show(fst) ++ ", " ++ show(snd) ++ ")"
   }
   println(strings)
@@ -12,7 +12,7 @@ def printListOfPairs(list: List[Tuple2[Int, Int]]): Unit = {
 
 // used to circumvent missing universal `show` & `println` on some backends
 def printListOfOneOrBoth(list: List[OneOrBoth[Int, Int]]): Unit = {
-  val strings: List[String] = list.map {
+  val strings = list.map {
     case Both(fst, snd) => "Both(" ++ show(fst) ++ ", " ++ show(snd) ++ ")"
     case This(fst) => "This(" ++ show(fst) ++ ")"
     case That(snd) => "That(" ++ show(snd) ++ ")"

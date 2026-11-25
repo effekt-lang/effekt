@@ -9,7 +9,7 @@ effect Scan[A] = {next[A], peek[A]}
 def skip[A](): Unit / {next[A], stop} = { do next(); () }
 
 def expect(message: String) { scanner: () => Unit / fail }: Unit / Exception[WrongFormat] =
-  returning::expect[Unit](message){scanner}
+  returning::expect(message){scanner}
 
 /// If conversion is successful read the next token, otherwise stop.
 def readWhen[A, B] { convert: A => B / fail }: B / { Scan[A], stop } = {
@@ -117,7 +117,7 @@ def skipWhitespace(): Unit / Scan[Char] =
 /// Read a prefix of the characters of the given string.
 /// Fails when it cannot read all of them.
 def readString(string: String): Unit / { Scan[Char], fail } =
-  for[Char] { string.each } { char => must { readIf(char) } }
+  for { string.each } { char => must { readIf(char) } }
 
 /// Check that the next character is a digit in base 10, and if so read and return it.
 def readDigit(): Int / { Scan[Char], stop } =
@@ -127,7 +127,7 @@ def readDigit(): Int / { Scan[Char], stop } =
 /// Fails when there isn't at least one digit.
 def readDecimal(): Int / { Scan[Char], fail } = {
   var result = must { readDigit() }
-  for[Int] { many { readDigit() } } { digit =>
+  for { many { readDigit() } } { digit =>
     result = result * 10 + digit
   }
   result
@@ -141,7 +141,7 @@ def readHexDigit(): Int / { Scan[Char], stop } =
 /// Fails when there isn't at least one digit.
 def readHexadecimal(): Int / { Scan[Char], fail } = {
   var result = must { readHexDigit() }
-  for[Int] { many { readHexDigit() } } { digit =>
+  for { many { readHexDigit() } } { digit =>
     result = result * 16 + digit
   }
   result
@@ -163,10 +163,10 @@ def readDouble(): Double / { Scan[Char], fail} = {
   def exponent(pre: Double): Double / fail = {
     try {
       if(do peek() == 'e' || do peek() == 'E') {
-        skip[Char]()
-        val e = do peek[Char]() match {
-          case '+' => skip[Char](); readDecimal()
-          case '-' => skip[Char](); neg(readDecimal())
+        skip()
+        val e = do peek() match {
+          case '+' => skip(); readDecimal()
+          case '-' => skip(); neg(readDecimal())
           case _ => readDecimal()
         }
         pre * pow(10.0, e)
@@ -179,7 +179,7 @@ def readDouble(): Double / { Scan[Char], fail} = {
     if (succeeds { must { readIf('.') } }) {
       var b = if (pre >= 0) 0.1 else -0.1
       var r = pre.toDouble
-      while (optionally[Int] { must { readDigit() } } is Some(d)) {
+      while (optionally { must { readDigit() } } is Some(d)) {
         r = r + b * d.toDouble
         b = b * 0.1
       }

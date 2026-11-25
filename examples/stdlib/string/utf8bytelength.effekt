@@ -7,5 +7,5 @@ def one(str: String) = {
 
 def main() = {
   val cases = ["", "a", "ab", "abc", "é", "λ", "💩", "aé💩b", "§é💩", "©", "¢", "€", "漢", "अ", "😀", "𝄞", "𐍈", "مرحبا", "👨‍👩‍👧‍👦", "e\u0301"]
-  for { cases.each } { (s: String) => one(s) }
+  for { cases.each } { (s) => one(s) }
 }

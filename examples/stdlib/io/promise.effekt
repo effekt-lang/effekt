@@ -3,7 +3,7 @@ import io/promise
 
 def main() = {
 
-  val p = promise::make[String]()
+  val p = promise::make()
 
   spawn(box { println("Resolved 1: " ++ p.await()) });
   spawn(box { println("Resolved 2: " ++ p.await()) });

@@ -27,7 +27,7 @@ def main() = {
   }
 
   var sum = 0
-  for[Int] {solved} { n =>
+  for {solved} { n =>
     sum = n + sum
     println(n)
   }

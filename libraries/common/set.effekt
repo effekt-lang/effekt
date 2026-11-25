@@ -73,7 +73,7 @@ def fromMapKeys[K, V](map: Map[K, V]): Set[K] =
 ///
 /// O(N)
 def toMap[K, V](keys: Set[K]) { valueOf: K => V }: Map[K, V] = {
-  val newTree: internal::Tree[K, V] = internal::map(keys.tree) { (k, _v) => valueOf(k) }
+  val newTree = internal::map(keys.tree) { (k, _v) => valueOf(k) }
   Map(newTree, keys.compare)
 }
 
@@ -248,14 +248,14 @@ def each[A](set: Set[A]): Unit / emit[A] =
 /// Collects elements emitted by a push stream producer `stream` into a new set
 /// using provided `compare` function, discarding the result of the producer.
 def collect[A](?compare: (A, A) => Ordering at {}) { stream: () => Unit / emit[A] }: Set[A] =
-  returning::collect[A, Unit](compare){stream}.second
+  returning::collect(compare){stream}.second
 
 namespace returning {
   /// Collects elements emitted by a push stream producer `stream` into a new set
   /// using provided `compare` function, returning the result of the producer as well as the collected set.
   def collect[A, R](?compare: (A, A) => Ordering at {}) { stream: () => R / emit[A] }: (R, Set[A]) = {
     val (r, tree) = internal::collect(compare) {
-      stream::returning::for[A, R] {stream} { (v: A) => do emit((v, ())) }
+      stream::returning::for {stream} { (v) => do emit((v, ())) }
     }
     (r, Set(tree, compare))
   }

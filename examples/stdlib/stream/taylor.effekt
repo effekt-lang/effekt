@@ -3,7 +3,7 @@ import stream
 /// Warning: This currently has the wrong time complexity.
 def ints(): Unit / emit[Int] = {
   do emit(1)
-  for[Int] {ints} { x => do emit(x + 1) }
+  for {ints} { x => do emit(x + 1) }
 }
 
 /// Take the `n` first elements of a `stream`, put them in a list.
@@ -18,7 +18,7 @@ def take[A](n: Int) { stream: () => Unit / emit[A] }: List[A] = {
 // => integral = C + all original Taylor series terms shifted by one and divided by n + 1
 def integrate(c: Double) { taylor: () => Unit / emit[Double] } = {
   do emit(c)
-  zip[Double, Int] {taylor} {ints} { (f, n) => do emit(f / n.toDouble) }
+  zip {taylor} {ints} { (f, n) => do emit(f / n.toDouble) }
 }
 
 // e^x := ∫_{0}^x e^y dy + 1
@@ -28,7 +28,7 @@ def exponential(): Unit / emit[Double] =
 // evaluate a taylor series, taking `steps`
 def eval(steps: Int, x: Double) { taylor: () => Unit / emit[Double] } = {
   var acc = 0.0
-  for[Double] { take[Double](steps) {taylor}.reverse.each } { a =>
+  for { take(steps) {taylor}.reverse.each } { a =>
     acc = a + acc * x
   }
   acc
@@ -47,8 +47,8 @@ def main() = {
   def rnd(many: List[Double]) = many.map { one => rnd(one) }
 
 
-  println(take[Int](5) {ints})
-  println(take[Double](5) {exponential}.rnd)
+  println(take(5) {ints})
+  println(take(5) {exponential}.rnd)
   println(eval(20, 2.0) {exponential}.rnd)
   println(eval(20, 2.0) {sine}.rnd)
   println(eval(20, 2.0) {cosine}.rnd)

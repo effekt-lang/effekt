@@ -27,7 +27,7 @@ def eachMSB(n: Int): Unit / emit[Bool] = {
     }
 
     // Then emit from MSB to LSB
-    for[Int] { range(0, highest) } { i =>
+    for { range(0, highest) } { i =>
       val index = highest - i
       val bit = n.bitwiseShr(index - 1).mod(2) == 1
       do emit(bit)
@@ -36,7 +36,7 @@ def eachMSB(n: Int): Unit / emit[Bool] = {
 }
 
 def fastexp(n: Int, k: Int) = product {
-  stream::zip[Int, Bool] {n.iterate { x => x * x }} {k.eachLSB} {
+  stream::zip {n.iterate { x => x * x }} {k.eachLSB} {
     case res, true => do emit(res)
     case res, false => ()
   }
@@ -62,8 +62,8 @@ def main() = {
 
   def testBits(n: Int) = {
     println(n)
-    println(list::collect[Bool] {n.eachLSB}.prettyBits)
-    println(list::collect[Bool] {n.eachMSB}.prettyBits)
+    println(list::collect {n.eachLSB}.prettyBits)
+    println(list::collect {n.eachMSB}.prettyBits)
   }
 
   testBits(0)

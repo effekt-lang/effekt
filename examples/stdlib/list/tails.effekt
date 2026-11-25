@@ -3,10 +3,10 @@ def printNested(list: List[List[Int]]): Unit =
 
 def main() = {
   printNested(
-    list::collect[List[Int]] { [1, 2, 3].tails }
+    list::collect { [1, 2, 3].tails }
   )
 
   printNested(
-    list::collect[List[Int]] { [].tails }
+    list::collect { [].tails }
   )
 }

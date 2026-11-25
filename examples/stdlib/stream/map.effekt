@@ -11,7 +11,7 @@ def main() = {
   val newMap = map::collect(box compareInt) { each(m) }
   println(map::internal::prettyPairs(newMap.toList) { n => show(n) } { c => show(c) })
 
-  val hello: String = string::collect { eachValue(m) }
+  val hello = string::collect { eachValue(m) }
   println(hello)
 }
 

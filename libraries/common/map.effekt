@@ -297,7 +297,7 @@ def union[K, V](m1: Map[K, V], m2: Map[K, V], ?compare: (K, K) => Ordering at {}
 ///
 /// O(???)
 def union[K, V](m1: Map[K, V], m2: Map[K, V]): Map[K, V] =
-  union[K, V](m1, m2, m1.compare) { (k, v1, v2) => v1 }
+  union(m1, m2, m1.compare) { (k, v1, v2) => v1 }
 
 /// Construct a new map which combines all elements that are in both `m1` and `m2` using the `combine` function.
 ///
@@ -311,14 +311,14 @@ def intersection[K, A, B, C](m1: Map[K, A], m2: Map[K, B], ?compare: (K, K) => O
 ///
 /// O(???)
 def intersection[K, A, B, C](m1: Map[K, A], m2: Map[K, B], ?compare: (K, K) => Ordering at {}) { combine: (A, B) => C }: Map[K, C] =
-  m1.intersection[K, A, B, C](m2, compare) { (k, v1, v2) => combine(v1, v2) }
+  m1.intersection(m2, compare) { (k, v1, v2) => combine(v1, v2) }
 
 /// Construct a new map which combines all elements that are in both `m1` and `m2`.
 /// Left-biased: Always uses values from `m1` and the comparison function from `m1`.
 ///
 /// O(???)
 def intersection[K, A, B](m1: Map[K, A], m2: Map[K, B]): Map[K, A] =
-  m1.intersection[K, A, B, A](m2, m1.compare) { (k, v1, v2) => v1 }
+  m1.intersection(m2, m1.compare) { (k, v1, v2) => v1 }
 
 
 
@@ -343,13 +343,13 @@ def eachValue[K, V](map: Map[K, V]): Unit / emit[V] =
 /// Collects `(key, value)` pairs from a push stream producer `stream` into a new `map`
 /// using the provided `compare` function, discarding the result of the producer.
 def collect[K, V](?compare: (K, K) => Ordering at {}) { stream: () => Unit / emit[(K, V)] }: Map[K, V] =
-  returning::collect[K, V, Unit](compare){stream}.second
+  returning::collect(compare){stream}.second
 
 namespace returning {
   /// Collects `(key, value)` pairs from a push stream producer `stream` into a new `map`,
   /// using the provided `compare` function, returning the result of the producer as well as the collected map.
   def collect[K, V, R](?compare: (K, K) => Ordering at {}) { stream: () => R / emit[(K, V)] }: (R, Map[K, V]) = {
-    val (r, tree) = internal::collect[K, V, R](compare) {stream}
+    val (r, tree) = internal::collect(compare) {stream}
     (r, Map(tree, compare))
   }
 }

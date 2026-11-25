@@ -18,28 +18,28 @@ def main() = {
     test("to bits and back LE bitorder"){
       with assertNoFail
       [42.toByte, 12.toByte, 113.toByte, 0.toByte, 255.toByte].foreach{ v =>
-        assert(first[Byte]{ groupBytesLE{ bitsLE(v) } }, v)
+        assert(first{ groupBytesLE{ bitsLE(v) } }, v)
       }
     }
     test("to bits and back BE bitorder"){
       with assertNoFail
       [42.toByte, 12.toByte, 113.toByte, 0.toByte, 255.toByte].foreach{ v =>
-        assert(first[Byte]{ groupBytesBE{ bitsBE(v) } }, v)
+        assert(first{ groupBytesBE{ bitsBE(v) } }, v)
       }
     }
     test("append 0 means *2"){
       with assertNoFail
       [42.toByte, 12.toByte, 127.toByte].foreach{ v =>
-        assert(nth[Byte](1){ groupBytesBE{ repeat(7){ do emit(B0()) }; bitsBE(v); do emit(B0()) } }, (v.toInt * 2).toByte)
+        assert(nth(1){ groupBytesBE{ repeat(7){ do emit(B0()) }; bitsBE(v); do emit(B0()) } }, (v.toInt * 2).toByte)
       }
     }
     test("LE 2s-complement"){
       with assertNoFail
-      assert(first[Byte]{ groupBytesLE{ twoscomplementLE{ bitsLE(6.toByte) } } }, 250.toByte)
+      assert(first{ groupBytesLE{ twoscomplementLE{ bitsLE(6.toByte) } } }, 250.toByte)
     }
     test("BE 2s-complement"){
       with assertNoFail
-      assert(first[Byte]{ groupBytesBE{ bit"${-6.Signed.BE.OfWidth(8)}" } }, 250.toByte)
+      assert(first{ groupBytesBE{ bit"${-6.Signed.BE.OfWidth(8)}" } }, 250.toByte)
     }
   }
   ()
