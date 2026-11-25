@@ -1613,18 +1613,10 @@ object Typer extends Phase[NameResolved, Typechecked] {
       effs = effs ++ eff
     }
 
-    // To improve inference, we first type check block arguments that DO NOT subtract effects,
-    // since those need to be fully known.
     val (explicitBps, implicitBps) = bps.splitAt(bargs.length)
     val (explicitCaptArgs, implicitCaptArgs) = captArgs.splitAt(bargs.length)
 
-    val (withoutEffects, withEffects) = (explicitBps zip (bargs.unspan zip explicitCaptArgs)).partitionMap {
-      // TODO refine and check that eff.args refers to (inferred) type arguments of this application (`typeArgs`)
-      case (tpe : FunctionType, rest) if tpe.effects.exists { eff => eff.args.nonEmpty } => Right((tpe, rest))
-      case (tpe, rest) => Left((tpe, rest))
-    }
-
-    (withoutEffects ++ withEffects) foreach { case (tpe, (expr, capt)) =>
+    (explicitBps zip (bargs.unspan zip explicitCaptArgs)) foreach { case (tpe, (expr, capt)) =>
       flowsInto(capt, callsite)
       // capture of block <: ?C
       flowingInto(capt) {
