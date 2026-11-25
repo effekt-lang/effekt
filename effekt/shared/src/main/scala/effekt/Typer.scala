@@ -450,7 +450,7 @@ object Typer extends Phase[NameResolved, Typechecked] {
           }
           val existentials = existentialParams.map(ValueTypeRef.apply)
 
-          Context.annotations.update(Annotations.TypeParameters, d, existentialParams)
+          Context.annotateTypeParameters(d, existentialParams)
 
           // canonical ordering on annotated effects
           val canonical = CanonicalOrdering(declared.effects.toList)
@@ -659,7 +659,7 @@ object Typer extends Phase[NameResolved, Typechecked] {
       // create fresh **bound** variables
       val freshExistentials = existentials.map { t => TypeVar.TypeParam(t.name, t.decl) }
 
-      Context.annotations.update(Annotations.TypeParameters, p, freshExistentials)
+      Context.annotateTypeParameters(p, freshExistentials)
 
       val targs = (freshUniversals ++ freshExistentials).map { t => ValueTypeRef(t) }
 
@@ -2070,6 +2070,9 @@ trait TyperOps extends ContextOps { self: Context =>
 
   private[typer] def annotateInferredEffects(t: Tree, e: Effects) =
     annotations.update(Annotations.InferredEffect, t, e)
+
+  private[typer] def annotateTypeParameters(t: source.TagPattern | source.OpClause, tparams: List[TypeVar]): Unit =
+    annotations.update(Annotations.TypeParameters, t, tparams)
 
   private[typer] def annotateTypeArgs(call: source.CallLike, targs: List[symbols.ValueType]): Unit = {
     // apply what we know before saving
