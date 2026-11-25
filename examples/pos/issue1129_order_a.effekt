@@ -1,0 +1,15 @@
+// #1129: the result must not depend on the order the two `each`s are declared in (order a)
+record Location[L]()
+type SomeLocation { Exists[Le](l: Location[Le]) }
+def eq[L1, L2](l1: Location[L1], l2: Location[L2]): Bool = true
+
+def each[T](list: List[T]) { action: T => Unit }: Unit = ()
+def each[T](arr: Array[T]) { action: T => Unit }: Unit = ()
+
+def epp[L](ls: List[SomeLocation], here: Location[L]): Unit =
+  ls.each {
+    case Exists(l) and eq(l, here) => ()
+    case _ => ()
+  }
+
+def main() = { epp([Exists(Location[Int]())], Location[Bool]()); println("ok") }
