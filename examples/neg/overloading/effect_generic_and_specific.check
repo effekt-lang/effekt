@@ -1,0 +1,10 @@
+[error] examples/neg/overloading/effect_generic_and_specific.effekt:22:22: Ambiguous overload. [typer]
+22    val (r, redexes) = collect { 
+                         ^^^^^^^
+
+    There are multiple overloads, which all would type check:
+ 9  * def collect[A, R] { stream: () => R / myEmit[A] }: (R, List[A]) = {
+          ^^^^^^^
+
+15  * def collect[R] { stream: () => R / myEmit[Redex] }: (R, RedexBag) = {
+          ^^^^^^^

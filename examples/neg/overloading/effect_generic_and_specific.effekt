@@ -1,0 +1,28 @@
+// the block's `myEmit[Redex]` fits both a generic and a specific handler, so the call is ambiguous, as with values
+// main took the specific one only because its capability lookup could not infer `A`
+// (minified from effekt-community/nette-effekte)
+effect myEmit[A](value: A): Unit
+
+record Redex(id: Int)
+record RedexBag(redexes: List[Redex])
+
+def collect[A, R] { stream: () => R / myEmit[A] }: (R, List[A]) = {
+  var items: List[A] = Nil()
+  val r = try stream() with myEmit[A] { v => items = Cons(v, items); resume(()) }
+  (r, items)
+}
+
+def collect[R] { stream: () => R / myEmit[Redex] }: (R, RedexBag) = {
+  var items: List[Redex] = Nil()
+  val r = try stream() with myEmit[Redex] { v => items = Cons(v, items); resume(()) }
+  (r, RedexBag(items))
+}
+
+def main() = {
+  val (r, redexes) = collect { 
+    do myEmit(Redex(1))
+    42 
+  }
+
+  println(r)
+}
