@@ -1,0 +1,21 @@
+// the written order of a function type's effects does not change which capture `{A}` means:
+// `g` holds `A`'s capability and only leaves `B`'s handler, in both orders
+interface A { def a(): Int }
+interface B { def b(): Int }
+
+def written { f: () => (() => Int at {A}) / { B, A } }: Int =
+  try {
+    val g = try { f() } with B { def b() = resume(2) }
+    g()
+  } with A { def a() = resume(1) }
+
+def canonical { f: () => (() => Int at {A}) / { A, B } }: Int =
+  try {
+    val g = try { f() } with B { def b() = resume(2) }
+    g()
+  } with A { def a() = resume(1) }
+
+def main() = {
+  println(written { () => box { () => do a() } })
+  println(canonical { () => box { () => do a() } })
+}

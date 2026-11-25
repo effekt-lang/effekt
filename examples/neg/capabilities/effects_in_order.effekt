@@ -1,0 +1,12 @@
+// the written order of a function type's effects does not change which capture `{A}` means:
+// `g` holds `A`'s capability and escapes `A`'s handler (written in order here, the twin being `effects_out_of_order`)
+interface A { def a(): Int }
+interface B { def b(): Int }
+
+def run { f: () => (() => Int at {A}) / { A, B } }: Int =
+  try {
+    val g = try { f() } with A { def a() = resume(1) }
+    g()
+  } with B { def b() = resume(2) }
+
+def main() = println(run { () => box { () => do a() } })
