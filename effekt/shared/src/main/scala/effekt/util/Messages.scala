@@ -437,7 +437,9 @@ object messages {
         abort(cause)
     }
 
-    def abortWith(resolution: Resolution): Nothing = {
+    def abortWith(resolution: Resolution): Nothing = abortWith(resolution)(())
+
+    def abortWith(resolution: Resolution)(subdiagnostics: Subdiagnostics ?=> Unit): Nothing = {
       val independent = resolution.independent
       val (errors, others) = independent.partition { d => d.severity == Severity.Error }
       if (errors.nonEmpty && resolution.candidates.exists { c => resolution.dependent(c).forall { d => d.severity != Severity.Error } }) {
@@ -445,7 +447,7 @@ object messages {
         abortWith(errors)
       } else {
         reraise(independent)
-        abort(resolution)
+        abort(resolution)(subdiagnostics)
       }
     }
 
