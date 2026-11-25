@@ -1,0 +1,9 @@
+// Typer: one `try` with two handlers of one interface is one scope: both fit `State[?T]`, so it is ambiguous
+interface State[T] { def get(): T }
+
+def main() = {
+  try {
+    val x = do get()
+    ()
+  } with c1: State[Int] { def get() = resume(1) } with c2: State[String] { def get() = resume("s") }
+}

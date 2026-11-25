@@ -1,0 +1,10 @@
+[error] examples/neg/capabilities/one_try_ambiguous.effekt:6:13: Ambiguous effect State[T]. [typer]
+6      val x = do get()
+               ^^^^^^^^
+
+   There are multiple handlers in scope, which all could handle it:
+8  *   } with c1: State[Int] { def get() = resume(1) } with c2: State[String] { def get() = resume("s") }
+              ^^
+
+8  *   } with c1: State[Int] { def get() = resume(1) } with c2: State[String] { def get() = resume("s") }
+                                                            ^^

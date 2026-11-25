@@ -1,0 +1,22 @@
+[error] examples/neg/capabilities/other_types.effekt:4:3: Effect Greet[Int] is not allowed in this context. [typer]
+4    do sayHello(42)
+     ^^^^^^^^^^^^^^^
+
+   There are handlers for it in scope, but for other types:
+5  * } with Greet[String] {
+            ^^^^^^^^^^^^^
+4  |    do sayHello(42)
+   |    ^^^^^^^^^^^^^^^ Expected Greet[String] but got Greet[Int].
+   |
+   |  |  * note: Expected String but got Int.
+
+7  * } with Greet[Bool] {
+            ^^^^^^^^^^^
+4  |    do sayHello(42)
+   |    ^^^^^^^^^^^^^^^ Expected Greet[Bool] but got Greet[Int].
+   |
+   |  |  * note: Expected Bool but got Int.
+
+   * note: main cannot have effects.
+3  |  def main() = try {
+   |      ^^^^

@@ -1,3 +1,7 @@
-[error] examples/neg/typer/infer-effectful-while.effekt:14:1: Main cannot have effects, but includes effects: { Foo } [typer]
-14  def main() = {
-    ^
+[error] examples/neg/typer/infer-effectful-while.effekt:15:3: Effect Foo is not allowed in this context. [typer]
+15    fooo()
+      ^^^^^^
+
+    * note: main cannot have effects.
+14  |  def main() = {
+    |      ^^^^

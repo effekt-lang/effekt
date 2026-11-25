@@ -1,0 +1,11 @@
+// Typer: the declaration fixes the capabilities: `f[Int, Int]` passes two, both found at the one `emit[Int]` handler
+// (expected: 2)
+effect emit[A](a: A): Unit
+
+def f[A, B](a: A, b: B): Unit / { emit[A], emit[B] } = { do emit(a); do emit(b) }
+
+def main() = {
+  var n = 0
+  try { f[Int, Int](1, 2) } with emit[Int] { x => n = n + 1; resume(()) }
+  println(n)
+}

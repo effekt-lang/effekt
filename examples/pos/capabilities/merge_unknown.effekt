@@ -1,0 +1,11 @@
+// Typer: an unannotated function reuses a capability that fits: `emit[List[?A]]` and then `emit[List[Int]]` are one
+// (expected: 0, then 1)
+effect emit[A](a: A): Unit
+
+def produce() = {
+  val xs = Nil()
+  do emit(xs)
+  do emit([1])
+}
+
+def main() = try { produce() } with emit[List[Int]] { a => println(a.size); resume(()) }

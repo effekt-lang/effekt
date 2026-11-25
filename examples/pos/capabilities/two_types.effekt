@@ -1,0 +1,12 @@
+// Typer: two handlers of one interface at different types, nested, each used where its type fits (expected: "1s")
+effect next[A](): A
+
+def main() = {
+  try {
+    try {
+      val n: Int = do next()
+      val s: String = do next()
+      println(n.show ++ s)
+    } with next[String] { () => resume("s") }
+  } with next[Int] { () => resume(1) }
+}

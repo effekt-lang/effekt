@@ -1,0 +1,15 @@
+// Typer: a capability is found like an overload: the inner `Fail[Int]` does not fit `Fail[String]`, the outer one does
+// (expected: "outer: raised", then 0)
+interface Fail[E] { def fail(e: E): Int }
+
+def g[E](x: Int) { act: Int => Int / Fail[E] }: Int / Fail[E] = act(x)
+
+def outer { act: Int => Int / Fail[String] }: Int / Fail[String] =
+  try { g(1) {act} } with Fail[Int] { def fail(e) = 0 }
+
+def main() = {
+  val r = try { outer { x => do fail("raised") } } with Fail[String] {
+    def fail(e) = { println("outer: " ++ e); 0 }
+  }
+  println(r)
+}

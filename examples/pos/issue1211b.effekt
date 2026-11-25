@@ -1,0 +1,10 @@
+// #1211: the same in a function with a declared result
+interface Greet[T] { def sayHello(x: T): Unit }
+
+def helloWorld(): Unit = try {
+  do sayHello(box {})
+} with Greet[=> Unit at {}] {
+  def sayHello(x) = { println("Hello!"); resume(()) }
+}
+
+def main() = helloWorld()

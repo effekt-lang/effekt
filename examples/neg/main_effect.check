@@ -1,3 +1,7 @@
-[error] examples/neg/main_effect.effekt:3:1: Main cannot have effects, but includes effects: { Eff } [typer]
+[error] examples/neg/main_effect.effekt:3:14: Effect Eff is not allowed in this context. [typer]
 3  def main() = do Eff()
-   ^^^^^^^^^^^^^^^^^^^^^
+                ^^^^^^^^
+
+   * note: main cannot have effects.
+3  |  def main() = do Eff()
+   |      ^^^^
