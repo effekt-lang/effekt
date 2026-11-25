@@ -88,7 +88,7 @@ trait TypeUnifier {
 
     // The sets are equal, so each effect equals one on the other side that it _may_ equal.
     def mayEqual(e1: InterfaceType, e2: InterfaceType) =
-      e1.typeConstructor == e2.typeConstructor && (e1 == e2 || unknowns(e1).nonEmpty || unknowns(e2).nonEmpty)
+      e1.typeConstructor == e2.typeConstructor && (sameType(e1, e2) || unknowns(e1).nonEmpty || unknowns(e2).nonEmpty)
     val candidates =
       effs1.map { e1 => (e1, effs2.filter { e2 => mayEqual(e1, e2) }.map { e2 => (e1, e2) }) } ++
       effs2.map { e2 => (e2, effs1.filter { e1 => mayEqual(e1, e2) }.map { e1 => (e1, e2) }) }

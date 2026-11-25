@@ -1,0 +1,23 @@
+// #727: a handled effect whose type argument, a function type with effects, is written twice
+interface Emit[T] { def emit(x: T): Unit }
+
+def total { prog: () => Unit / Emit[Int] }: Int = {
+  var s = 0
+  try { prog() } with Emit[Int] { def emit(x) = { s = s + x; resume(()) } }
+  s
+}
+def emitAll[T](l: List[T]): Unit / Emit[T] = l match {
+  case Nil() => ()
+  case Cons(h, t) => do emit(h); emitAll(t)
+}
+def for[T] { stream: () => Unit / Emit[T] } { action: T => Unit }: Unit =
+  try { stream() } with Emit[T] { def emit(x) = { action(x); resume(()) } }
+
+def applyAllAndSum(operations: List[(Int) => Unit / Emit[Int] at {}], n: Int): Int / {} = total {
+  with val op = for[(Int) => Unit / Emit[Int] at {}] { emitAll(operations) }
+  (unbox op)(n)
+}
+def addOne(n: Int) = do emit(n + 1)
+def monusOne(n: Int) = if (n > 0) { do emit(n - 1) } else ()
+
+def main() = println(applyAllAndSum([box addOne, box monusOne], 0))

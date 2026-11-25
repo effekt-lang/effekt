@@ -23,9 +23,8 @@ class ConcreteEffects private[typer] (protected val effects: List[InterfaceType]
 
   // we can use set difference since type constructors are assumed to be invariant and all unification variables
   // are substituted away.
-  def --(other: ConcreteEffects): ConcreteEffects = ConcreteEffects.fromList(
-    (this.effects.toSet -- other.effects.toSet).toList
-  )
+  def --(other: ConcreteEffects): ConcreteEffects =
+    ConcreteEffects.fromList(this.effects.filterNot { e => other.effects.exists(sameType(e, _)) })
 
   def isEmpty: Boolean = effects.isEmpty
   def nonEmpty: Boolean = effects.nonEmpty
@@ -39,7 +38,7 @@ class ConcreteEffects private[typer] (protected val effects: List[InterfaceType]
 }
 object ConcreteEffects {
   // unsafe, doesn't perform check
-  private def fromList(eff: List[InterfaceType]): ConcreteEffects = new ConcreteEffects(eff.distinct)
+  private def fromList(eff: List[InterfaceType]): ConcreteEffects = new ConcreteEffects(distinctTypes(eff))
 
   /**
    * These smart constructors should not be used directly.

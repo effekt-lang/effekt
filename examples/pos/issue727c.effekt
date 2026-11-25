@@ -1,0 +1,12 @@
+// #727: an effect whose type argument, a function type with a block parameter, is written twice
+interface Bar {}
+interface Foo[T] {
+  def foo(): T
+}
+def foo{block: => Unit / Foo[{Bar} => Unit at {}]}: Unit = ()
+def main(): Unit / {} = {
+  foo {
+    val f = do foo[{Bar} => Unit at {}]()
+  }
+  println("ok")
+}

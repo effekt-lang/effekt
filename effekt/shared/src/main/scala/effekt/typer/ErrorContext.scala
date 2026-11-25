@@ -140,7 +140,7 @@ object ErrorContext {
 
       // resuming with the result is suggested only if when the type would fit to get rid of the mismatch
       resumesWith(resume) match {
-        case Some((argument, syntax)) if got == argument =>
+        case Some((argument, syntax)) if symbols.sameType(got, argument) =>
           help(pretty"Did you mean to resume with it, `${syntax}`? Here, `resume` has type ${resume}.")
         case _ =>
           note(pretty"${exp} is the type of the handled statement.", Some(handled.span))

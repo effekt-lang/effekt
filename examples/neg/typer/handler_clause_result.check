@@ -51,3 +51,11 @@ but got type
 [error] examples/neg/typer/handler_clause_result.effekt:25:43: Expected String but got Int. [typer]
 25    val f: () => String at {} = box { () => 42 }
                                               ^^
+[error] examples/neg/typer/handler_clause_result.effekt:34:63: Expected type [typer]
+  Int
+but got type
+  () => Unit / { Bar } at {}
+34  def binders(): Int = try { do thunkAsk(); 1 } with thunkAsk { thunk() }
+                                                                  ^^^^^^^
+
+    * help: Did you mean to resume with it, `resume(...)`? Here, `resume` has type (() => Unit / { Bar } at {}) => Int.

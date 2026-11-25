@@ -85,7 +85,7 @@ extension (i: BlockType.InterfaceType) {
  */
 case class Effects(effects: List[BlockType.InterfaceType]) {
 
-  lazy val toList: List[InterfaceType] = effects.distinct
+  lazy val toList: List[InterfaceType] = distinctTypes(effects)
 
   def isEmpty: Boolean = effects.isEmpty
   def nonEmpty: Boolean = effects.nonEmpty
@@ -99,7 +99,7 @@ case class Effects(effects: List[BlockType.InterfaceType]) {
 
   def size: Int = effects.size
 
-  def distinct: Effects = Effects(effects.distinct)
+  def distinct: Effects = Effects(distinctTypes(effects))
 }
 object Effects {
 
@@ -125,6 +125,10 @@ object CanonicalOrdering extends Ordering[InterfaceType] {
   def compareStructural(tpe1: Any, tpe2: Any): Int = (tpe1, tpe2) match {
     case (_: UnificationVar, _) | (_, _: UnificationVar) =>
       effekt.util.messages.INTERNAL_ERROR("Cannot compute canonical ordering, since type still contains unification variables.")
+    // binders compared by position to prevent issues like #727
+    case (f1: FunctionType, f2: FunctionType) if (f1.tparams, f1.cparams) != (f2.tparams, f2.cparams) &&
+        f1.tparams.size == f2.tparams.size && f1.cparams.size == f2.cparams.size =>
+      compareStructural(f1, renamed(f1, f2))
     case (sym1: Symbol, sym2: Symbol) =>
       sym1.id - sym2.id
     case (p1: Product, p2: Product) if p1.getClass == p2.getClass =>
@@ -147,4 +151,48 @@ object CanonicalOrdering extends Ordering[InterfaceType] {
   }
 }
 
+/**
+ * Equal up to binder renaming: each written function type has its own type and capture parameters,
+ * where `==` would compare them by identity.
+ */
+def sameType(tpe1: Type, tpe2: Type): Boolean = (tpe1, tpe2) match {
+  case (t1: ValueType, t2: ValueType) => SameType.equal(t1, t2)
+  case (t1: BlockType, t2: BlockType) => SameType.equal(t1, t2)
+  case _ => false
+}
 
+// the first of each group of types that are the same as per [[sameType]]
+def distinctTypes(tpes: List[InterfaceType]): List[InterfaceType] =
+  tpes.foldLeft(List.empty[InterfaceType]) { (kept, t) => if (kept.exists(sameType(_, t))) kept else kept :+ t }
+
+private object SameType {
+  def equal(t1: ValueType, t2: ValueType): Boolean = (t1, t2) match {
+    case (ValueTypeApp(c1, args1), ValueTypeApp(c2, args2)) => c1 == c2 && all(args1, args2)(equal)
+    case (BoxedType(b1, c1), BoxedType(b2, c2)) => equal(b1, b2) && c1 == c2
+    case _ => t1 == t2
+  }
+
+  def equal(t1: BlockType, t2: BlockType): Boolean = (t1, t2) match {
+    case (InterfaceType(c1, args1), InterfaceType(c2, args2)) => c1 == c2 && all(args1, args2)(equal)
+    case (f1 @ FunctionType(tps1, cps1, vps1, bps1, ret1, effs1), f2 @ FunctionType(tps2, cps2, _, _, _, _)) =>
+      tps1.size == tps2.size && cps1.size == cps2.size && {
+        val FunctionType(_, _, vps2, bps2, ret2, effs2) = renamed(f1, f2)
+        all(vps1, vps2)(equal) && all(bps1, bps2)(equal) && equal(ret1, ret2) && sameSet(effs1.toList, effs2.toList)
+      }
+    case _ => false
+  }
+
+  // effects are a set (like in `unifyEffects`)
+  private def sameSet(effs1: List[InterfaceType], effs2: List[InterfaceType]): Boolean =
+    effs1.size == effs2.size && effs1.forall { e1 => effs2.exists(equal(e1, _)) }
+
+  private def all[A](as: List[A], bs: List[A])(p: (A, A) => Boolean): Boolean =
+    as.size == bs.size && (as zip bs).forall(p.tupled)
+}
+
+// `f2` with its binders renamed to those of `f1`, like in [[typer.TypeUnifier.unifyFunctionTypes]]
+private def renamed(f1: FunctionType, f2: FunctionType): FunctionType = {
+  val subst = effekt.typer.Substitutions(f2.tparams zip f1.tparams.map(ValueTypeRef(_)), f2.cparams zip f1.cparams.map(CaptureSet(_)))
+  FunctionType(f1.tparams, f1.cparams, f2.vparams.map(subst.substitute), f2.bparams.map(subst.substitute),
+    subst.substitute(f2.result), Effects(f2.effects.effects.map(subst.substitute)))
+}
