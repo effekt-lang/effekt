@@ -11,10 +11,6 @@ package object kinds {
   }
 
   def wellformed(effs: Effects)(using C: Context): Unit =
-    val effects = effs.toList
-    if (effects.size != distinctTypes(effects).size) {
-      C.panic("Compiler invariant violated: duplicate effects.")
-    }
     effs.toList foreach { wellformed }
 
   def wellformed(tpe: ValueType)(using C: Context): Unit = wellformedType(tpe) match {
