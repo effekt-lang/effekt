@@ -22,8 +22,18 @@ class InferredEffects private[typer] (val capabilities: List[BlockParam]) {
 
   def toEffects(using C: Context): Effects = Effects(capabilities.map(C.capabilityType))
 
-  def canonical(using C: Context): List[BlockParam] = capabilities.sortBy(C.capabilityType)(using CanonicalOrdering)
+  def canonical(using C: Context): List[BlockParam] = {
+    assertOrderable(capabilities.map(C.capabilityType))
+    capabilities.sortBy(C.capabilityType)(using CanonicalOrdering)
+  }
 }
+
+// the entries of a repeated interface are ordered by their type arguments,
+// which must be concrete when wanting to order the whole thing
+private def assertOrderable(effs: List[InterfaceType])(using Context): Unit =
+  effs.groupBy(_.typeConstructor).values.filter(_.size > 1).flatten.foreach { eff => 
+    assertConcreteEffect(eff)
+  }
 
 object InferredEffects {
   def apply(capabilities: List[BlockParam]): InferredEffects = new InferredEffects(capabilities.distinct)
@@ -38,19 +48,20 @@ val Pure = InferredEffects.empty
 // declared effects in the order of their capabilities
 def canonical(effs: Effects)(using C: Context): List[InterfaceType] = {
   val known = C.unification(effs).toList
-  known.foreach { eff => assertConcreteEffect(eff) }
+  assertOrderable(known)
   known.sorted(using CanonicalOrdering)
 }
 
-/** Asserts that an effect is _concrete_ (i.e., has no unification variables). */
+ /**
+ * Asserts that an effect is _concrete_ (i.e., has no unification variables):
+ * this is needed only where an interface occurs more than once in a set,
+ * where its entries are told apart by their type arguments (see [[TypeComparer.unifyEffects]]).
+ */
 private[typer] def assertConcreteEffect(eff: InterfaceType, hints: Set[InterfaceType] = Set.empty)(using C: Context): Unit =
   unknowns(eff) match {
     case us if us.nonEmpty =>
       C.abort(pretty"Effects need to be fully known, but effect ${eff}'s type parameter(s) ${us.mkString(", ")} could not be inferred.") {
         help(pretty"Maybe try annotating them?")
-        hints.foreach { hint =>
-          help(pretty"Did you mean to use an operation of the concrete interface ${hint}?")
-        }
       }
     case _ => ()
   }

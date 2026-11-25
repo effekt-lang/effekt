@@ -1919,25 +1919,17 @@ trait TyperOps extends ContextOps { self: Context =>
 
   private [typer] def bindingCapabilities[R](binder: source.Tree, caps: List[symbols.BlockParam])(f: => R): R = {
     bindCapabilities(binder, caps)
-    capabilityScope = BindSome(
-      binder,
-      caps.map { c => c.tpe.getOrElse { INTERNAL_ERROR("Capability type needs to be know.") }.asInterfaceType -> c }.toMap,
-      capabilityScope
-    )
+    capabilityScope = BindSome(binder, caps, capabilityScope)
     val result = f
     capabilityScope = capabilityScope.parent
     result
   }
 
   private [typer] def bindCapabilities[R](binder: source.Tree, caps: List[symbols.BlockParam]): Unit =
-    val capabilities = caps map { cap =>
-      assertConcreteEffect(cap.tpe.getOrElse { INTERNAL_ERROR("Capability type needs to be know.") }.asInterfaceType)
-      cap
-    }
-    annotations.update(Annotations.BoundCapabilities, binder, capabilities)
+    annotations.update(Annotations.BoundCapabilities, binder, caps)
 
   private [typer] def bindingAllCapabilities[R](binder: source.Tree)(f: => R): R = {
-    capabilityScope = BindAll(binder, Map.empty, capabilityScope)
+    capabilityScope = BindAll(binder, Nil, capabilityScope)
     val result = f
     capabilityScope = capabilityScope.parent
     result
@@ -1947,14 +1939,21 @@ trait TyperOps extends ContextOps { self: Context =>
    * Has the potential side-effect of creating a fresh capability. Also see [[BindAll.capabilityFor()]]
    */
   private [typer] def capabilityFor(tpe: InterfaceType): symbols.BlockParam =
-    val cap = capabilityScope.capabilityFor(tpe)
-    assertConcreteEffect(unification(tpe), hints = capabilityScope.relevantInScopeFor(tpe))
+    val cap = capabilityScope.capabilityFor(tpe, Nil)
     annotations.update(Annotations.Captures, cap, CaptureSet(cap.capture))
     cap
 
   // the type of a capability as it is known right now
   private [typer] def capabilityType(cap: symbols.BlockParam): InterfaceType =
     unification(cap.tpe.getOrElse { INTERNAL_ERROR("Capability type needs to be known.") }.asInterfaceType)
+
+  // why `tpe` cannot be the type of `cap`, if it cannot (uses overloading via `Try`)
+  private [typer] def tryCapability(tpe: InterfaceType, cap: symbols.BlockParam): Option[util.messages.Failure] =
+    val before = backupUnification()
+    try { Try { unifyCapability(tpe, cap) }.left.toOption } finally { restoreUnification(before) }
+
+  private [typer] def unifyCapability(tpe: InterfaceType, cap: symbols.BlockParam): Unit =
+    requireSubtype(tpe, capabilityType(cap), ErrorContext.Expected(unification(tpe), capabilityType(cap), focus, None))
 
   def requireConcrete(eff: InterfaceType, ctx: ErrorContext): Unit =
     assertConcreteEffect(unification(eff))

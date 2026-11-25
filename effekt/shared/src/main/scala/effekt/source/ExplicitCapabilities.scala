@@ -187,6 +187,7 @@ object ExplicitCapabilities extends Phase[Typechecked, Typechecked], Rewrite {
   def definitionFor(s: symbols.BlockParam)(using C: Context): source.BlockParam =
     val id = IdDef(s.name.name, Span.missing)
     C.assignSymbol(id, s)
-    val tree: source.BlockParam = source.BlockParam(id, s.tpe.map { source.BlockTypeTree(_, Span.missing) }, isImplicit=false, Span.missing)
+    // the capability's type as solved (its declared type may hold unification variables)
+    val tree: source.BlockParam = source.BlockParam(id, C.blockTypeOption(s).orElse(s.tpe).map { source.BlockTypeTree(_, Span.missing) }, isImplicit=false, Span.missing)
     tree
 }

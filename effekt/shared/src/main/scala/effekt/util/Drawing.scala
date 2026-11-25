@@ -42,7 +42,7 @@ object Drawing {
   }
 
   private def block(c: Candidate, of: Reason): Block = {
-    val declaration = c.definitionTree.toList.flatMap { name => excerpt(name.span) }
+    val declaration = c.place.toList.flatMap(excerpt)
     Block.Candidate(c.show, declaration, of.dependent(c).toList.map(block))
   }
 
