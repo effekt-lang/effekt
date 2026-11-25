@@ -69,19 +69,13 @@ extension (i: BlockType.InterfaceType) {
 }
 
 /**
- * Represents effect _sets_ (no order, no duplicates) on function types.
+ * The effects of a function type, as declared, being the capabilities a call passes.
  *
- * All effects are dealiased by namer. Effects are inferred via [[typer.ConcreteEffects]] so
- * by construction all entries in the set of effects here should be concrete (no unification variables).
+ * All effects are dealiased by Namer. This is a list, not a set: entries are not made distinct after substitution,
+ * since { State[?S], State[?T] }[?S !-> Int, ?T !-> Int] becomes { State[Int], State[Int] },
+ * and a call then still passes two capabilities. The effects of a term, as _inferred_, are [[typer.InferredEffects]].
  *
  * Effect sets are themselves *not* symbols, they are just aggregates.
- *
- * We do not enforce entries to be distinct. This way we can substitute types and keep duplicate entries.
- * For instances { State[S], State[T] }[S -> Int, T -> Int] then becomes { State[Int], State[Int] }.
- * This is important since we need to pass two capabilities in this case.
- *
- * Member [[canonical]] computes the canonical ordering of capabilities for this set of effects.
- * Disjointness needs to be ensured manually when constructing effect sets (for instance via [[typer.ConcreteEffects]]).
  */
 case class Effects(effects: List[BlockType.InterfaceType]) {
 
@@ -123,7 +117,7 @@ object CanonicalOrdering extends Ordering[InterfaceType] {
   def compare(tpe1: InterfaceType, tpe2: InterfaceType): Int = compareStructural(tpe1, tpe2)
 
   def compareStructural(tpe1: Any, tpe2: Any): Int = (tpe1, tpe2) match {
-    case (_: UnificationVar, _) | (_, _: UnificationVar) =>
+    case (_: UnificationVar, _) | (_, _: UnificationVar) | (_: CaptUnificationVar, _) | (_, _: CaptUnificationVar) =>
       effekt.util.messages.INTERNAL_ERROR("Cannot compute canonical ordering, since type still contains unification variables.")
     // binders compared by position to prevent issues like #727
     case (f1: FunctionType, f2: FunctionType) if (f1.tparams, f1.cparams) != (f2.tparams, f2.cparams) &&
