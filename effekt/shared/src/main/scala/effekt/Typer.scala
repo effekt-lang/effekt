@@ -860,8 +860,11 @@ object Typer extends Phase[NameResolved, Typechecked] {
                 Result(annotated, effs -- capabilities)
 
               case None =>
+                // `main` cannot have effects, so let's checked it as if it were declared with `Unit / {}`
+                val Result(tpe, effs) = if (Context.isMain(sym))
+                  Context.bindingCapabilities(d, Nil) { Context in { checkStmt(body, None) } }
                 // all effects are handled by the function itself (since they are inferred)
-                val Result(tpe, effs) = Context.bindingAllCapabilities(d) {
+                else Context.bindingAllCapabilities(d) {
                   Context in { checkStmt(body, None) }
                 }
 
@@ -1916,6 +1919,8 @@ trait TyperOps extends ContextOps { self: Context =>
     capabilityScope = capabilityScope.parent
     result
   }
+
+  private [typer] def isMain(sym: TermSymbol): Boolean = findMain(module).contains(sym)
 
   private [typer] def bindCapabilities[R](binder: source.Tree, caps: List[symbols.BlockParam]): Unit =
     annotations.update(Annotations.BoundCapabilities, binder, caps)
