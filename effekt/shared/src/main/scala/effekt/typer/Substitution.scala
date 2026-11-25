@@ -57,7 +57,7 @@ case class Substitutions(
       BoxedType(substitute(tpe), substitute(capt))
   }
 
-  def substitute(t: Effects): Effects = Effects(t.toList.map(substitute))
+  def substitute(t: Effects): Effects = t.map(substitute)
   def substitute(t: InterfaceType): InterfaceType = t match {
     case InterfaceType(cons, args) => InterfaceType(cons, args.map(substitute))
   }
@@ -68,14 +68,13 @@ case class Substitutions(
   }
 
   def substitute(t: FunctionType): FunctionType = t match {
-    case FunctionType(tps, cps, vps, bps, ret, eff) =>
+    case f @ FunctionType(tps, vps, bps, ret, eff) =>
       // do not substitute with types parameters bound by this function!
-      val substWithout = without(tps, cps)
+      val substWithout = without(tps, f.cparams)
       FunctionType(
         tps,
-        cps,
         vps map substWithout.substitute,
-        bps map substWithout.substitute,
+        bps map { b => Tracked(b.capture, substWithout.substitute(b.tpe)) },
         substWithout.substitute(ret),
         substWithout.substitute(eff))
   }

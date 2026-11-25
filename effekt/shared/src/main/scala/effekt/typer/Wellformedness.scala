@@ -145,7 +145,7 @@ object Wellformedness extends Phase[Typechecked, Typechecked], Visit[WFContext] 
         })
 
       // ... and the handled effects
-      usedEffects.effects.foreach { tpe =>
+      usedEffects.toList.foreach { tpe =>
         wellformed(tpe, prog, locationDetail = " as part of the inferred effect")
       }
 
@@ -327,9 +327,8 @@ object Wellformedness extends Phase[Typechecked, Typechecked], Visit[WFContext] 
     case t: symbols.CaptureParam => Set(t)
     case t: symbols.LexicalRegion => Set(t)
 
-    case FunctionType(tparams, cparams, vparams, bparams, ret, eff) =>
-      // TODO what with capabilities introduced for eff--those are bound in ret?
-      freeCapture(vparams) ++ freeCapture(bparams) ++ freeCapture(ret) ++ freeCapture(eff) -- cparams.toSet
+    case f @ FunctionType(tparams, vparams, bparams, ret, eff) =>
+      freeCapture(vparams) ++ freeCapture(bparams) ++ freeCapture(ret) ++ freeCapture(eff) -- f.cparams.toSet
     case CaptureSet(cs) => freeCapture(cs)
     case x: CaptUnificationVar => sys error s"Cannot compute free variables for unification variable ${x}"
     case x: UnificationVar => sys error s"Cannot compute free variables for unification variable ${x}"
@@ -344,7 +343,7 @@ object Wellformedness extends Phase[Typechecked, Typechecked], Visit[WFContext] 
 
   def freeTypes(o: Any): Set[TypeVar] = o match {
     case t: symbols.TypeVar => Set(t)
-    case FunctionType(tps, cps, vps, bps, ret, effs) =>
+    case FunctionType(tps, vps, bps, ret, effs) =>
       freeTypes(vps) ++ freeTypes(bps) ++ freeTypes(ret) ++ freeTypes(effs) -- tps.toSet
     case e: Effects            => freeTypes(e.toList)
     case _: Symbol | _: String => Set.empty // don't follow symbols

@@ -20,7 +20,7 @@ class InferredEffects private[typer] (val capabilities: List[BlockParam]) {
   def isEmpty: Boolean = capabilities.isEmpty
   def nonEmpty: Boolean = capabilities.nonEmpty
 
-  def toEffects(using C: Context): Effects = Effects(capabilities.map(C.capabilityType))
+  def toEffects(using C: Context): Effects = Effects(capabilities.map { c => Tracked(c.capture, C.capabilityType(c)) })
 
   def canonical(using C: Context): List[BlockParam] = {
     assertOrderable(capabilities.map(C.capabilityType))
@@ -44,13 +44,6 @@ object InferredEffects {
 }
 
 val Pure = InferredEffects.empty
-
-// declared effects in the order of their capabilities
-def canonical(effs: Effects)(using C: Context): List[InterfaceType] = {
-  val known = C.unification(effs).toList
-  assertOrderable(known)
-  known.sorted(using CanonicalOrdering)
-}
 
 /**
  * Asserts that an effect is _concrete_ (i.e., has no unification variables):
@@ -87,8 +80,8 @@ private def unknowns(tpe: TypeVar): Set[Unknown] = tpe match {
 }
 
 private def unknowns(tpe: BlockType): Set[Unknown] = tpe match {
-  case FunctionType(tparams, cparams, vparams, bparams, result, effects) =>
-    vparams.flatMap(unknowns).toSet ++ bparams.flatMap(unknowns).toSet ++ unknowns(result) ++ unknowns(effects)
+  case FunctionType(tparams, vparams, bparams, result, effects) =>
+    vparams.flatMap(unknowns).toSet ++ bparams.flatMap(b => unknowns(b.tpe)).toSet ++ unknowns(result) ++ unknowns(effects)
   case InterfaceType(tpe, args) => args.flatMap(unknowns).toSet
 }
 

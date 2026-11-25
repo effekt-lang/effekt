@@ -139,21 +139,16 @@ trait Callable extends BlockSymbol {
    // invariant: only works if ret is defined!
   def toType: FunctionType = annotatedType.get
 
-  def toType(ret: ValueType, effects: Effects, capabilityParams: List[Capture]): FunctionType =
-    val tps = tparams
+  def toType(ret: ValueType, effects: Effects): FunctionType =
     val vps = vparams.map { p => p.tpe.get }
-    val (bcapt, bps) = bparams.map { p => (p.capture, p.tpe) }.unzip
-    val bps_ = bps.collect { case Some(bp) => bp }
-    FunctionType(tps, bcapt ++ capabilityParams, vps, bps_, ret, effects)
+    val bps = bparams.collect { case p if p.tpe.isDefined => Tracked(p.capture, p.tpe.get) }
+    FunctionType(tparams, vps, bps, ret, effects)
 
   def annotatedType: Option[FunctionType] =
     for {
       ret <- annotatedResult;
       effects <- annotatedEffects
-      // TODO currently the return type cannot refer to the annotated effects, so we can make up capabilities
-      //   in the future namer needs to annotate the function with the capture parameters it introduced.
-      capt = CanonicalOrdering(effects.toList).map { tpe => CaptureParam(tpe.name) }
-    } yield toType(ret, effects, capt)
+    } yield toType(ret, effects)
 
 }
 
@@ -324,7 +319,7 @@ export BlockTypeConstructor.*
 case class Operation(name: Name, tparams: List[TypeParam], vparams: List[ValueParam], bparams: List[BlockParam], resultType: ValueType, effects: Effects, interface: BlockTypeConstructor.Interface, decl: source.Tree) extends Callable {
   def annotatedCaptures = None
   def annotatedResult: Option[ValueType] = Some(resultType)
-  def annotatedEffects: Option[Effects] = Some(Effects(effects.toList))
+  def annotatedEffects: Option[Effects] = Some(effects)
   def appliedInterface: InterfaceType = InterfaceType(interface, interface.tparams map ValueTypeRef.apply)
 }
 
@@ -332,7 +327,7 @@ case class Operation(name: Name, tparams: List[TypeParam], vparams: List[ValuePa
  * Effect aliases are *not* block types, or block type constructors. They have to be dealiased by [[Namer]]
  * before usage.
  */
-case class EffectAlias(name: Name, tparams: List[TypeParam], effs: Effects, decl: source.Tree) extends BlockTypeSymbol
+case class EffectAlias(name: Name, tparams: List[TypeParam], effs: List[InterfaceType], decl: source.Tree) extends BlockTypeSymbol
 
 
 /**

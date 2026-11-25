@@ -1,6 +1,7 @@
 package effekt
 package source
 
+import effekt.symbols.cparams
 import scala.util.DynamicVariable
 
 import effekt.util.messages.{ErrorMessageReifier, Failure, Piece, StructuredMessage}
@@ -55,8 +56,8 @@ object GenerateImplicitArgs {
     case tpe: symbols.ValueType => typeSize(tpe)
   }
   def typeSize(tpe: symbols.BlockType): Int = tpe match {
-    case BlockType.FunctionType(tparams, cparams, vparams, bparams, result, effects) =>
-      tparams.length + cparams.length + vparams.map(typeSize).sum + bparams.map(typeSize).sum + typeSize(result)
+    case f @ BlockType.FunctionType(tparams, vparams, bparams, result, effects) =>
+      tparams.length + f.cparams.length + vparams.map(typeSize).sum + bparams.map(b => typeSize(b.tpe)).sum + typeSize(result)
     case BlockType.InterfaceType(typeConstructor, args) =>
       1 + args.map(typeSize).sum
   }
@@ -182,7 +183,7 @@ object GenerateImplicitArgs {
    */
   def generateImplicitBlockArg(p: symbols.BlockParam, index: Int, scope: symbols.scopes.Scoping, span: source.Span = source.Span.missing)(using Context): ImplicitStencil =
     p.tpe.get match {
-      case BlockType.FunctionType(tparams, cparams, vparams, bparams, result, effects) =>
+      case BlockType.FunctionType(tparams, vparams, bparams, result, effects) =>
         val gtparams = tparams.map { p => IdDef(p.name.name, span.synthesized) }
         val gvparams: List[ValueParam] =
           vparams.zipWithIndex.map { (p, i) =>
@@ -190,7 +191,7 @@ object GenerateImplicitArgs {
           }
         val gbparams: List[BlockParam] =
           bparams.zipWithIndex.map { (p, i) =>
-            BlockParam(IdDef(s"block_arg${i}", span.synthesized), Some(source.BlockTypeTree(p, span.synthesized)), false, span.synthesized)
+            BlockParam(IdDef(s"block_arg${i}", span.synthesized), Some(source.BlockTypeTree(p.tpe, span.synthesized)), false, span.synthesized)
           }
         Try {
           val id = IdRef(Nil, p.name.name, span.synthesized)
@@ -242,7 +243,7 @@ object GenerateImplicitArgs {
           Context.abort(util.messages.ImplicitInstantiation(e, tpe))
 
         case (ImplicitBlockLiteral(name, sym),
-          symbols.BlockType.FunctionType(tps, cps, vps, bps, res, effs)) =>
+          symbols.BlockType.FunctionType(tps, vps, bps, res, effs)) =>
               // We need to refresh the whole binding structure, so we don't have duplicate stuff in the tree.
               // Doing this in a very specialized way here.
               // It annotates the correct concrete types for *this* invocation.
@@ -261,7 +262,7 @@ object GenerateImplicitArgs {
               }.unzip3
               val (fbsyms, fbparams, fbargs) = bps.zipWithIndex.map { (t, i) =>
                 val name = Name.local(s"block_arg${i}")
-                val sym = symbols.BlockParam(name, Some(t), symbols.Capture.CaptureParam(name), false, NoSource)
+                val sym = symbols.BlockParam(name, Some(t.tpe), symbols.Capture.CaptureParam(name), false, NoSource)
                 val (p, a) = generateResolvedId(sym, span)
                 (sym,
                   source.BlockParam(p, Some(source.BlockTypeTree(sym.tpe.get, span.synthesized)), false, span.synthesized): source.BlockParam,

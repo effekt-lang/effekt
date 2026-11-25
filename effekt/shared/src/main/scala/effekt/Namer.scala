@@ -194,7 +194,7 @@ object Namer extends Phase[Parsed, NameResolved] {
       val tps = Context scoped { tparams map resolve }
       val alias = Context scoped {
         tps.foreach { t => Context.bind(t) }
-        EffectAlias(Context.nameFor(id), tps, resolve(effs), d)
+        EffectAlias(Context.nameFor(id), tps, resolveTypes(effs), d)
       }
       Context.define(id, alias)
 
@@ -847,26 +847,13 @@ object Namer extends Phase[Parsed, NameResolved] {
       val tps = tparams.map(resolve)
       val vps = vparams.map(resolveValueType)
 
-      var cps: List[Capture] = Nil
-      val bps = bparams.map {
-        case (id, tpe) =>
-          val name = id.map(Name.apply).getOrElse(NoName)
-          val cap = CaptureParam(name)
-          cps = cps :+ cap
-          resolveBlockType(tpe)
+      val bps = bparams.unspan.map {
+        case (id, tpe) => Tracked(CaptureParam(id.map(Name.apply).getOrElse(NoName)), resolveBlockType(tpe))
       }
-
       val effs = resolve(effects)
-      CanonicalOrdering(effs.toList) foreach { eff =>
-        val cap = CaptureParam(eff.name)
-        cps = cps :+ cap
-      }
+      (bps.map(_.capture) ++ effs.captures) foreach Context.bind
 
-      cps foreach Context.bind
-
-      val res = resolveValueType(ret)
-
-      FunctionType(tps.unspan, cps, vps.unspan, bps.unspan, res, effs)
+      FunctionType(tps.unspan, vps.unspan, bps, resolveValueType(ret), effs)
     }
   }
 
@@ -890,7 +877,7 @@ object Namer extends Phase[Parsed, NameResolved] {
           }
           val targs = args.map(resolveValueType)
           val subst = Substitutions.types(tparams, targs.unspan)
-          effs.toList.map(subst.substitute)
+          effs.map(subst.substitute)
         case i: BlockTypeConstructor => List(InterfaceType(i, args.unspan.map(resolveValueType)))
         case other =>
           Context.error(pretty"Expected an interface type, but got value type ${other}.")
@@ -902,8 +889,10 @@ object Namer extends Phase[Parsed, NameResolved] {
     resolved
   }
 
-  def resolve(tpe: source.Effects)(using Context): Effects =
-    Effects(distinctTypes(tpe.effs.flatMap(resolveWithAliases)))
+  def resolve(tpe: source.Effects)(using Context): Effects = Effects.declared(resolveTypes(tpe))
+
+  def resolveTypes(tpe: source.Effects)(using Context): List[InterfaceType] =
+    distinctTypes(tpe.effs.flatMap(resolveWithAliases))
 
   def resolve(e: source.Effectful)(using Context): (ValueType, Effects) =
     (resolveValueType(e.tpe), resolve(e.eff))

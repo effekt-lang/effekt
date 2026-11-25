@@ -122,8 +122,8 @@ object ErrorContext {
   }
 
   private def resumesWith(resume: symbols.FunctionType): Option[(symbols.ValueType, String)] = resume match {
-    case symbols.FunctionType(Nil, Nil, List(argument), Nil, _, _) => Some((argument, "resume(...)"))
-    case symbols.FunctionType(Nil, _, Nil, List(symbols.FunctionType(Nil, _, Nil, bparams, argument, _)), _, _) =>
+    case symbols.FunctionType(Nil, List(argument), Nil, _, effs) if effs.isEmpty => Some((argument, "resume(...)"))
+    case symbols.FunctionType(Nil, Nil, List(symbols.Tracked(_, symbols.FunctionType(Nil, Nil, bparams, argument, _))), _, _) =>
       Some((argument, if (bparams.isEmpty) "resume { ... }" else "resume { {...} => ... }"))
     case _ => None
   }

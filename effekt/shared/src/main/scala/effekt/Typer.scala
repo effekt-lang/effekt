@@ -111,7 +111,7 @@ object Typer extends Phase[NameResolved, Typechecked] {
       Context.at(mainFn.decl) {
         // If type checking failed before reaching main, there is no type
         C.functionTypeOption(mainFn).foreach {
-          case FunctionType(tparams, cparams, vparams, bparams, result, effects) =>
+          case FunctionType(tparams, vparams, bparams, result, effects) =>
             if (vparams.nonEmpty || bparams.nonEmpty) {
               C.abort("Main does not take arguments")
             }
@@ -452,8 +452,8 @@ object Typer extends Phase[NameResolved, Typechecked] {
 
           Context.annotate(Annotations.TypeParameters, d, existentialParams)
 
-          // canonical ordering on annotated effects
-          val canonical = CanonicalOrdering(declared.effects.toList)
+          // the captures of this clause's capabilities, in the order the declared effects are passed
+          def freshCparamsForEffects() = declared.effects.toList.map { tpe => CaptureParam(tpe.name) }
 
           // distinguish between handler operation or object operation (which does not capture a cont.)
           val Result(_, effs) = continuationDetails match {
@@ -463,8 +463,7 @@ object Typer extends Phase[NameResolved, Typechecked] {
               assertArity("block parameters", bparams.size, declared.bparams.size)
 
               val cparamsForBlocks = bparams.map { p => p.symbol.capture }
-              // will be introduced as capabilities in a later phase
-              val cparamsForEffects = canonical.map { tpe => CaptureParam(tpe.name) }
+              val cparamsForEffects = freshCparamsForEffects()
               val cparams = cparamsForBlocks ++ cparamsForEffects
 
               // substitute actual type parameter and capture parameters for declared ones
@@ -488,7 +487,7 @@ object Typer extends Phase[NameResolved, Typechecked] {
               }
 
               // these capabilities are later introduced as parameters in capability passing
-              val capabilities = (CanonicalOrdering(effs) zip cparamsForEffects).map {
+              val capabilities = (effs zip cparamsForEffects).map {
                 case (tpe, capt) => Context.freshCapabilityFor(tpe, capt)
               }
 
@@ -512,10 +511,10 @@ object Typer extends Phase[NameResolved, Typechecked] {
               if (bparams.nonEmpty)
                 Context.error("Block parameters are bound by resume and not the effect operation itself")
 
-              def isBidirectional = canonical.nonEmpty || declared.bparams.nonEmpty
+              def isBidirectional = declared.effects.nonEmpty || declared.bparams.nonEmpty
 
               val cparamsForBlocks = declaredOperation.bparams.map { p => CaptureParam(p.name) } // use the original name
-              val cparamsForEffects = canonical.map { tpe => CaptureParam(tpe.name) } // use the type name
+              val cparamsForEffects = freshCparamsForEffects()
               val cparams = cparamsForBlocks ++ cparamsForEffects
 
               val (vps, bps, tpe, effs) =
@@ -532,12 +531,13 @@ object Typer extends Phase[NameResolved, Typechecked] {
               // (4) synthesize type of continuation
               val resumeType: FunctionType = if (isBidirectional) {
                 // resume { {f} => e }
-                val resumeType = FunctionType(Nil, cparams, Nil, bps, tpe, Effects(effs))
+                val resumeType = FunctionType(Nil, Nil, (cparamsForBlocks zip bps).map(Tracked.apply),
+                  tpe, Effects((cparamsForEffects zip effs).map(Tracked.apply)))
                 val resumeCapt = CaptureParam(Name.local("resumeBlock"))
-                FunctionType(Nil, List(resumeCapt), Nil, List(resumeType), ret, Effects.Pure)
+                FunctionType(Nil, Nil, List(Tracked(resumeCapt, resumeType)), ret, Effects.Pure)
               } else {
                 // resume(v)
-                FunctionType(Nil, Nil, List(tpe), Nil, ret, Effects.Pure)
+                FunctionType(Nil, List(tpe), Nil, ret, Effects.Pure)
               }
               Context.bind(Context.symbolOf(resume).asBlockSymbol, resumeType, continuationCapt)
 
@@ -584,7 +584,7 @@ object Typer extends Phase[NameResolved, Typechecked] {
                 val freshVps = List.fill(arity) {
                   ValueTypeRef(Context.freshTypeVar(TypeParam(Name.local("_"), NoSource), u))
                 }
-                val partialFn = FunctionType(Nil, Nil, freshVps, Nil, retTpe, Effects.empty)
+                val partialFn = FunctionType(Nil, freshVps, Nil, retTpe, Effects.empty)
                 val captVar = Context.freshCaptVar(CaptUnificationVar.InferredUnbox(u))
                 matchExpected(vtpe, BoxedType(partialFn, captVar), None)
                 usingCapture(captVar)
@@ -811,7 +811,7 @@ object Typer extends Phase[NameResolved, Typechecked] {
       defs.map(precheckDef)
 
     case d: source.TypeDef => wellformed(d.symbol.tpe)
-    case d: source.EffectDef => wellformed(d.symbol.effs)
+    case d: source.EffectDef => d.symbol.effs.foreach { wellformed }
 
     case _ => ()
   }
@@ -842,8 +842,7 @@ object Typer extends Phase[NameResolved, Typechecked] {
             (sym.annotatedType: @unchecked) match {
               case Some(annotated) =>
                 // the declared effects are considered as bound
-                val capabilities = canonical(annotated.effects).map { tpe => Context.freshCapabilityFor(tpe) }
-                val captures = capabilities.map { _.capture }
+                val capabilities = annotated.effects.effects.map { e => Context.freshCapabilityFor(e.tpe, e.capture) }
 
                 // block parameters and capabilities for effects are assumed bound
                 val Result(tpe, effs) = Context.bindingCapabilities(d, capabilities) {
@@ -854,7 +853,7 @@ object Typer extends Phase[NameResolved, Typechecked] {
 
                 // TODO also annotate the capabilities
                 flowsIntoWithout(inferredCapture, functionCapture) {
-                  annotated.cparams ++ captures
+                  annotated.cparams
                 }
 
                 Result(annotated, effs -- capabilities)
@@ -870,7 +869,6 @@ object Typer extends Phase[NameResolved, Typechecked] {
 
                 // We do no longer use the order annotated on the function, but always the canonical ordering.
                 val capabilities = effs.canonical
-                val captures = capabilities.map(_.capture)
 
                 Context.bindCapabilities(d, capabilities)
                 Context.annotateInferredType(d, tpe)
@@ -881,8 +879,7 @@ object Typer extends Phase[NameResolved, Typechecked] {
                   (sym.bparams ++ capabilities).map(_.capture)
                 }
 
-                // TODO also add capture parameters for inferred capabilities
-                val funType = sym.toType(tpe, effs.toEffects, captures)
+                val funType = sym.toType(tpe, Effects(capabilities.map { c => Tracked(c.capture, Context.capabilityType(c)) }))
                 Result(funType, Pure)
             }
           }
@@ -1010,10 +1007,10 @@ object Typer extends Phase[NameResolved, Typechecked] {
     case decl @ source.BlockLiteral(tparams, vparams, bparams, body, _) =>
 
       // (1) Apply what we already know.
-      val bt @ FunctionType(tps, cps, vps, bps, tpe1, effs) = expected
+      val bt @ FunctionType(tps, vps, bps, tpe1, effs) = expected
 
       // (2) Check wellformedness (that type, value, block params and args align)
-      assertArgsParamsAlign(name = None, Aligned(tparams, tps), Aligned(vparams, vps), Aligned(bparams, bps))
+      assertArgsParamsAlign(name = None, Aligned(tparams, tps), Aligned(vparams, vps), Aligned(bparams, bps.map(_.tpe)))
 
       // (3) Substitute type parameters
       val typeParams = tparams.map { p => p.symbol.asTypeParam }
@@ -1033,7 +1030,7 @@ object Typer extends Phase[NameResolved, Typechecked] {
           tpe
       }
 
-      val blockTypes = (bparams zip bps) map {
+      val blockTypes = (bparams zip bps.map(_.tpe)) map {
         case (param, expTpe) =>
           val adjusted = typeSubst `substitute` expTpe
           val sym = param.symbol
@@ -1047,13 +1044,12 @@ object Typer extends Phase[NameResolved, Typechecked] {
           got
       }
 
-      // (4) Bind capabilities for all effects "handled" by this function
-      val effects = canonical(typeSubst `substitute` effs)
-      val capabilities = effects.map { tpe => Context.freshCapabilityFor(tpe) }
+      // (4) Bind capabilities for all effects "handled" by this function, in the order they are passed
+      val capabilities = effs.toList.map { tpe => Context.freshCapabilityFor(Context.unification(typeSubst `substitute` tpe)) }
 
       // (5) Substitute capture params
       val captParams = (bparams.map(_.symbol) ++ capabilities).map { p => p.capture }
-      val captSubst = Substitutions.captures(cps, captParams.map { p => CaptureSet(p) })
+      val captSubst = Substitutions.captures(bt.cparams, captParams.map { p => CaptureSet(p) })
 
       // (6) Substitute both types and captures into expected return type
       val subst = typeSubst ++ captSubst
@@ -1069,7 +1065,8 @@ object Typer extends Phase[NameResolved, Typechecked] {
 
       usingCaptureWithout(bodyRegion) { captParams }
 
-      val tpe = FunctionType(typeParams, captParams, valueTypes, blockTypes, bodyType, Effects(effects))
+      val tpe = FunctionType(typeParams, valueTypes, (bparams zip blockTypes).map { (p, t) => Tracked(p.symbol.capture, t) }, bodyType,
+        Effects(capabilities.map { c => Tracked(c.capture, Context.capabilityType(c)) }))
 
       Result(tpe, bodyEffs -- capabilities)
   }
@@ -1111,9 +1108,8 @@ object Typer extends Phase[NameResolved, Typechecked] {
       val capabilities = effs.canonical
       Context.bindCapabilities(arg, capabilities)
 
-      val cps = (bparams.map(_.symbol) ++ capabilities).map(_.capture)
-
-      val funType = FunctionType(tps, cps, vps, bps, tpe, effs.toEffects)
+      val funType = FunctionType(tps, vps, (bparams zip bps).map { (p, t) => Tracked(p.symbol.capture, t) }, tpe,
+        Effects(capabilities.map { c => Tracked(c.capture, Context.capabilityType(c)) }))
 
       // Like with functions, bound parameters and capabilities are not closed over
       usingCaptureWithout(inferredCapture) {
@@ -1563,13 +1559,13 @@ object Typer extends Phase[NameResolved, Typechecked] {
     val atargs = Aligned(targs, funTpe.tparams)
     val (avargs, implicitVargs) = Aligned(vargs.unspan, funTpe.vparams)
       .fillImplicit(knownVParams) { (i, p) => source.GenerateImplicitArgs.resolveImplicitValue(p, i, scope, vargs.span) }
-    val (abargs, implicitBargs) = Aligned(bargs.unspan, funTpe.bparams)
+    val (abargs, implicitBargs) = Aligned(bargs.unspan, funTpe.bparams.map(_.tpe))
       .fillImplicit(knownBParams) { (i, p) => source.GenerateImplicitArgs.resolveImplicitBlock(p, i, scope, bargs.span) }
     assertArgsParamsAlign(name = Some(name), atargs, avargs, abargs)
 
     // (1) Instantiate blocktype
     // e.g. `[A, B] (A, A) => B` becomes `(?A, ?A) => ?B`
-    val (typeArgs, captArgs, (vps, bps, ret, retEffs)) = Context.instantiateFresh(CanonicalOrdering(funTpe))
+    val (typeArgs, captArgs, (vps, bps, ret, retEffs)) = Context.instantiateFresh(funTpe)
 
     // provided type arguments flow into the fresh unification variables (i.e., Int <: ?A)
     if (targs.nonEmpty) (targs zip typeArgs).foreach { case (targ, tvar) => matchExpected(tvar, targ, None) }

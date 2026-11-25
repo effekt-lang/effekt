@@ -53,9 +53,8 @@ enum BlockType extends Type {
 
   case FunctionType(
     tparams: List[TypeParam],
-    cparams: List[Capture],
     vparams: List[ValueType],
-    bparams: List[BlockType],
+    bparams: List[Tracked[BlockType]],
     result: ValueType,
     effects: Effects
   )
@@ -68,34 +67,48 @@ extension (i: BlockType.InterfaceType) {
   def name: Name = i.typeConstructor.name
 }
 
+extension (f: BlockType.FunctionType) {
+  // every capture the function type binds: its block parameters', then its effects'
+  def cparams: List[Capture] = f.bparams.map(_.capture) ++ f.effects.captures
+}
+
 /**
- * The effects of a function type, as declared, being the capabilities a call passes.
+ * A block type together with the capture it binds:
+ * a block parameter or an effect of a function type (the type "dual" of a [[TrackedParam]]).
+ */
+case class Tracked[+T <: BlockType](capture: Capture, tpe: T)
+
+/**
+ * The effects of a function type, as declared, being the capabilities a call passes: 
+ * each with its capture, in the order they are passed.
  *
- * All effects are dealiased and made distinct by Namer. This is a list, not a set: entries are not made distinct after
- * substitution, since { State[?S], State[?T] }[?S !-> Int, ?T !-> Int] becomes { State[Int], State[Int] },
+ * All effects are dealiased and made distinct by Namer, which fixes the order once ([[Effects.declared]]).
+ * This is a list, not a set: entries are not made distinct after substitution,
+ * since { State[?S], State[?T] }[?S !-> Int, ?T !-> Int] becomes { State[Int], State[Int] },
  * and a call then still passes two capabilities. The effects of a term, as _inferred_, are [[typer.InferredEffects]].
  *
  * Effect sets are themselves *not* symbols, they are just aggregates.
  */
-case class Effects(effects: List[BlockType.InterfaceType]) {
+case class Effects(effects: List[Tracked[InterfaceType]]) {
 
-  def toList: List[InterfaceType] = effects
+  def toList: List[InterfaceType] = effects.map(_.tpe)
+  def captures: List[Capture] = effects.map(_.capture)
 
   def isEmpty: Boolean = effects.isEmpty
   def nonEmpty: Boolean = effects.nonEmpty
 
-  def forall(p: InterfaceType => Boolean): Boolean = effects.forall(p)
-  def exists(p: InterfaceType => Boolean): Boolean = effects.exists(p)
+  def forall(p: InterfaceType => Boolean): Boolean = toList.forall(p)
+  def exists(p: InterfaceType => Boolean): Boolean = toList.exists(p)
+
+  def map(f: InterfaceType => InterfaceType): Effects = Effects(effects.map { e => Tracked(e.capture, f(e.tpe)) })
 
   def size: Int = effects.size
 }
 object Effects {
 
-  def apply(effs: InterfaceType*): Effects =
-    new Effects(effs.toList)
-
-  def apply(effs: Iterable[InterfaceType]): Effects =
-    new Effects(effs.toList)
+  // declared effects, each with a fresh capture, in the order they are passed
+  def declared(effs: List[InterfaceType]): Effects =
+    Effects(CanonicalOrdering(effs).map { tpe => Tracked(CaptureParam(tpe.name), tpe) })
 
   def empty: Effects = new Effects(Nil)
   val Pure = empty
@@ -115,7 +128,7 @@ object CanonicalOrdering extends Ordering[InterfaceType] {
       effekt.util.messages.INTERNAL_ERROR("Cannot compute canonical ordering, since type still contains unification variables.")
     // binders compared by position to prevent issues like #727
     case (f1: FunctionType, f2: FunctionType) if (f1.tparams, f1.cparams) != (f2.tparams, f2.cparams) &&
-        f1.tparams.size == f2.tparams.size && f1.cparams.size == f2.cparams.size =>
+        f1.tparams.size == f2.tparams.size && f1.bparams.size == f2.bparams.size && f1.effects.size == f2.effects.size =>
       compareStructural(f1, renamed(f1, f2))
     case (sym1: Symbol, sym2: Symbol) =>
       sym1.id - sym2.id
@@ -130,13 +143,6 @@ object CanonicalOrdering extends Ordering[InterfaceType] {
   def fallback(tpe1: Any, tpe2: Any): Int = tpe1.hashCode - tpe2.hashCode
 
   def apply(l: List[InterfaceType]): List[InterfaceType] = l.sorted(using this)
-
-  def apply(f: FunctionType): FunctionType = f match {
-    case FunctionType(tparams, cparams, vparams, bparams, result, effects) =>
-      val (cparamsBlocks, cparamsEffects) = cparams.splitAt(bparams.size)
-      val (cparams2, effects2) = (cparamsEffects zip effects.toList).sortBy(_._2)(using this).unzip
-      FunctionType(tparams, cparamsBlocks ++ cparams2, vparams, bparams, result, Effects(effects2))
-  }
 }
 
 /**
@@ -162,10 +168,10 @@ private object SameType {
 
   def equal(t1: BlockType, t2: BlockType): Boolean = (t1, t2) match {
     case (InterfaceType(c1, args1), InterfaceType(c2, args2)) => c1 == c2 && all(args1, args2)(equal)
-    case (f1 @ FunctionType(tps1, cps1, vps1, bps1, ret1, effs1), f2 @ FunctionType(tps2, cps2, _, _, _, _)) =>
-      tps1.size == tps2.size && cps1.size == cps2.size && {
-        val FunctionType(_, _, vps2, bps2, ret2, effs2) = renamed(f1, f2)
-        all(vps1, vps2)(equal) && all(bps1, bps2)(equal) && equal(ret1, ret2) && sameSet(effs1.toList, effs2.toList)
+    case (f1 @ FunctionType(tps1, vps1, bps1, ret1, effs1), f2: FunctionType) =>
+      tps1.size == f2.tparams.size && bps1.size == f2.bparams.size && effs1.size == f2.effects.size && {
+        val FunctionType(_, vps2, bps2, ret2, effs2) = renamed(f1, f2)
+        all(vps1, vps2)(equal) && all(bps1.map(_.tpe), bps2.map(_.tpe))(equal) && equal(ret1, ret2) && sameSet(effs1.toList, effs2.toList)
       }
     case _ => false
   }
@@ -181,6 +187,8 @@ private object SameType {
 // `f2` with its binders renamed to those of `f1`, like in [[typer.TypeUnifier.unifyFunctionTypes]]
 private def renamed(f1: FunctionType, f2: FunctionType): FunctionType = {
   val subst = effekt.typer.Substitutions(f2.tparams zip f1.tparams.map(ValueTypeRef(_)), f2.cparams zip f1.cparams.map(CaptureSet(_)))
-  FunctionType(f1.tparams, f1.cparams, f2.vparams.map(subst.substitute), f2.bparams.map(subst.substitute),
-    subst.substitute(f2.result), Effects(f2.effects.effects.map(subst.substitute)))
+  FunctionType(f1.tparams, f2.vparams.map(subst.substitute),
+    (f1.bparams zip f2.bparams).map { (b1, b2) => Tracked(b1.capture, subst.substitute(b2.tpe)) },
+    subst.substitute(f2.result),
+    Effects((f1.effects.effects zip f2.effects.effects).map { (e1, e2) => Tracked(e1.capture, subst.substitute(e2.tpe)) }))
 }
