@@ -1,0 +1,6 @@
+// two effects of the same interface: both captures are called `State`, so the name is ambiguous
+interface State[T] { def get(): T }
+
+def run { f: () => (() => Int at {State}) / { State[Int], State[String] } }: Int = 0 // ERROR Ambiguous reference to capture State
+
+def main() = ()
