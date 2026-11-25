@@ -59,7 +59,7 @@ extern def toString(address: Address) at {}: String =
 /// Raises the error of the resolver, such as `EAI_NONAME`, if it has none.
 def resolve(host: String): List[Address] / Exception[IOError] = {
   val resolution = internal::checkResult(internal::resolve(host))
-  val addresses = list::collect[Address] { internal::addresses(resolution) }
+  val addresses = list::collect { internal::addresses(resolution) }
   internal::release(resolution)
   addresses
 }

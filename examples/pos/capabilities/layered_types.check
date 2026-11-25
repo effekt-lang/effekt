@@ -1,0 +1,5 @@
+outer: raised
+0
+[warning] examples/pos/capabilities/layered_types.effekt:8:3: Handling effect Fail[Int], which seems not to be used by the program. [typer]
+8    try { g(1) {act} } with Fail[Int] { def fail(e) = 0 }
+     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^

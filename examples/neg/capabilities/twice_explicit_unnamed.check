@@ -1,0 +1,10 @@
+[error] examples/neg/capabilities/twice_explicit_unnamed.effekt:5:9: Ambiguous effect Exc. [typer]
+5    try { do Exc() }
+           ^^^^^^^^
+
+   There are multiple handlers in scope, which all could handle it:
+6  *   with Exc { () }
+            ^^^
+
+7  *   with Exc { () }
+            ^^^

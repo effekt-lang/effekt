@@ -1,0 +1,11 @@
+// Typer: effects are compared up to renaming of binders: `Foo[=> Unit / Bar at {}]` spelled twice is one effect (#727)
+// (expected: "ok")
+interface Bar {}
+interface Foo[T] { def foo(): T }
+
+def foo { block: => Unit / Foo[=> Unit / Bar at {}] }: Unit = ()
+
+def main() = {
+  foo { val f = do foo[=> Unit / Bar at {}]() }
+  println("ok")
+}

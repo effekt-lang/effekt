@@ -856,7 +856,7 @@ object Namer extends Phase[Parsed, NameResolved] {
           resolveBlockType(tpe)
       }
 
-      val effs = resolve(effects).distinct
+      val effs = resolve(effects)
       CanonicalOrdering(effs.toList) foreach { eff =>
         val cap = CaptureParam(eff.name)
         cps = cps :+ cap
@@ -903,7 +903,7 @@ object Namer extends Phase[Parsed, NameResolved] {
   }
 
   def resolve(tpe: source.Effects)(using Context): Effects =
-    Effects(tpe.effs.flatMap(resolveWithAliases).toSeq*) // TODO this otherwise is calling the wrong apply
+    Effects(distinctTypes(tpe.effs.flatMap(resolveWithAliases)))
 
   def resolve(e: source.Effectful)(using Context): (ValueType, Effects) =
     (resolveValueType(e.tpe), resolve(e.eff))

@@ -1,0 +1,9 @@
+interface Greet[T] { def sayHello(x: T): Unit }
+
+def main() = try {
+  do sayHello(42)
+} with Greet[String] {
+  def sayHello(x) = { println(x); resume(()) }
+} with Greet[Bool] {
+  def sayHello(x) = { println(x); resume(()) }
+}

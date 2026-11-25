@@ -2,7 +2,6 @@ package effekt
 package symbols
 
 import effekt.symbols.builtins.*
-import effekt.typer.ConcreteEffects
 import kiama.output.ParenPrettyPrinter
 
 import scala.language.implicitConversions
@@ -37,7 +36,6 @@ object TypePrinter extends ParenPrettyPrinter {
     case t: Capture         => TypePrinter.show(t)
     case t: Captures        => TypePrinter.show(t)
     case t: Effects         => TypePrinter.show(t)
-    case t: ConcreteEffects => TypePrinter.show(t.toEffects)
     case c: TypeConstructor => c.name.name
     case c: Constructor     => c.name.name
     case c: Field           => c.name.name

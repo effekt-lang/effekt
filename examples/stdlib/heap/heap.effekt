@@ -4,7 +4,7 @@ import test
 
 def drain(heap: Heap[Int]): String = {
   var out = ""
-  for[Weighted[Int]] { each(heap) } { case Weighted(x, _) => out = out ++ show(x) ++ " " }
+  for { each(heap) } { case Weighted(x, _) => out = out ++ show(x) ++ " " }
   out
 }
 
@@ -48,7 +48,7 @@ def main() = {
       assertTrue(none.isEmpty)
     }
     test("collectHeap") {
-      val h = collectHeap[Int] {
+      val h = collectHeap {
         for[Int] { [5, 3, 8, 1, 9, 2].each } { x => do emit(Weighted(x, x.toDouble)) }
       }
       assert(drain(h), "1 2 3 5 8 9 ")

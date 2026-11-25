@@ -194,9 +194,23 @@ object messages {
     case n: Name          => n.name
   }
 
-  /** Overload resolution that did not resolve: either no candidate fits, or several do. */
-  case class OverloadResolution(candidates: List[Candidate]) extends Reason {
+  /** A search that did not resolve: either no candidate fits, or several do. */
+  sealed trait Resolution extends Reason {
+    def candidates: List[Candidate]
     def ambiguous: Boolean = candidates.count { c => c.failure.isEmpty } > 1
+
+    override def alternatives = candidates
+
+    override def independent = candidates.map(_.failure) match {
+      case failures if failures.forall(_.isDefined) =>
+        val diagnostics = failures.flatten.map { f => f.diagnostics }
+        diagnostics.head.distinct.filter { d => diagnostics.tail.forall(_.contains(d)) }
+      case _ => Vector.empty
+    }
+  }
+
+  /** Overload resolution that did not resolve. */
+  case class OverloadResolution(candidates: List[Candidate]) extends Resolution {
 
     override def undecided: Boolean = !ambiguous && candidates.exists { c =>
       c.failure.exists { case _: Failure.Undecided => true; case _ => false }
@@ -212,21 +226,26 @@ object messages {
       else if undecided then List(pretty"There are multiple overloads, which all could type check:")
       else List(pretty"There are multiple overloads, which all fail to check:")
 
-    override def alternatives = candidates
-
-    override def independent = candidates.map(_.failure) match {
-      case failures if failures.forall(_.isDefined) =>
-        val diagnostics = failures.flatten.map { f => f.diagnostics }
-        diagnostics.head.distinct.filter { d => diagnostics.tail.forall(_.contains(d)) }
-      case _ => Vector.empty
-    }
   }
 
-  case class Candidate(symbol: symbols.TermSymbol, tpe: symbols.Type, failure: Option[Failure], definitionTree: Option[source.IdDef]) {
-    def errors: EffektMessages = failure.map(_.diagnostics).getOrElse(Vector.empty)
+  /** The handlers in scope for an effect that did not resolve to exactly one. */
+  case class CapabilityResolution(effect: symbols.InterfaceType, candidates: List[Candidate]) extends Resolution {
+    def claim =
+      if ambiguous then pretty"Ambiguous effect ${effect}."
+      else pretty"Effect ${effect} is not allowed in this context."
 
-    // without its declaration
-    def show: StructuredMessage = pretty"${Piece.Code(fullname(symbol.name))} of type ${tpe}"
+    override def details =
+      if ambiguous then List(pretty"There are multiple handlers in scope, which all could handle it:")
+      else List(pretty"There are handlers for it in scope, but for other types:")
+  }
+
+  /** An alternative of a search: what it is (without its declaration), where it is declared, and why it did not fit. */
+  case class Candidate(show: StructuredMessage, place: Option[source.Span], failure: Option[Failure]) {
+    def errors: EffektMessages = failure.map(_.diagnostics).getOrElse(Vector.empty)
+  }
+  object Candidate {
+    def apply(symbol: symbols.TermSymbol, tpe: symbols.Type, failure: Option[Failure], definitionTree: Option[source.IdDef]): Candidate =
+      Candidate(pretty"${Piece.Code(fullname(symbol.name))} of type ${tpe}", definitionTree.map(_.span), failure)
   }
 
   case class ImplicitMaxRecursion(text: String) extends Reason {
@@ -418,7 +437,9 @@ object messages {
         abort(cause)
     }
 
-    def abortWith(resolution: OverloadResolution): Nothing = {
+    def abortWith(resolution: Resolution): Nothing = abortWith(resolution)(())
+
+    def abortWith(resolution: Resolution)(subdiagnostics: Subdiagnostics ?=> Unit): Nothing = {
       val independent = resolution.independent
       val (errors, others) = independent.partition { d => d.severity == Severity.Error }
       if (errors.nonEmpty && resolution.candidates.exists { c => resolution.dependent(c).forall { d => d.severity != Severity.Error } }) {
@@ -426,7 +447,7 @@ object messages {
         abortWith(errors)
       } else {
         reraise(independent)
-        abort(resolution)
+        abort(resolution)(subdiagnostics)
       }
     }
 

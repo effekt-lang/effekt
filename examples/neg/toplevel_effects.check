@@ -1,3 +1,7 @@
 [error] examples/neg/toplevel_effects.effekt:8:28: Effect Console is not allowed in this context. [typer]
 8  def pureFun(): Unit / {} = sayHello()
                               ^^^^^^^^^^
+
+   * note: pureFun declares no effects.
+8  |  def pureFun(): Unit / {} = sayHello()
+   |                        ^^

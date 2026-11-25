@@ -60,7 +60,7 @@ def main() = {
   
   // Test for "reifying" an Exception using Result
   def resultTestException { p: => String / Exception[TestException] }: Unit = {
-    val res = result[String, TestException] { p() }
+    val res = result { p() }
     res match {
       case Success(msg) => println("Success: " ++ msg) 
       case Error(exc, msg) => println(msg)

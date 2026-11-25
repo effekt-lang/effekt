@@ -1,0 +1,9 @@
+effect Exc(): Unit
+
+// Typer: two handlers of one interface in one `try` both fit `do Exc()`: ambiguous (was a warning, pos/twice-explicit)
+def test() =
+  try { do Exc() }
+  with Exc { () }
+  with Exc { () }
+
+def main() = ()

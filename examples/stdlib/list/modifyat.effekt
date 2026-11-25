@@ -3,6 +3,6 @@ module examples/pos/list/modifyat
 
 def main() = {
   // synchronized with doctest in `modifyAt`
-  println(result[List[Int], OutOfBounds] { [1, 2, 3].modifyAt(1) { n => n + 100 } }.show)
-  println(result[List[Int], OutOfBounds] { [1, 2, 3].modifyAt(10) { n => n + 100 } }.show)
+  println(result { [1, 2, 3].modifyAt(1) { n => n + 100 } }.show)
+  println(result { [1, 2, 3].modifyAt(10) { n => n + 100 } }.show)
 }

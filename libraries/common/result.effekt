@@ -50,7 +50,7 @@ def firstSuccess[A, R, E](head: A, tail: List[A]) { action: A => R / Exception[E
   def go(candidate: A, rest: List[A]): R = rest match {
     case Nil() => action(candidate)
     case Cons(next, more) =>
-      result[R, E] { action(candidate) } match {
+      result { action(candidate) } match {
         case Success(value) => value
         case Error(_, _) => go(next, more)
       }

@@ -222,10 +222,9 @@ class LSPTests extends FunSuite {
       val (textDoc, range) = raw"""
                                 |effect Eff(): Unit
                                 |def main() = {
-                                |↑
                                 |  do Eff()
+                                |  ↑      ↑
                                 |}
-                                |↑
                                 |""".stripMargin.textDocumentAndRange
 
       val didOpenParams = new DidOpenTextDocumentParams()
@@ -236,7 +235,7 @@ class LSPTests extends FunSuite {
       diagnostic.setRange(range)
       diagnostic.setSeverity(DiagnosticSeverity.Error)
       diagnostic.setSource("effekt [typer]")
-      diagnostic.setMessage("Main cannot have effects, but includes effects: { Eff }")
+      diagnostic.setMessage("Effect Eff is not allowed in this context.\n  * note: main cannot have effects.")
 
       val diagnosticsWithError = new util.ArrayList[Diagnostic]()
       diagnosticsWithError.add(diagnostic)

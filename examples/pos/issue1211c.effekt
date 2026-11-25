@@ -1,0 +1,11 @@
+// #1211: the same with the boxed block bound first
+interface Greet[T] { def sayHello(x: T): Unit }
+
+def helloWorld() = try {
+  val f = box {}
+  do sayHello(f)
+} with Greet[=> Unit at {}] {
+  def sayHello(x) = { println("Hello!"); resume(()) }
+}
+
+def main() = helloWorld()

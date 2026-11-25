@@ -55,12 +55,12 @@ def readSome[A] { predicate: A => Bool }: Unit / { Scan[A], emit[A], fail } =
 
 /// Skips until the predicate does not hold for the next token.
 def skipMany[A] { predicate: A => Bool }: Unit / Scan[A] =
-  for[A] { readMany{predicate} } { _ => () }
+  for { readMany{predicate} } { _ => () }
 
 /// Skips until the predicate does not hold for the next token.
 /// Must skip at least one token, else fail.
 def skipSome[A] { predicate: A => Bool }: Unit / { Scan[A], fail } =
-  for[A] { readSome{predicate} } { _ => () }
+  for { readSome{predicate} } { _ => () }
 
 /// Read the next character if it is the given one.
 def readIf(e: Char): Unit / { Scan[Char], stop } = {

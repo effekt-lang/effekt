@@ -10,7 +10,7 @@ def ints(): Unit / emit[Int] = {
 def take[A](n: Int) { stream: () => Unit / emit[A] }: List[A] = {
   with collect[A]
   with boundary
-  with limit[A](n)
+  with limit(n)
   stream()
 }
 
@@ -40,7 +40,7 @@ def sine(): Unit / emit[Double] = integrate(0.0) {cosine}
 // cos x := - ∫_{0}^x sin y dy + 1
 //        = -(∫_{0}^x sin y dy - 1)
 def cosine(): Unit / emit[Double] =
-  for[Double] { integrate(-1.0) {sine} } { x => do emit(x.neg) }
+  for { integrate(-1.0) {sine} } { x => do emit(x.neg) }
 
 def main() = {
   def rnd(one: Double) = one.round(5)

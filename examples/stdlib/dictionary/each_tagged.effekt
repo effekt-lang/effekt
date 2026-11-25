@@ -9,7 +9,7 @@ def main() = {
   trie.insert("ab", "amazing")
   trie.insert("b", "banana")
 
-  for[Tagged[String]] { eachTagged(trie) } { case Tagged(key, value) =>
+  for { eachTagged(trie) } { case Tagged(key, value) =>
     println(bytearray::toString(key))
     println(value)
   }

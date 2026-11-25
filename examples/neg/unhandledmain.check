@@ -1,3 +1,7 @@
-[error] examples/neg/unhandledmain.effekt:5:1: Main cannot have effects, but includes effects: { Flip } [typer]
+[error] examples/neg/unhandledmain.effekt:5:16: Effect Flip is not allowed in this context. [typer]
 5  def main() = { do Flip(); () }
-   ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+                  ^^^^^^^^^
+
+   * note: main cannot have effects.
+5  |  def main() = { do Flip(); () }
+   |      ^^^^

@@ -10,7 +10,7 @@ def main() = {
 
   println("m1 := map::collect { stream() }")
 
-  val m1: Map[Int, String] = map::collect(box compareInt) { stream() }
+  val m1 = map::collect(box compareInt) { stream() }
 
   println("m1.toList.foreach === m1.foreach")
 
@@ -26,7 +26,7 @@ def main() = {
 
   println("m2 := list::collect { stream() }.map:fromList")
 
-  val m2: Map[Int, String] = list::collect { stream() }.fromList(box compareInt)
+  val m2 = list::collect { stream() }.fromList(box compareInt)
 
   println("m2.toList.foreach === m2.foreach")
 

@@ -39,7 +39,7 @@ def substring(str: String, from: Int): String =
 
 /// Checks whether str starts with the given prefix at `from`
 def isSubstringAt(str: String, prefix: String, from: Int): Bool = {
-  with default[OutOfBounds, Bool] { false };
+  with default { false };
 
   val stringLength = str.length
   val prefixLength = prefix.length
