@@ -31,7 +31,7 @@ class InferredEffects private[typer] (val capabilities: List[BlockParam]) {
 // the entries of a repeated interface are ordered by their type arguments,
 // which must be concrete when wanting to order the whole thing
 private def assertOrderable(effs: List[InterfaceType])(using Context): Unit =
-  effs.groupBy(_.typeConstructor).values.filter(_.size > 1).flatten.foreach { eff => 
+  effs.groupBy(_.typeConstructor).values.filter(_.size > 1).flatten.foreach { eff =>
     assertConcreteEffect(eff)
   }
 
@@ -52,12 +52,12 @@ def canonical(effs: Effects)(using C: Context): List[InterfaceType] = {
   known.sorted(using CanonicalOrdering)
 }
 
- /**
+/**
  * Asserts that an effect is _concrete_ (i.e., has no unification variables):
  * this is needed only where an interface occurs more than once in a set,
  * where its entries are told apart by their type arguments (see [[TypeComparer.unifyEffects]]).
  */
-private[typer] def assertConcreteEffect(eff: InterfaceType, hints: Set[InterfaceType] = Set.empty)(using C: Context): Unit =
+private[typer] def assertConcreteEffect(eff: InterfaceType)(using C: Context): Unit =
   unknowns(eff) match {
     case us if us.nonEmpty =>
       C.abort(pretty"Effects need to be fully known, but effect ${eff}'s type parameter(s) ${us.mkString(", ")} could not be inferred.") {
