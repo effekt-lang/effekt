@@ -14,6 +14,11 @@ sealed trait CapabilityScope {
   def parent: CapabilityScope
   def relevantInScopeFor(tpe: symbols.InterfaceType)(using C: Context): Set[symbols.InterfaceType]
 }
+
+// the capability bound for `tpe`, up to renaming of binders
+private[typer] def lookup(capabilities: Map[symbols.InterfaceType, symbols.BlockParam], tpe: symbols.InterfaceType): Option[symbols.BlockParam] =
+  capabilities.collectFirst { case (t, c) if symbols.sameType(t, tpe) => c }
+
 case object GlobalCapabilityScope extends CapabilityScope {
   def copy: CapabilityScope = this
   def parent: CapabilityScope = sys error "No parent"
@@ -54,7 +59,7 @@ object DummyUnifier extends TypeUnifier {
 class BindSome(binder: source.Tree, capabilities: Map[symbols.InterfaceType, symbols.BlockParam], val parent: CapabilityScope) extends CapabilityScope {
   def copy: CapabilityScope = BindSome(binder, capabilities, parent.copy)
   def capabilityFor(tpe: symbols.InterfaceType)(using C: Context): symbols.BlockParam =
-    capabilities.get(tpe).orElse {
+    lookup(capabilities, tpe).orElse {
       tryLexicalCapabilityFor(tpe)
     }.getOrElse(parent.capabilityFor(tpe))
 
@@ -89,7 +94,7 @@ class BindSome(binder: source.Tree, capabilities: Map[symbols.InterfaceType, sym
 class BindAll(binder: source.Tree, var capabilities: Map[symbols.InterfaceType, symbols.BlockParam], val parent: CapabilityScope) extends CapabilityScope {
   def copy: CapabilityScope = BindAll(binder, capabilities, parent.copy)
   def capabilityFor(tpe: symbols.InterfaceType)(using C: Context): symbols.BlockParam =
-    capabilities.getOrElse(tpe, {
+    lookup(capabilities, tpe).getOrElse({
       val freshCapability = C.freshCapabilityFor(tpe)
       capabilities = capabilities.updated(tpe, freshCapability)
       freshCapability

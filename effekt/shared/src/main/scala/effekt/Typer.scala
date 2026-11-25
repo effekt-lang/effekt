@@ -287,8 +287,10 @@ object Typer extends Phase[NameResolved, Typechecked] {
         val explicitCapabilities = handlers.flatMap { _.capability.map(_.symbol) }.toSet
         // - all effects that are handled
         val handled = ConcreteEffects(handlerFor.map(_._1))
-        // - capabilities grouped by effect
-        val capabilityGroups = handlerFor.groupBy(_._1).view.mapValues(_.map(_._2)).toList
+        // - capabilities grouped by effect, in the order of the handlers
+        val capabilityGroups = distinctTypes(handlerFor.map(_._1)).map { effect =>
+          effect -> handlerFor.collect { case (e, c) if sameType(e, effect) => c }
+        }
 
         // Compute groups of capabilities that handle the same effects, then
         //  1) check whether all are bound explicitly (which would be fine)
@@ -306,7 +308,7 @@ object Typer extends Phase[NameResolved, Typechecked] {
         capabilityGroups.foreach {
           case (effect, capabilities) =>
             val allImplicit = capabilities.forall { c => !(explicitCapabilities contains c) }
-            val used = effs.exists(e => e == effect)
+            val used = effs.exists(sameType(_, effect))
 
             if (allImplicit && !used)
               Context.warning(pp"Handling effect ${effect}, which seems not to be used by the program.")
@@ -873,7 +875,7 @@ object Typer extends Phase[NameResolved, Typechecked] {
                 }
 
                 // We do no longer use the order annotated on the function, but always the canonical ordering.
-                val capabilities = effs.canonical.map { caps.apply }
+                val capabilities = effs.canonical.map { e => lookup(caps, e).get }
                 val captures = capabilities.map(_.capture)
 
                 Context.bindCapabilities(d, capabilities)
@@ -1112,7 +1114,7 @@ object Typer extends Phase[NameResolved, Typechecked] {
       }
 
       // The order of effects annotated to the function is the canonical ordering for capabilities
-      val capabilities = effs.canonical.map { caps.apply }
+      val capabilities = effs.canonical.map { e => lookup(caps, e).get }
       Context.bindCapabilities(arg, capabilities)
 
       val cps = (bparams.map(_.symbol) ++ capabilities).map(_.capture)
