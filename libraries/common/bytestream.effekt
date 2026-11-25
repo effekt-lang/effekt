@@ -140,7 +140,7 @@ def hex{ body: => Unit / { write, HexSplices } }: Unit / emit[Byte] = {
 /// convert the given hex notation to an integer (big-endian)
 def x{ body: => Unit / { write, HexSplices } }: Int = {
   var res = 0
-  for[Byte]{ hex{body} }{ v => res = res * 256 + v.toInt }
+  for{ hex{body} }{ v => res = res * 256 + v.toInt }
   res
 }
 
@@ -218,7 +218,7 @@ def collectBitsBE{ body: => Unit / emit[Bit] }: Int = {
 
 /// split emitted bytes and emit the individual bits in big-endian bit order
 def ungroupBytesBE{ body: => Unit / emit[Byte] }: Unit / emit[Bit] =
-  for[Byte]{body}{ b => bitsBE(b) }
+  for{body}{ b => bitsBE(b) }
 
 /// streaming negation in 2s-complement for little-endian bitstreams
 def twoscomplementLE{ body: => Unit / emit[Bit] }: Unit / emit[Bit] = {
@@ -325,7 +325,7 @@ def bit{ body: => Unit / { write, BitSplices } }: Unit / emit[Bit] = {
     resume(())
   }
   with splice[OfWidth[BE[Signed[Int]]]] { i =>
-    list::collect[Bit]{
+    list::collect{
       if(i.raw.raw.raw < 0){
         twoscomplementLE{ bitsLE(0 - i.raw.raw.raw, i.width) }
       } else {

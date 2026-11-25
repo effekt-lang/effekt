@@ -307,7 +307,7 @@ def manyTee[A]{ body: { { { => Unit / emit[A] } => Unit }{ => Unit / emit[A] } =
 ///     assertEquals(product{ range(0, 10) }, productRes)
 ///
 def tee[A]{ cons1: { => Unit / emit[A] } => Unit }{ cons2: { => Unit / emit[A] } => Unit }{ prod: => Unit / emit[A] }: Unit = {
-  manyTee[A]{ {tee} =>
+  manyTee{ {tee} =>
     with tee{cons1}
     with tee{cons2}
     prod()

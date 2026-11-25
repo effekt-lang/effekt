@@ -1,11 +1,11 @@
 import stream
 
 def main() = {
-  for[Char] { each("Hello") } { c =>
+  for { each("Hello") } { c =>
     println(show(c) ++ " (" ++ show(c.toInt) ++ ")")
   }
 
-  val list = list::collect[Char] { each("Hello") }
+  val list = list::collect { each("Hello") }
   println(list.map { c => c.show })
 }
 

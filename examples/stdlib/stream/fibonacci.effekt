@@ -2,7 +2,7 @@
 def main() = {
   val max = 10
 
-  val fibs = list::collect[Int] {
+  val fibs = list::collect {
     var a = 0
     var b = 1
 

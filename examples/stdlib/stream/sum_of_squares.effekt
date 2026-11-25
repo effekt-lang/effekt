@@ -1,7 +1,7 @@
 import stream
 
 def squares(): Unit / emit[Int] =
-  for[Int] { rangeFrom(1) } { n =>
+  for { rangeFrom(1) } { n =>
     do emit(n * n)
   }
 
@@ -11,7 +11,7 @@ def main() = {
   println("The sum of squares from 1 to " ++ show(max) ++ " is:")
   println(sum {
     with boundary
-    with limit[Int](max)
+    with limit(max)
     squares()
   })
 }
