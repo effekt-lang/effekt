@@ -98,7 +98,8 @@ object builtins {
   val toplevelCaptures: CaptureSet = CaptureSet() // CaptureSet(IOCapability.capture, GlobalCapability.capture)
 
   lazy val rootBindings: Bindings =
-    Bindings(Map.empty, rootTypes, rootCaptures, Map("effekt" -> Bindings(Map.empty, rootTypes, rootCaptures, Map.empty)))
+    val captures = rootCaptures.map { case (name, capt) => name -> Set(capt) }
+    Bindings(Map.empty, rootTypes, captures, Map("effekt" -> Bindings(Map.empty, rootTypes, captures, Map.empty)))
 
   // All built-in symbols that can occur in core programs
   lazy val coreBuiltins: Map[String, symbols.Symbol] = {
