@@ -1016,7 +1016,7 @@ def feed[T, R](list: List[T]) { driver: () => R / next[T] }: R = {
 /// Collects elements emitted by a push stream producer `stream` into a new list,
 /// discarding the result of the producer.
 def collect[A] { stream: () => Unit / emit[A] }: List[A] =
-  returning::collect[A, Unit]{stream}.second
+  returning::collect{stream}.second
 
 namespace returning {
   /// Collects elements emitted by a push stream producer `stream` into a new list,

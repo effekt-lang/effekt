@@ -105,4 +105,4 @@ def report[E](proxy: on[E]) { prog: => Unit / Exception[E] }: Unit =
   report {prog}
 
 def finalize[E, T](proxy: on[E]) { finalizer: => Unit } { prog: => T / Exception[E] }: T / Exception[E] =
-  finalize[E, T] {finalizer} {prog}
+  finalize {finalizer} {prog}

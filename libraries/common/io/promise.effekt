@@ -23,7 +23,7 @@ namespace promise {
 /// Spawns a task and immediately returns a promise that upon completion
 /// of the task will resolve to its result.
 def promise[T](task: () => T at {io, async, global}): Promise[T] = {
-  val p = promise::make[T]();
+  val p = promise::make();
   spawn(box { p.resolve(task()) });
   return p
 }

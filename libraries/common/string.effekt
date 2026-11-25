@@ -236,7 +236,7 @@ namespace internal {
     """
 
   def utf8ByteLength(str: String): Int = stream::sum {
-    for {str.each} { (c: Char) =>
+    for {str.each} { (c) =>
       do emit(c.utf8ByteCount)
     }
   }
@@ -323,7 +323,7 @@ def each(string: String): Unit / emit[Char] =
   }
 
 def collect(capacity: Int) { stream: () => Unit / emit[Char] }: String =
-  returning::collect[Unit](capacity){stream}.second
+  returning::collect(capacity){stream}.second
 
 def collect { stream: () => Unit / emit[Char] }: String =
   collect(4){stream}
@@ -331,7 +331,7 @@ def collect { stream: () => Unit / emit[Char] }: String =
 namespace returning {
 
   def collect[R](capacity: Int) { stream: () => R / emit[Char] }: (R, String) = {
-    val (result, bytes) = bytearray::returning::collect[R](capacity) { encodeUTF8 { stream } }
+    val (result, bytes) = bytearray::returning::collect(capacity) { encodeUTF8 { stream } }
     (result, bytes.toString)
   }
 

@@ -11,11 +11,11 @@ def main() = {
     }
   }
   def a{ b: => Unit / emit[Int] }: Unit = {
-    println(list::collect{boundary{limit[Int](4){b}}})
+    println(list::collect{boundary{limit(4){b}}})
     println("a done")
   }
   def b{ b: => Unit / emit[Int] }: Unit = {
-    println(list::collect{boundary{limit[Int](9){b}}})
+    println(list::collect{boundary{limit(9){b}}})
     println("b done")
   }
   println("a{ ... }")
@@ -28,12 +28,12 @@ def main() = {
   tee{b}{a}{ stream() }
   println("a{ teeing{b}{ ... } }")
   a{
-    with teeing[Int]{b}
+    with teeing{b}
     stream()
   }
   println("b{ teeing{a}{ ... } }")
   b{
-    with teeing[Int]{a}
+    with teeing{a}
     stream()
   }
 }

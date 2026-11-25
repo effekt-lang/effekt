@@ -13,8 +13,8 @@ def show(p: Pos) = "[" ++ show(p.x) ++ ", " ++ show(p.y) ++ "]"
 /// with radius=2, these are neighbours&their neighbours
 /// ...
 def neighboursOf(pos: Pos, radius: Int) = {
-  with val dx = for[Int] { range(neg(radius), radius + 1) }
-  with val dy = for[Int] { range(neg(radius), radius + 1) }
+  with val dx = for { range(neg(radius), radius + 1) }
+  with val dy = for { range(neg(radius), radius + 1) }
   val newPosition = Pos(pos.x + dx, pos.y + dy)
   do emit(newPosition)
 }
@@ -23,7 +23,7 @@ def main() = {
   val start = Pos(4, 3)
 
   println("The immediate neighbours of " ++ show(start) ++ " are:")
-  for[Pos] { start.neighboursOf(1) } { 
+  for { start.neighboursOf(1) } {
     case p and not(p.equals(start)) => println(show(p))
     case _ => ()
   }
@@ -31,7 +31,7 @@ def main() = {
   println("")
 
   println("The neighbours and their neighbours of " ++ show(start) ++ " are:")
-  for[Pos] { start.neighboursOf(2) } { 
+  for { start.neighboursOf(2) } {
     case p and not(p.equals(start)) => println(show(p))
     case _ => ()
   }

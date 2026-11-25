@@ -348,7 +348,7 @@ def reverse[A](arr: Array[A]): Unit = {
 /// O(N)
 def reversed[A](arr: Array[A]): Array[A] = {
   val size = arr.size()
-  val result = unsafeAllocate[A](size)
+  val result = unsafeAllocate(size)
 
   // Copy elements in reverse order to new array
   each(0, size) { i =>
@@ -473,7 +473,7 @@ def sliced[A](arr: Array[A], start: Int, end: Int): Array[A] = {
 /// O(min(N, M))
 def zipped[A, B](this: Array[A], other: Array[B]): Array[(A, B)] = {
   val len = min(this.size, other.size)
-  val result = unsafeAllocate[(A, B)](len)
+  val result = unsafeAllocate(len)
   each(0, len) { i =>
     result.set(i, (this.get(i), other.get(i)))
   }
@@ -486,7 +486,7 @@ def zipped[A, B](this: Array[A], other: Array[B]): Array[(A, B)] = {
 /// O(min(N, M))
 def zippedWith[A, B, C](this: Array[A], other: Array[B]) { f: (A, B) => C }: Array[C] = {
   val len = min(this.size, other.size)
-  val result = unsafeAllocate[C](len)
+  val result = unsafeAllocate(len)
   each(0, len) { i =>
     result.set(i, f(this.get(i), other.get(i)))
   }
@@ -684,12 +684,12 @@ def feed[T, R](array: Array[T]) { driver: () => R / next[T] }: R = {
 /// The provided capacity is a hint for the expected number of elements.
 /// It must be strictly larger than zero.
 def collect[A](capacity: Int) { stream: () => Unit / emit[A] }: Array[A] =
-  returning::collect[A, Unit](capacity){stream}.second
+  returning::collect(capacity){stream}.second
 
 /// Collects elements emitted by a push stream producer `stream` into a new array,
 /// discarding the result of the producer.
 def collect[A] { stream: () => Unit / emit[A] }: Array[A] =
-  collect[A](4){stream}
+  collect(4){stream}
 
 namespace returning {
 
@@ -713,6 +713,6 @@ namespace returning {
   /// Collects elements emitted by a push stream producer `stream` into a new array,
   /// returning the result of the producer as well as the collected array.
   def collect[A, R] { stream: () => R / emit[A] }: (R, Array[A]) =
-    returning::collect[A, R](4){stream}
+    returning::collect(4){stream}
 
 }

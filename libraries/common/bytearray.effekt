@@ -330,7 +330,7 @@ def feed[R](bytes: ByteArray) { driver: () => R / next[Byte] }: R = {
 }
 
 def collect(capacity: Int) { stream: () => Unit / emit[Byte] }: ByteArray =
-  returning::collect[Unit](capacity){stream}.second
+  returning::collect(capacity){stream}.second
 
 def collect { stream: () => Unit / emit[Byte] }: ByteArray =
   collect(4){stream}

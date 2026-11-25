@@ -130,7 +130,7 @@ namespace internal {
 
   /// The addresses of a `resolution`, in order.
   def addresses(resolution: Int): Unit / emit[Address] = {
-    with val i = for[Int] { range(0, addressCount(resolution)) }
+    with val i = for { range(0, addressCount(resolution)) }
     do emit(addressAt(resolution, i))
   }
 

@@ -103,11 +103,11 @@ def hex{ body: => Unit / { write, HexSplices } }: Unit / emit[Byte] = {
       body()
     }
     with splice[String] { s =>
-      feed(s){ loop { do splice[Char](do next[Char]()) } }
+      feed(s){ loop { do splice(do next()) } }
       resume(())
     }
     with splice[ByteArray] { ba =>
-      ba.foreach{ b => do splice[Byte](b) }
+      ba.foreach{ b => do splice(b) }
       resume(())
     }
   }
@@ -115,15 +115,15 @@ def hex{ body: => Unit / { write, HexSplices } }: Unit / emit[Byte] = {
       feed(s){
         loop {
           attempt {
-            val upper: Int = hexDigitValue(do next[Char]())
-            val lower: Int = hexDigitValue(do next[Char]())
-            do emit[Byte]((16 * upper + lower).toByte)
+            val upper: Int = hexDigitValue(do next())
+            val lower: Int = hexDigitValue(do next())
+            do emit((16 * upper + lower).toByte)
           } { () }
         }
       }
       resume(())
     }
-  with splice[Char] { c => do emit[Byte](c.toInt.toByte); resume(()) }
+  with splice[Char] { c => do emit(c.toInt.toByte); resume(()) }
   with splice[Byte] { b => do emit(b); resume(()) }
   with splice[Unit] { u => resume(()) }
   with splice[Int] { n => bytesBE(n); resume(()) }
@@ -296,7 +296,7 @@ def bit{ body: => Unit / { write, BitSplices } }: Unit / emit[Bit] = {
   with write { s =>
     feed(s){
       loop {
-        do next[Char]() match {
+        do next() match {
           case '0' => do emit(B0())
           case '1' => do emit(B1())
           case _ => ()

@@ -64,7 +64,7 @@ def insert[A](dictionary: Dictionary[A], key: ByteArray, value: A): Unit = {
   // The four children of a `Branch4`, plus the rest of the key at `b`,
   // as a full 256-slot array.
   def densified(byte1: Byte, child1: Ref[Trie[A]], byte2: Byte, child2: Ref[Trie[A]], byte3: Byte, child3: Ref[Trie[A]], byte4: Byte, child4: Ref[Trie[A]], b: Byte, i: Int): Array[Trie[A]] = {
-    val children = array[Trie[A]](256, Empty())
+    val children = array(256, Empty())
     children.set(byte1.toInt, child1.get)
     children.set(byte2.toInt, child2.get)
     children.set(byte3.toInt, child3.get)
@@ -221,8 +221,8 @@ def lookup[A](dictionary: Dictionary[A], key: ByteArray): Option[A] = {
 
 /// Collect key-value pairs from a stream of Tagged elements into a fresh Dictionary.
 def collect[A] { stream: () => Unit / emit[Tagged[A]] }: Dictionary[A] = {
-  val dictionary = empty[A]()
-  for[Tagged[A]] { stream() } { case Tagged(bytes, value) =>
+  val dictionary = empty()
+  for { stream() } { case Tagged(bytes, value) =>
     dictionary.insert(bytes, value)
   }
   dictionary
