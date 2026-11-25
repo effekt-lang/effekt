@@ -155,7 +155,11 @@ object CanonicalOrdering extends Ordering[InterfaceType] {
  * Equal up to binder renaming: each written function type has its own type and capture parameters,
  * where `==` would compare them by identity.
  */
-def sameType(tpe1: InterfaceType, tpe2: InterfaceType): Boolean = SameType.equal(tpe1, tpe2)
+def sameType(tpe1: Type, tpe2: Type): Boolean = (tpe1, tpe2) match {
+  case (t1: ValueType, t2: ValueType) => SameType.equal(t1, t2)
+  case (t1: BlockType, t2: BlockType) => SameType.equal(t1, t2)
+  case _ => false
+}
 
 // the first of each group of types that are the same as per [[sameType]]
 def distinctTypes(tpes: List[InterfaceType]): List[InterfaceType] =
