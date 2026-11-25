@@ -26,4 +26,11 @@ def insideFunction(): String = try {
   resume(1)
 }
 
+// the result type written twice: the same type up to binder renaming (#727)
+// last in this file, since its error aborts Typer w/o recovery
+interface Bar { def bar(): Unit }
+effect thunkAsk(): => Unit / Bar at {}
+def thunk(): => Unit / Bar at {} = box { () => do bar() }
+def binders(): Int = try { do thunkAsk(); 1 } with thunkAsk { thunk() }
+
 def main() = ()
