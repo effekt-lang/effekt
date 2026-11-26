@@ -17,6 +17,8 @@ enum Outcome[+A, +R] {
 /**
  * From the innermost scope outwards, the first scope with an accepted or undecided candidate decides.
  * A scope's candidates are tried only when the search reaches it.
+ * `attempt` must leave no trace: every candidate is tried in the state the search started in, and what the winner
+ * changed is in its result, for the caller to commit.
  */
 def resolveOverloaded[A, R](scopes: Iterator[List[A]])(attempt: A => Either[Failure, R]): Outcome[A, R] = {
   @tailrec

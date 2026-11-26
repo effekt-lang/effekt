@@ -1334,6 +1334,7 @@ object Typer extends Phase[NameResolved, Typechecked] {
 
   /** Helps with `x.f(…)` when nothing named `f` exists: the closest names with a candidate that accepts the call */
   private def didYouMeanMethod(id: source.IdRef, scope: Option[scopes.Scope])(checkCandidate: TermSymbol => Result[ValueType])(using Context, Subdiagnostics): Unit = {
+    // some candidate could accept the call: ambiguous and undecided count too, not whether the call resolves
     def accepts(syms: Set[TermSymbol]): Boolean = resolveOverloaded(Iterator(syms.toList))(sym => tryCandidate(checkCandidate(sym))) match {
       case _: Outcome.Failed[?, ?] => false
       case _ => true
