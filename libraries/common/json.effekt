@@ -90,12 +90,12 @@ def encodeJson[R]{ body: => R / JsonBuilder }: R / emit[String] = {
 // --------------------------------------------------------------------------------
 
 
-def expectString(string: String): Unit / { Scan[Char], Exception[WrongFormat] } =
+def expectString(string: String): Unit / { Scan[Char], throw[WrongFormat] } =
   expect("Expected " ++ string) { readString(string) }
 
 
 /// Read and unescape a string in ""
-def readQuotedString(): Unit / { Scan[Char], emit[Char], Exception[WrongFormat] } = {
+def readQuotedString(): Unit / { Scan[Char], emit[Char], throw[WrongFormat] } = {
   with expect("Unexpected end of input while reading a string")
   skipWhitespace()
   expect("Expected \"") { must { readIf('"') } }
@@ -118,7 +118,7 @@ def readQuotedString(): Unit / { Scan[Char], emit[Char], Exception[WrongFormat] 
 }
 
 /// Decode a json string and do the appropriate calls to an implicitly bound JsonBuilder
-def decodeJson(): Unit / {Scan[Char], JsonBuilder, Exception[WrongFormat]} = {
+def decodeJson(): Unit / {Scan[Char], JsonBuilder, throw[WrongFormat]} = {
   skipWhitespace()
   if(optionally { must { do peek() } } is Some(c)) {
     c match {
@@ -134,7 +134,7 @@ def decodeJson(): Unit / {Scan[Char], JsonBuilder, Exception[WrongFormat]} = {
     }
   }
 }
-def decodeJsonObject(): Unit / {Scan[Char], JsonObjectBuilder, Exception[WrongFormat]} = {
+def decodeJsonObject(): Unit / {Scan[Char], JsonObjectBuilder, throw[WrongFormat]} = {
   var first = true
   expectString("{")
   with expect("Expected whitespace")
@@ -152,7 +152,7 @@ def decodeJsonObject(): Unit / {Scan[Char], JsonObjectBuilder, Exception[WrongFo
   }
   must { skip() }
 }
-def decodeJsonList(): Unit / {Scan[Char], JsonBuilder, Exception[WrongFormat]} = {
+def decodeJsonList(): Unit / {Scan[Char], JsonBuilder, throw[WrongFormat]} = {
   var first = true
   expectString("[")
   with expect("Expected whitespace")

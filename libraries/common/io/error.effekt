@@ -484,12 +484,13 @@ extern jsNode """
 }
 
 namespace internal {
-  def checkResult(result: Int): Int / Exception[IOError] =
+  def checkResult(result: Int): Int / throw[IOError] =
     if (result < 0) {
       val ioError = fromNumber(internal::errorNumber(result));
-      do raise(ioError, message(ioError))
+      do throw(ioError)
     } else {
       result
     }
 }
 
+def display(error: IOError): String = message(error)

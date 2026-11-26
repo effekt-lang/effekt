@@ -15,11 +15,11 @@ def main() = {
   // the next file opened usually gets the descriptor `file` had
   val other = openForWriting("/tmp/effekt_file_closed_2.txt")
 
-  def afterClose(what: String) { operation: => Unit / Exception[IOError] }: Unit = try {
+  def afterClose(what: String) { operation: => Unit / throw[IOError] }: Unit = try {
     operation()
     println(what ++ " after close succeeded")
-  } with Exception[IOError] {
-    def raise(e, msg) = println(what ++ " after close raised: " ++ msg)
+  } with throw[IOError] { e =>
+    println(what ++ " after close raised: " ++ message(e))
   }
 
   afterClose("write") { val _ = write(file, bytes, 0, 3, -1); () }

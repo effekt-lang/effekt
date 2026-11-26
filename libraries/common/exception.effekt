@@ -5,46 +5,39 @@ import effekt
 // Exceptions
 // ==========
 
-interface Exception[E] {
-  def raise(exception: E, msg: String): Nothing
-}
-
-def raise[A, E](exception: E, msg: String): A / Exception[E] =
-  do raise(exception, msg) match {}
+effect throw[E](notice: E): Nothing
 
 /**
- * Used as a type for `Exception` in functions which expect a non-empty
+ * Used as a type for `throw` in functions which expect a non-empty
  * container (e.g. option or list).
  */
 record MissingValue()
 
-def missingValue(): Nothing / Exception[MissingValue] =
-  do raise(MissingValue(), "Missing value.")
+def display(notice: MissingValue): String = "Missing value."
+
+def missingValue(): Nothing / throw[MissingValue] =
+  do throw(MissingValue())
 
 /**
- * Used as a type for `Exception` in functions where an index can be out of bounds.
+ * Used as a type for `throw` in functions where an index can be out of bounds.
  */
 record OutOfBounds()
 
-/**
- * Unexpected runtime exceptions that can be caught.
- */
-record RuntimeError()
-
-def raise[A](msg: String): A / Exception[RuntimeError] =
-  do raise(RuntimeError(), msg) match {}
+def display(notice: OutOfBounds): String = "Out of bounds."
 
 /**
- * Used as a type for `Exception` in functions which expect the input
+ * Used as a type for `throw` in functions which expect the input
  * to be formatted in a specific way.
  */
-record WrongFormat()
+record WrongFormat(message: String)
 
-def wrongFormat(): Nothing / Exception[WrongFormat] =
-  do raise(WrongFormat(), "Wrong format.")
+def display(notice: WrongFormat): String = notice.message
 
-def wrongFormat(msg: String): Nothing / Exception[WrongFormat] =
-  do raise(WrongFormat(), msg)
+def wrongFormat(): Nothing / throw[WrongFormat] =
+  do throw(WrongFormat("Wrong format."))
+
+def wrongFormat(msg: String): Nothing / throw[WrongFormat] =
+  do throw(WrongFormat(msg))
 
 
 // Exception Handlers
@@ -54,33 +47,33 @@ def wrongFormat(msg: String): Nothing / Exception[WrongFormat] =
 /**
  * Converts exceptions of (static) type E to an uncatchable panic that aborts the program
  */
-def panicOn[E, T] { prog: => T / Exception[E] }: T =
-  try { prog() } with Exception[E] { def raise(exception: E, msg: String) = panic(msg) }
+def panicOn[E, T] { program: => T / throw[E] } { ?display: E => String }: T =
+  try { program() } with throw[E] { notice => panic(display(notice)) }
 
 /**
  * Reports exceptions of (static) type E to the console
  */
-def report[E] { prog: => Unit / Exception[E] }: Unit =
-  try { prog() } with Exception[E] { def raise(exception: E, msg: String) = println(msg) }
+def report[E] { program: => Unit / throw[E] } { ?display: E => String }: Unit =
+  try { program() } with throw[E] { notice => println(display(notice)) }
 
 /**
  * Ignores exceptions of (static) type E
  */
-def ignore[E] { prog: => Unit / Exception[E] }: Unit =
-  try { prog() } with Exception[E] { def raise(exception: E, msg: String) = () }
+def ignore[E] { program: => Unit / throw[E] }: Unit =
+  try { program() } with throw[E] { notice => () }
 
 /**
  * Use the default value to handle the exception of type E
  */
-def default[E, T] { default: => T } { prog: => T / Exception[E] }: T =
-  try { prog() } with Exception[E] { def raise(exception: E, msg: String) = default() }
+def default[E, T] { default: => T } { program: => T / throw[E] }: T =
+  try { program() } with throw[E] { notice => default() }
 
 /**
  * Runs the finalizer and rethrows E
  */
-def finalize[E, T] { finalizer: => Unit } { prog: => T / Exception[E] }: T / Exception[E] =
-  try { val res = prog(); finalizer(); res } with Exception[E] {
-    def raise(exception: E, msg: String) = { finalizer(); do raise(exception, msg) }
+def finalize[E, T] { finalizer: => Unit } { program: => T / throw[E] }: T / throw[E] =
+  try { val result = program(); finalizer(); result } with throw[E] { notice =>
+    finalizer(); do throw(notice)
   }
 
 /**
@@ -92,17 +85,17 @@ def finalize[E, T] { finalizer: => Unit } { prog: => T / Exception[E] }: T / Exc
  */
 record on[E]()
 
-def ignore[E](proxy: on[E]) { prog: => Unit / Exception[E] }: Unit =
-  ignore {prog}
+def ignore[E](proxy: on[E]) { program: => Unit / throw[E] }: Unit =
+  ignore {program}
 
-def default[E, T](proxy: on[E]) { d: => T } { prog: => T / Exception[E] }: T =
-  default[E, T] {d} {prog}
+def default[E, T](proxy: on[E]) { default: => T } { program: => T / throw[E] }: T =
+  default[E, T] {default} {program}
 
-def panic[E, T](proxy: on[E]) { prog: => T / Exception[E] }: T =
-  panicOn {prog}
+def finalize[E, T](proxy: on[E]) { finalizer: => Unit } { program: => T / throw[E] }: T / throw[E] =
+  finalize {finalizer} {program}
 
-def report[E](proxy: on[E]) { prog: => Unit / Exception[E] }: Unit =
-  report {prog}
+def panic[E, T](proxy: on[E]) { program: => T / throw[E] } { ?display: E => String }: T =
+  panicOn[E, T] {program}
 
-def finalize[E, T](proxy: on[E]) { finalizer: => Unit } { prog: => T / Exception[E] }: T / Exception[E] =
-  finalize {finalizer} {prog}
+def report[E](proxy: on[E]) { program: => Unit / throw[E] } { ?display: E => String }: Unit =
+  report[E] {program}

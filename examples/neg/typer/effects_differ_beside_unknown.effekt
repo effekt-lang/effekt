@@ -1,17 +1,19 @@
 import exception
 
+record RuntimeError()
+
 effect emit[A](a: A): Unit
 
-def g[E](x: Int) { act: Int => Int / { Exception[E], emit[String] } }: Int / { Exception[E], emit[String] } = act(x)
+def g[E](x: Int) { act: Int => Int / { throw[E], emit[String] } }: Int / { throw[E], emit[String] } = act(x)
 
 // `emit[Int]` is not `emit[String]`, even though `E` is not known yet
-def outer { act: Int => Int / { Exception[RuntimeError], emit[Int] } }: Int / { Exception[RuntimeError], emit[Int] } = {
+def outer { act: Int => Int / { throw[RuntimeError], emit[Int] } }: Int / { throw[RuntimeError], emit[Int] } = {
   try { g(1) {act} } with emit[String] { def emit(s) = resume(()) }
 }
 
 def main() = {
   val r = try {
     try { outer { x => do emit(x); x } } with emit[Int] { def emit(a) = resume(()) }
-  } with Exception[RuntimeError] { def raise(e, msg) = 0 }
+  } with throw[RuntimeError] { e => 0 }
   println(r)
 }

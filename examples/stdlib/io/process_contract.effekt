@@ -14,8 +14,8 @@ def main() = {
   try {
     val _ = spawn("effekt-no-such-command", [].fromList, default())
     println("starting a missing command succeeded")
-  } with Exception[IOError] {
-    def raise(e, msg) = println("starting a missing command raised: " ++ msg)
+  } with throw[IOError] { e =>
+    println("starting a missing command raised: " ++ message(e))
   }
 
   // a non-zero exit code is the result of the process, not an error

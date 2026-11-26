@@ -26,13 +26,13 @@ def nextBE(): Int / { next[Byte], fail } = must {
 }
 
 /// Write a 4-byte big-endian int
-def writeInt(connection: Connection, n: Int): Unit / Exception[IOError] = {
+def writeInt(connection: Connection, n: Int): Unit / throw[IOError] = {
   val buffer = bytearray::collect { emitBE(n) }
   val _ = write(connection, buffer, 0, 4)
 }
 
 /// Read exactly 4 bytes and decode into a big-endian int
-def nextInt(connection: Connection): Int / Exception[IOError] = {
+def nextInt(connection: Connection): Int / throw[IOError] = {
   val buffer = bytearray::allocate(4)
   var offset = 0
   while (offset < 4) {

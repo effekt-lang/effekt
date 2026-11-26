@@ -72,14 +72,14 @@ def minstd(seed: Int) { randomnessReader: () => Unit / random }: Unit = {
 
 /// CSPRNG from `/dev/urandom`, handling a reader of random bytes.
 /// Only works on Unix-like OSes!
-def devurandom { randomnessReader: () => Unit / random }: Unit / Exception[IOError] =
+def devurandom { randomnessReader: () => Unit / random }: Unit / throw[IOError] =
   try {
     with readFile("/dev/urandom")
     try randomnessReader() with random {
       resume(do next())
     }
   } with stop {
-    do raise(io::error::EOF(), "Unexpected EOF when reading /dev/urandom!")
+    do throw(io::error::EOF())
   }
 
 // ------------------------

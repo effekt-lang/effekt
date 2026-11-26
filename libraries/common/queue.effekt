@@ -38,7 +38,7 @@ def emptyQueue[T](initialCapacity: Int): Queue[T] at global = {
     value
   }
 
-  def nonEmpty[T] { p: => Option[T] / Exception[OutOfBounds] }: Option[T] =
+  def nonEmpty[T] { p: => Option[T] / throw[OutOfBounds] }: Option[T] =
     if (size.get <= 0) None() else on[OutOfBounds].default { None() } { p() }
 
   // Exponential back-off

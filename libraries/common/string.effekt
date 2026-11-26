@@ -293,9 +293,9 @@ extern def compareStringBytes(left: String, right: String) at {}: Ordering =
   llvm { fromInt(internal::compareBytes(left, right)) }
   default { internal::compareCodePoints(left, right) }
 
-def charAt(str: String, index: Int): Char / Exception[OutOfBounds] =
+def charAt(str: String, index: Int): Char / throw[OutOfBounds] =
   if (index < 0 || index >= length(str))
-    do raise(OutOfBounds(), "Index out of bounds: " ++ show(index) ++ " in string: '" ++ str ++ "'")
+    do throw(OutOfBounds())
   else
     unsafeCharAt(str, index)
 

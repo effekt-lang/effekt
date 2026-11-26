@@ -23,7 +23,7 @@ extern type Connection =
 /// Panics unless:
 /// - `size` is positive (a read of nothing would look like end of file), and
 /// - `[offset, offset + size)` is a valid range inside `buffer` (like `bytearray::copy`).
-def read(handle: Connection, buffer: ByteArray, offset: Int, size: Int): Int / Exception[IOError] = {
+def read(handle: Connection, buffer: ByteArray, offset: Int, size: Int): Int / throw[IOError] = {
   if (size <= 0) { panic("io/network::read: size must be positive") }
   if (buffer.inBounds(offset, size)) {
     internal::checkResult(internal::read(handle, buffer, offset, size))
@@ -37,7 +37,7 @@ def read(handle: Connection, buffer: ByteArray, offset: Int, size: Int): Int / E
 /// Returns once all bytes are written, and returns `size`.
 /// Raises `EBADF` if the connection is closed.
 /// Panics unless `[offset, offset + size)` is a valid range inside `buffer` (like `bytearray::copy`).
-def write(handle: Connection, buffer: ByteArray, offset: Int, size: Int): Int / Exception[IOError] = {
+def write(handle: Connection, buffer: ByteArray, offset: Int, size: Int): Int / throw[IOError] = {
   if (buffer.inBounds(offset, size)) {
     internal::checkResult(internal::write(handle, buffer, offset, size))
   } else {
@@ -57,7 +57,7 @@ extern def toString(address: Address) at {}: String =
 
 /// Resolves the given `host`, a name or an IPv4 or IPv6 address, to its addresses, in the order which the system prefers.
 /// Raises the error of the resolver, such as `EAI_NONAME`, if it has none.
-def resolve(host: String): List[Address] / Exception[IOError] = {
+def resolve(host: String): List[Address] / throw[IOError] = {
   val resolution = internal::checkResult(internal::resolve(host))
   val addresses = list::collect { internal::addresses(resolution) }
   internal::release(resolution)
@@ -65,12 +65,12 @@ def resolve(host: String): List[Address] / Exception[IOError] = {
 }
 
 /// Establishes a TCP connection to the given `address` and port.
-def connect(address: Address, port: Int): Connection / Exception[IOError] =
+def connect(address: Address, port: Int): Connection / throw[IOError] =
   internal::connection(internal::checkResult(internal::connect(address, port)))
 
 /// Establishes a TCP connection to the given `host` and port,
 /// trying the addresses of the host in turn until one accepts (o/w raising the error of the last one).
-def connect(host: String, port: Int): Connection / Exception[IOError] =
+def connect(host: String, port: Int): Connection / throw[IOError] =
   internal::eachAddress(resolve(host)) { address => connect(address, port) }
 
 /// Closes a TCP connection and releases associated resources.
@@ -85,22 +85,22 @@ extern type Listener =
 
 /// Creates a TCP listener bound to the given `address` and port, reserving it (o/w raising `EADDRINUSE`).
 /// Port 0 asks the system for a free port, which `port` then returns.
-def bind(address: Address, port: Int): Listener / Exception[IOError] =
+def bind(address: Address, port: Int): Listener / throw[IOError] =
   internal::listener(internal::checkResult(internal::bind(address, port)))
 
 /// Creates a TCP listener bound to the given `host` and port,
 /// trying the addresses of the host in turn until one can be bound (o/w raising the error of the last one).
-def bind(host: String, port: Int): Listener / Exception[IOError] =
+def bind(host: String, port: Int): Listener / throw[IOError] =
   internal::eachAddress(resolve(host)) { address => bind(address, port) }
 
 /// The port which the given `listener` is bound to.
 /// Raises `EBADF` if the listener was shut down.
-def port(listener: Listener): Int / Exception[IOError] =
+def port(listener: Listener): Int / throw[IOError] =
   internal::checkResult(internal::port(listener))
 
 /// Starts listening for incoming connections and handles each with the given `handler`, including those which arrived since `bind`.
 /// Returns only once `shutdown` is called on this `Listener`, so it is usually run with `spawn`.
-def listen(listener: Listener, handler: Connection => Unit at {io, async, global}): Unit / Exception[IOError] = {
+def listen(listener: Listener, handler: Connection => Unit at {io, async, global}): Unit / throw[IOError] = {
   internal::checkResult(internal::listen(listener, handler)); ()
 }
 
@@ -111,7 +111,7 @@ def shutdown(listener: Listener): Unit =
 /// Runs `program` with `emit` writing to the connection and `next` reading from it.
 /// `next` returns the bytes read so far (at most 4096) and performs `stop` at end of file,
 /// so a loop over `next` ends when the peer closes the connection.
-def streaming[R](connection: Connection) { program: () => R / {next[ByteArray], emit[ByteArray]} }: R / Exception[IOError] =
+def streaming[R](connection: Connection) { program: () => R / {next[ByteArray], emit[ByteArray]} }: R / throw[IOError] =
   try {
     program()
   } with emit[ByteArray] { bytes =>
@@ -136,7 +136,7 @@ namespace internal {
 
   /// Runs `attempt` on each of the `addresses` of a host in turn until one succeeds,
   /// and otherwise raises the error of the last attempt.
-  def eachAddress[R](addresses: List[Address]) { attempt: Address => R / Exception[IOError] }: R / Exception[IOError] = {
+  def eachAddress[R](addresses: List[Address]) { attempt: Address => R / throw[IOError] }: R / throw[IOError] = {
     val Cons(first, rest) = addresses else panic("io/network: `resolve` returned no addresses")
     firstSuccess(first, rest) {attempt}
   }

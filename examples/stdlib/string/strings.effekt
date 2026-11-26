@@ -4,7 +4,7 @@ def main() = {
   val str = "hello world"
   val c = 'a'
 
-  def charOrOutOfBounds { p: => Char / Exception[OutOfBounds] }: Unit = {
+  def charOrOutOfBounds { p: => Char / throw[OutOfBounds] }: Unit = {
     with on[OutOfBounds].default { println("<OutOfBounds>") }
     println(p().show)
   }

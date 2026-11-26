@@ -60,16 +60,16 @@ def assertEqual[A](obtained: A, expected: A, ?sourcePosition: SourcePosition) { 
   // NOTE:                              ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
   //             Here's an accidental capture! Can we prevent this somehow nicely?
 
-def assertNotThrown[E](ex: on[E], ?sourcePosition: SourcePosition) { body: => Unit / Exception[E] }: Unit / Assertion =
+def assertNotThrown[E](ex: on[E], ?sourcePosition: SourcePosition) { body: => Unit / throw[E] }: Unit / Assertion =
   ex.default { do assert(false, "Unexpected Exception", sourcePosition) } {body}
 
-def assertNoThrow[E](?sourcePosition: SourcePosition) { body: => Unit / Exception[E] }: Unit / Assertion =
+def assertNoThrow[E](?sourcePosition: SourcePosition) { body: => Unit / throw[E] }: Unit / Assertion =
   on[E].default{ do assert(false, "Unexpected Exception", sourcePosition) } {body}
 
-def assertThrown[E](ex: on[E], ?sourcePosition: SourcePosition) { body: => Unit / Exception[E] }: Unit / Assertion =
+def assertThrown[E](ex: on[E], ?sourcePosition: SourcePosition) { body: => Unit / throw[E] }: Unit / Assertion =
   do assert(ex.default { true } { body(); false }, "Expected Exception, but exited normally", sourcePosition)
 
-def assertThrows[E](?sourcePosition: SourcePosition) { body: => Unit / Exception[E] }: Unit / Assertion =
+def assertThrows[E](?sourcePosition: SourcePosition) { body: => Unit / throw[E] }: Unit / Assertion =
   do assert(on[E].default { true } { body(); false }, "Expected Exception, but exited normally", sourcePosition)
 
 def assertFail(?sourcePosition: SourcePosition) { body: => Unit / fail }: Unit / Assertion =
