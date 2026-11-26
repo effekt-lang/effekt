@@ -11,7 +11,6 @@ import effekt.symbols.*
 import effekt.symbols.builtins.*
 import effekt.symbols.kinds.*
 import effekt.util.messages.*
-import effekt.util.foreachAborting
 import effekt.context.Try
 
 import scala.language.implicitConversions
@@ -1170,10 +1169,8 @@ object Typer extends Phase[NameResolved, Typechecked] {
     def checkCandidate(expected: Option[Expectation])(sym: TermSymbol) =
       checkReceiverCallTo(call, receiver, sym, targs, vargs, bargs, expected, iscope)
 
-    val results = scopes map { scope => tryEach(inReportedOrder(scope))(checkCandidate(expected)) }
-
     // without the expected type: the suggestion must not depend on an enclosing choice
-    resolveOverload(id, results, explainMissingMethod(id, iscope)(checkCandidate(None)))
+    resolveOverloadedCall(id, scopes, explainMissingMethod(id, iscope)(checkCandidate(None)))(checkCandidate(expected))
   }
 
   def checkReceiverCallTo(
@@ -1287,11 +1284,9 @@ object Typer extends Phase[NameResolved, Typechecked] {
     // - If there are multiple possible candidates -> Ambiguity Error
     // - If there is none: proceed to outer scope
     // - If there is exactly one match, fully typecheck the call with this.
-    val results = scopes map { scope => tryEach(inReportedOrder(scope)) { receiver =>
+    resolveOverloadedCall(id, scopes) { receiver =>
       checkCallToCandidate(call, receiver, targs, vargs, bargs, expected, iscope)
-    }}
-
-    resolveOverload(id, results)
+    }
   }
 
   def checkCallToCandidate(
@@ -1339,7 +1334,10 @@ object Typer extends Phase[NameResolved, Typechecked] {
 
   /** Helps with `x.f(…)` when nothing named `f` exists: the closest names with a candidate that accepts the call */
   private def didYouMeanMethod(id: source.IdRef, scope: Option[scopes.Scope])(checkCandidate: TermSymbol => Result[ValueType])(using Context, Subdiagnostics): Unit = {
-    def accepts(syms: Set[TermSymbol]): Boolean = tryEach(syms.toList)(checkCandidate)._1.nonEmpty
+    def accepts(syms: Set[TermSymbol]): Boolean = resolveOverloaded(Iterator(syms.toList))(sym => tryCandidate(checkCandidate(sym))) match {
+      case _: Outcome.Failed[?, ?] => false
+      case _ => true
+    }
 
     val candidates = scope.toList.flatMap { s => scopes.visibleTerms(Nil, s) }
     val closest = effekt.util.CloseMatches(id.name, candidates) { case (name, _) => name }.filter { case (_, syms) => accepts(syms) }.closest
@@ -1352,58 +1350,40 @@ object Typer extends Phase[NameResolved, Typechecked] {
     case b: BlockSymbol => findFunctionTypeFor(b)._1
   }
 
-  private def resolveOverload(
+  private def resolveOverloadedCall(
     id: source.IdRef,
-    scopes: List[(List[(TermSymbol, Result[ValueType], TyperState)], List[(TermSymbol, Failure)])],
+    scopes: List[Set[? <: TermSymbol]],
     explainMissing: Subdiagnostics ?=> Unit = () // explain a call when no candidate found
-  )(using Context): Result[ValueType] = {
+  )(check: TermSymbol => Result[ValueType])(using Context): Result[ValueType] = {
 
     def candidate(sym: TermSymbol, failure: Option[Failure]) =
       Candidate(sym, candidateType(sym), failure, Context.definitionTreeOption(sym))
 
-    scopes foreachAborting { (successes, failures) =>
+    resolveOverloaded(scopes.iterator.map(inReportedOrder))(sym => tryCandidate(check(sym))) match {
+      case Outcome.Resolved(sym, (tpe, st)) =>
+        // use the typer state after this checking pass
+        Context.restoreTyperstate(st)
+        // reassign symbol of fun to resolved calltarget symbol
+        Context.annotateSymbol(id, sym)
+        tpe
+
+      case Outcome.Ambiguous(fits) =>
+        Context.abort(Context.diagnostic(OverloadResolution(fits.map { sym => candidate(sym, None) }), Severity.Error, Context.spanOf(id)))
+
       // A candidate whose implicit search was cut off could have worked, so it competes with the successes of its scope
-      val undecided = failures.filter { case (_, failure) => failure.isInstanceOf[Failure.Undecided] }
+      case Outcome.Undecided(List((sym, Some(failure)))) => Context.abortWith(failure) // specializing for single failure
+      case Outcome.Undecided(competitors) => Context.abortWith(OverloadResolution(competitors.map(candidate)))
 
-      (successes, undecided) match {
-        // continue in outer scope
-        case (Nil, Nil) => ()
-
-        // Exactly one successful result in the current scope
-        case (List((sym, tpe, st)), Nil) =>
-          // use the typer state after this checking pass
-          Context.restoreTyperstate(st)
-          // reassign symbol of fun to resolved calltarget symbol
-          Context.annotateSymbol(id, sym)
-
-          return tpe
-
-        // Ambiguous reference
-        case (results, _) if results.size > 1 =>
-          val candidates = results.map { case (sym, res, st) => candidate(sym, None) }
-          Context.abort(Context.diagnostic(OverloadResolution(candidates), Severity.Error, Context.spanOf(id)))
-
-        // Cannot decide
-        case (results, _) =>
-          results.map { case (sym, res, st) => (sym, None) } ++ undecided.map { case (sym, failure) => (sym, Some(failure)) } match {
-            case List((sym, Some(failure))) => Context.abortWith(failure) // specializing for single failure
-            case competitors => Context.abortWith(OverloadResolution(competitors.map(candidate)))
-          }
-      }
-    }
-
-    scopes.flatMap { scope => scope._2 } match {
-      case Nil =>
+      case Outcome.Failed(Nil) =>
         Context.abort(pretty"Cannot typecheck call to ${id}. Does a function/method with that name exist?") { explainMissing }
 
       // exactly one error
-      case List((sym, failure)) =>
+      case Outcome.Failed(List((sym, failure))) =>
         Context.abortWith(failure)
 
-      case failed =>
+      case Outcome.Failed(failed) =>
         // reraise all and abort
-        val candidates = failed.map { case (block, failure) => candidate(block, Some(failure)) }
-        Context.abortWith(OverloadResolution(candidates))
+        Context.abortWith(OverloadResolution(failed.map { case (sym, failure) => candidate(sym, Some(failure)) }))
     }
   }
 
@@ -1660,21 +1640,16 @@ object Typer extends Phase[NameResolved, Typechecked] {
     Result(ret, effs ++ InferredEffects(capabilities))
   }
 
-  def tryEach[K, R](inputs: List[K])(f: K => R)(using Context): (List[(K, R, TyperState)], List[(K, Failure)]) = {
+  // the result of `f` and the typer state after it; the state before is restored either way
+  def tryCandidate[R](f: => R)(using Context): Either[Failure, (R, TyperState)] = {
     val stateBefore = Context.backupTyperstate()
-    val results = inputs.map {
-      case input =>
-        try { input ->
-          Try {
-            val result = f(input)
-            val state = Context.backupTyperstate()
-            (result, state)
-          }
-        } finally { Context.restoreTyperstate(stateBefore) }
-    }
-    val successes = results.collect { case (sym, Right((r, st))) => (sym, r, st) }
-    val errors = results.collect { case (sym, Left(r)) => (sym, r) }
-    (successes, errors)
+    try {
+      Try {
+        val result = f
+        val state = Context.backupTyperstate()
+        (result, state)
+      }
+    } finally { Context.restoreTyperstate(stateBefore) }
   }
 
   def iterativeDeepening[R](start: Int, max: Int)(f: Int => R)(shouldDeepen: util.messages.Diagnostic => Boolean)(using Context): R = {
