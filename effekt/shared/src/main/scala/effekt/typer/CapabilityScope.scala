@@ -3,57 +3,73 @@ package typer
 
 import effekt.context.Context
 import effekt.{ source, symbols }
-import effekt.util.messages.{Candidate, CapabilityResolution, ErrorMessageReifier, Failure, Piece, Subdiagnostics, note}
+import effekt.util.messages.{Candidate, CapabilityResolution, ErrorMessageReifier, Failure, INTERNAL_ERROR, Piece, Subdiagnostics, note}
 
 /**
  * Capabilities are found like overloads: from the lexically innermost scope outwards, the first scope with capabilities
  * of the effect's interface that fit wins, and exactly one may fit there.
+ *
+ * A capability's type may contain unknowns: an unannotated function's fresh capability has the request's type as far as it is known. 
+ * Trying a capability is undone ([[Context.tryCapability]]), so only committing solves unknowns:
+ * unifying with the capability that fits, or with the only one that does not, to report why.
+ * Type arguments must be known only where an interface occurs more than once in a set ([[assertConcreteEffect]]).
  */
 sealed trait CapabilityScope {
   def copy: CapabilityScope
   def parent: CapabilityScope
-  // `passed`: the capabilities of the interface in inner scopes that did not fit, with why
-  def capabilityFor(tpe: symbols.InterfaceType, passed: List[(symbols.BlockParam, Candidate)])(using C: Context): symbols.BlockParam
+  // the capabilities bound here
+  def bound: List[symbols.BlockParam]
+
+  // the scopes a lookup from here asks, innermost first
+  // an unannotated function's scope is the last one
+  private def reached: List[CapabilityScope] = this match {
+    case GlobalCapabilityScope => Nil
+    case s: BindAll => List(s)
+    case s: BindSome => s :: s.parent.reached
+  }
+
+  def capabilityFor(tpe: symbols.InterfaceType)(using C: Context): symbols.BlockParam = {
+    val scopes = reached
+    def ofInterface(s: CapabilityScope) =
+      s.bound.filter { c => C.capabilityType(c).typeConstructor == tpe.typeConstructor }.map { c => (s, c) }
+    def show(candidate: (CapabilityScope, symbols.BlockParam), failure: Option[Failure]) = candidate match {
+      case (scope, capability) => scope.candidate(capability, failure)
+    }
+
+    resolveOverloaded(scopes.iterator.map(ofInterface)) { case (_, c) => C.tryCapability(tpe, c).toLeft(()) } match {
+      case Outcome.Resolved((_, capability), _) => C.unifyCapability(tpe, capability); capability
+      case Outcome.Ambiguous(fits) => C.abortWith(CapabilityResolution(tpe, fits.map { c => show(c, None) }))
+      case Outcome.Undecided(_) => INTERNAL_ERROR("A capability is tried by one unification, which is never cut off.")
+      case Outcome.Failed(tried) => scopes.lastOption match {
+        case Some(s: BindAll) => s.fresh(tpe)
+        case last =>
+          // the effects a top-level definition declares are the context
+          val context: Subdiagnostics ?=> Unit = last match { case Some(s: BindSome) => s.declaration; case _ => () }
+          tried match {
+            case Nil => C.abort(pretty"Effect ${tpe} is not allowed in this context.")(context)
+            // the only one: unified with for real, so its mismatch is reported and checking goes on
+            case List(((_, capability), _)) => C.unifyCapability(tpe, capability); capability
+            case several => C.abortWith(CapabilityResolution(tpe, several.map { (c, failure) => show(c, Some(failure)) }))(context)
+          }
+      }
+    }
+  }
 
   // how a capability bound here is shown, and where
   protected def candidate(capability: symbols.BlockParam, failure: Option[Failure])(using C: Context): Candidate =
     Candidate(pretty"${C.capabilityType(capability)}", None, failure)
-
-  // among the capabilities bound here, the one for `tpe` that fits; if none fits, `orElse` the ones that did not, with a reason
-  protected def choose(bound: List[symbols.BlockParam], tpe: symbols.InterfaceType)(orElse: List[(symbols.BlockParam, Candidate)] => symbols.BlockParam)(using C: Context): symbols.BlockParam = {
-    val tried = bound.filter { c => C.capabilityType(c).typeConstructor == tpe.typeConstructor }.map { c => (c, C.tryCapability(tpe, c)) }
-    tried.collect { case (c, None) => c } match {
-      case List(capability) => C.unifyCapability(tpe, capability); capability
-      case Nil => orElse(tried.collect { case (c, Some(failure)) => (c, candidate(c, Some(failure))) })
-      case several => C.abortWith(CapabilityResolution(tpe, several.map { c => candidate(c, None) }))
-    }
-  }
-
-  // no capability for `tpe` fits anywhere
-  protected def notAllowed(tpe: symbols.InterfaceType, passed: List[(symbols.BlockParam, Candidate)])(context: Subdiagnostics ?=> Unit)(using C: Context): symbols.BlockParam = passed match {
-    case Nil => C.abort(pretty"Effect ${tpe} is not allowed in this context.")(context)
-    // the only one: why it does not fit
-    case List((capability, _)) => C.unifyCapability(tpe, capability); capability
-    case several => C.abortWith(CapabilityResolution(tpe, several.map(_._2)))(context)
-  }
 }
 case object GlobalCapabilityScope extends CapabilityScope {
   def copy: CapabilityScope = this
   def parent: CapabilityScope = sys error "No parent"
-  def capabilityFor(tpe: symbols.InterfaceType, passed: List[(symbols.BlockParam, Candidate)])(using C: Context): symbols.BlockParam =
-    notAllowed(tpe, passed)(())
+  def bound: List[symbols.BlockParam] = Nil
 }
 
 class BindSome(binder: source.Tree, capabilities: List[symbols.BlockParam], val parent: CapabilityScope) extends CapabilityScope {
   def copy: CapabilityScope = BindSome(binder, capabilities, parent.copy)
-  def capabilityFor(tpe: symbols.InterfaceType, passed: List[(symbols.BlockParam, Candidate)])(using C: Context): symbols.BlockParam =
-    choose(capabilities, tpe) { notFitting =>
-      // the effects a top-level definition declares are the context
-      if (parent == GlobalCapabilityScope) notAllowed(tpe, passed ++ notFitting)(declaration)
-      else parent.capabilityFor(tpe, passed ++ notFitting)
-    }
+  def bound: List[symbols.BlockParam] = capabilities
 
-  private def declaration(using C: Context, S: Subdiagnostics): Unit = binder match {
+  private[typer] def declaration(using C: Context, S: Subdiagnostics): Unit = binder match {
     case f: source.FunDef if C.isMain(f.symbol) =>
       note(pretty"${Piece.Code("main")} cannot have effects.", Some(f.id.span))
     case f: source.FunDef =>
@@ -82,11 +98,12 @@ class BindSome(binder: source.Tree, capabilities: List[symbols.BlockParam], val 
 // the requirements of a function without annotated effects: a capability that fits is reused, else a fresh one
 class BindAll(binder: source.Tree, var capabilities: List[symbols.BlockParam], val parent: CapabilityScope) extends CapabilityScope {
   def copy: CapabilityScope = BindAll(binder, capabilities, parent.copy)
-  def capabilityFor(tpe: symbols.InterfaceType, passed: List[(symbols.BlockParam, Candidate)])(using C: Context): symbols.BlockParam =
-    choose(capabilities, tpe) { _ =>
-      val fresh = C.freshCapabilityFor(tpe)
-      capabilities = capabilities :+ fresh
-      fresh
-    }
+  def bound: List[symbols.BlockParam] = capabilities
+
+  private[typer] def fresh(tpe: symbols.InterfaceType)(using C: Context): symbols.BlockParam = {
+    val capability = C.freshCapabilityFor(tpe)
+    capabilities = capabilities :+ capability
+    capability
+  }
   override def toString: String = s"BindAll(${binder.getClass.getSimpleName}, ${capabilities}, ${parent})"
 }

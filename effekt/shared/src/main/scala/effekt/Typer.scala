@@ -1929,10 +1929,10 @@ trait TyperOps extends ContextOps { self: Context =>
   }
 
   /**
-   * Has the potential side-effect of creating a fresh capability. Also see [[BindAll.capabilityFor()]]
+   * Has the potential side-effect of creating a fresh capability. Also see [[CapabilityScope.capabilityFor]]
    */
   private [typer] def capabilityFor(tpe: InterfaceType): symbols.BlockParam =
-    val cap = capabilityScope.capabilityFor(tpe, Nil)
+    val cap = capabilityScope.capabilityFor(tpe)
     annotations.update(Annotations.Captures, cap, CaptureSet(cap.capture))
     cap
 
