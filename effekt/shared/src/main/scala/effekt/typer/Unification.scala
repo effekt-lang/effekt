@@ -186,19 +186,18 @@ trait Unification extends TypeUnifier, TypeMerger, TypeInstantiator, ErrorReport
    */
   def instantiate(tpe: FunctionType, targs: List[ValueType], cargs: List[Captures]): (List[ValueType], List[BlockType], ValueType, List[InterfaceType]) = {
     val position = this.focus
-    val FunctionType(tparams, cparams, vparams, bparams, ret, eff) = substitution.substitute(tpe)
+    val f @ FunctionType(tparams, vparams, bparams, ret, eff) = substitution.substitute(tpe)
+    val cparams = f.cparams
 
     assert(targs.size == tparams.size,
       pp"Type argument and parameter size mismatch: ${targs.size} vs ${tparams.size} ($targs, $tparams)")
     assert(cargs.size == cparams.size,
       pp"Capture arguments and parameter size mismatch: ${cargs.size} vs ${cparams.size} ($cargs, $cparams)")
-    assert(cparams.size == (bparams.size + eff.size),
-      pp"Capture param count ${cparams.size} is not equal to bparam ${bparams.size} + controleffects ${eff.size}.\n  ${tpe}")
 
     given Instantiation = Instantiation((tparams zip targs).toMap, (cparams zip cargs).toMap)
 
     val substitutedVparams = vparams map instantiate
-    val substitutedBparams = bparams map instantiate
+    val substitutedBparams = bparams.map { b => instantiate(b.tpe) }
     val substitutedReturn = instantiate(ret)
 
     val substitutedEffects = instantiate(eff)
@@ -213,7 +212,8 @@ trait Unification extends TypeUnifier, TypeMerger, TypeInstantiator, ErrorReport
    */
   def instantiateFresh(tpe: FunctionType): (List[ValueType], List[Captures], (List[ValueType], List[BlockType], ValueType, List[InterfaceType])) = {
     val position = this.focus
-    val FunctionType(tparams, cparams, vparams, bparams, ret, eff) = substitution.substitute(tpe)
+    val f @ FunctionType(tparams, vparams, bparams, ret, eff) = substitution.substitute(tpe)
+    val cparams = f.cparams
 
     val typeRigids = tparams map { t => ValueTypeRef(freshTypeVar(t, position)) }
     val captRigids = cparams.map { param => freshCaptVar(CaptUnificationVar.VariableInstantiation(param, position)) }
@@ -358,15 +358,14 @@ trait TypeInstantiator { self: Unification =>
   }
 
   def instantiate(t: FunctionType)(using i: Instantiation): FunctionType = t match {
-    case FunctionType(tps, cps, vps, bps, ret, eff) =>
+    case f @ FunctionType(tps, vps, bps, ret, eff) =>
       // do not substitute with types parameters bound by this function!
-      given Instantiation = without(tps, cps)(using i)
+      given Instantiation = without(tps, f.cparams)(using i)
       FunctionType(
         tps,
-        cps,
         vps map instantiate,
-        bps map instantiate,
+        bps.map { b => Tracked(b.capture, instantiate(b.tpe)) },
         instantiate(ret),
-        Effects(instantiate(eff)))
+        eff.map { e => instantiate(e) })
   }
 }

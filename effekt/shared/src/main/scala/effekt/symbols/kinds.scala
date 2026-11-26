@@ -31,13 +31,10 @@ package object kinds {
   }
 
   def wellformed(b: FunctionType)(using C: Context): Unit = b match {
-    case FunctionType(tps, cps, vps, bps, res, effs) =>
+    case FunctionType(tps, vps, bps, res, effs) =>
       // TODO we could also check whether the same type variable shows up twice
-      if (cps.size != (bps.size + effs.size)) {
-        C.panic(s"Compiler invariant violated: different size of capture parameters and block parameters: ${b}")
-      }
       vps.foreach { tpe => wellformed(tpe) }
-      bps.foreach { tpe => wellformed(tpe) }
+      bps.foreach { b => wellformed(b.tpe) }
       wellformed(res)
       wellformed(effs)
   }

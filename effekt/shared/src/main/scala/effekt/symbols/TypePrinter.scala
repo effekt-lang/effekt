@@ -25,6 +25,7 @@ object TypePrinter extends ParenPrettyPrinter {
   def show(t: Capture): String = pretty(toDoc(t), 80).layout
   def show(t: Captures): String = pretty(toDoc(t), 80).layout
   def show(t: Effects): String = pretty(toDoc(t), 80).layout
+  def showEffects(t: List[InterfaceType]): String = pretty(toDoc(t), 80).layout
   def show(t: List[ValueType | TypeVar]): String = pretty(maybeTypeParams(t), 80).layout
 
   val show: PartialFunction[Any, String] = {
@@ -60,7 +61,7 @@ object TypePrinter extends ParenPrettyPrinter {
   }
 
   def toDoc(tpe: BlockType): Doc = tpe match {
-    case FunctionType(tparams, cparams, vparams, bparams, result, effects) =>
+    case FunctionType(tparams, vparams, bparams, result, effects) =>
       val tps = if (tparams.isEmpty) emptyDoc else typeParams(tparams)
       val ps: Doc = (vparams, bparams) match {
         case (Nil, Nil)       => "()"
@@ -68,7 +69,7 @@ object TypePrinter extends ParenPrettyPrinter {
         case (List(tpe), Nil) => if (tparams.isEmpty) toDoc(tpe) else parens(toDoc(tpe))
         case (_, _) =>
           val vps = if (vparams.isEmpty) emptyDoc else parens(hsep(vparams.map(toDoc), comma))
-          val bps = if (bparams.isEmpty) emptyDoc else hcat(bparams.map(toDoc).map(braces))
+          val bps = if (bparams.isEmpty) emptyDoc else hcat(bparams.map(b => toDoc(b.tpe)).map(braces))
           vps <> bps
       }
       val ret = result match {
@@ -95,9 +96,11 @@ object TypePrinter extends ParenPrettyPrinter {
     case ErrorValueType(name, tparams, _) => "?"
   }
 
-  def toDoc(eff: Effects): Doc =
-    if (eff.isEmpty) "{}" else
-    braces(space <> hsep(eff.effects.map(toDoc), comma) <> space)
+  def toDoc(eff: Effects): Doc = toDoc(eff.toList)
+
+  def toDoc(effs: List[InterfaceType]): Doc =
+    if (effs.isEmpty) "{}" else
+    braces(space <> hsep(effs.map(toDoc), comma) <> space)
 
   def toDoc(c: Captures): Doc = c match {
     case CaptureSet(captures)  => braces { hsep(captures.toList.map(toDoc), comma) }

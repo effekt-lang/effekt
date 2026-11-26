@@ -10,7 +10,7 @@ import effekt.util.messages.{ErrorMessageReifier, ErrorReporter, StructuredMessa
 case class Bindings(
   terms: Map[String, Set[TermSymbol]] = Map.empty,
   types: Map[String, TypeSymbol] = Map.empty,
-  captures: Map[String, Capture] = Map.empty,
+  captures: Map[String, Set[Capture]] = Map.empty,
   namespaces: Map[String, Bindings] = Map.empty
 ) {
 
@@ -27,8 +27,10 @@ case class Bindings(
           ns.setType(name, tpe)
       }
       val withCaptures = captures2.foldLeft(withTypes) {
-        case (ns, (name, capt)) =>
-          ns.setCapture(name, capt)
+        case (ns, (name, capts)) =>
+          capts.foldLeft(ns) { (ns2, capt) =>
+            ns2.addCapture(name, capt)
+          }
       }
       namespaces2.foldLeft(withCaptures) {
         case (ns, (name, otherNs)) =>
@@ -42,8 +44,8 @@ case class Bindings(
   def setType(name: String, sym: TypeSymbol): Bindings =
     copy(types = types.updated(name, sym))
 
-  def setCapture(name: String, capt: Capture): Bindings =
-    copy(captures = captures.updated(name, capt))
+  def addCapture(name: String, capt: Capture): Bindings =
+    copy(captures = captures.updated(name, captures.getOrElse(name, Set.empty) + capt))
 
   def updateNamespace(name: String, f: Bindings => Bindings): Bindings =
     copy(namespaces = namespaces.updated(name, f(namespaces.getOrElse(name, Bindings.empty))))
@@ -299,7 +301,12 @@ object scopes {
       first(path, scope) { _.types.get(name) }
 
     def lookupCapture(id: IdRef)(using E: ErrorReporter): Capture =
-      first(id.path, scope) { _.captures.get(id.name) } getOrElse E.abort(pp"Could not resolve capture ${id}")
+      first(id.path, scope) { 
+        _.captures.get(id.name).map { capts =>
+          if (capts.size > 1) E.abort(pp"Ambiguous reference to capture ${id}")
+          else capts.head
+        }
+      } getOrElse E.abort(pp"Could not resolve capture ${id}")
 
     def lookupOverloaded(id: IdRef, filter: TermSymbol => Boolean)(using ErrorReporter): List[Set[TermSymbol]] =
       all(id.path, scope) { _.terms.getOrElse(id.name, Set.empty).filter(filter) }
@@ -362,7 +369,7 @@ object scopes {
       scope = scope.withBindings(bindings.setType(name, sym))
 
     def define(name: String, capt: Capture)(using ErrorReporter): Unit =
-      scope = scope.withBindings(scope.bindings.setCapture(name, capt))
+      scope = scope.withBindings(scope.bindings.addCapture(name, capt))
 
     def exports: Bindings = scope.bindings
 

@@ -114,8 +114,8 @@ trait TypeUnifier {
 
   def unifyFunctionTypes(tpe1: FunctionType, tpe2: FunctionType, ctx: ErrorContext): Unit = (tpe1, tpe2) match {
     case (
-      f1 @ FunctionType(tparams1, cparams1, vparams1, bparams1, ret1, eff1),
-      f2 @ FunctionType(tparams2, cparams2, vparams2, bparams2, ret2, eff2)) =>
+      f1 @ FunctionType(tparams1, vparams1, bparams1, ret1, eff1),
+      f2 @ FunctionType(tparams2, vparams2, bparams2, ret2, eff2)) =>
 
       if (tparams1.size != tparams2.size)
         abort(pretty"Expected ${pluralized(tparams2.size, "type parameter")} but got ${tparams1.size}", ctx)
@@ -126,20 +126,19 @@ trait TypeUnifier {
       if (bparams1.size != bparams2.size)
         abort(pretty"Expected ${pluralized(bparams2.size, "block parameter")} but got ${bparams1.size}", ctx)
 
-      // with as many block parameters, the capture parameters differ in number only through the effects
-      if (cparams1.size != cparams2.size)
+      if (eff1.size != eff2.size)
         abort(pretty"Expected the effects ${eff2} but got ${eff1}", ErrorContext.FunctionEffects(ctx))
 
       val targs1 = tparams1.map(ValueTypeRef.apply)
 
-      val subst = Substitutions(tparams2 zip targs1, cparams2 zip cparams1.map(c => CaptureSet(c)))
+      val subst = Substitutions(tparams2 zip targs1, f2.cparams zip f1.cparams.map(c => CaptureSet(c)))
       val substVParams2 = vparams2 map subst.substitute
-      val substBParams2 = bparams2 map subst.substitute
+      val substBParams2 = bparams2.map { b => subst.substitute(b.tpe) }
       val substRet2 = subst.substitute(ret2)
       val substEffs2 = subst.substitute(eff2)
 
       (vparams1 zip substVParams2) foreach { case (t1, t2) => unifyValueTypes(t1, t2, ErrorContext.FunctionArgument(f1, f2, ctx)) }
-      (bparams1 zip substBParams2) foreach { case (t1, t2) => unifyBlockTypes(t1, t2, ErrorContext.FunctionArgument(f1, f2, ctx)) }
+      (bparams1.map(_.tpe) zip substBParams2) foreach { case (t1, t2) => unifyBlockTypes(t1, t2, ErrorContext.FunctionArgument(f1, f2, ctx)) }
 
       unifyValueTypes(ret1, substRet2, ErrorContext.FunctionReturn(ctx))
 
