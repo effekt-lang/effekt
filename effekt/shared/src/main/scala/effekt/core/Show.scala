@@ -245,8 +245,6 @@ object Show extends Phase[CoreTransformed, CoreTransformed] {
       val defn: Toplevel.Def = Toplevel.Def(showId, block)
       ctx.showDefns += (vt -> defn)
       defn
-    def generateShow(valueType: ValueType): Toplevel.Def =
-      generateDef(generateValAppRet(valueType))
 
     vt match {
       case Type.TString =>
@@ -255,22 +253,17 @@ object Show extends Phase[CoreTransformed, CoreTransformed] {
       case Type.TUnit =>
         val stmt = Stmt.Return(List(Expr.Literal("()", TString)))
         Some(generateDef(stmt))
-      case Type.TInt =>
-        Some(generateShow(Type.TInt))
-      case Type.TChar =>
-        Some(generateShow(Type.TChar))
-      case Type.TByte =>
-        Some(generateShow(Type.TByte))
-      case Type.TDouble =>
-        Some(generateShow(Type.TDouble))
       case Type.TBoolean =>
         val stmt = Stmt.If(paramValueVar, Stmt.Return(List(Expr.Literal("true", TString))), Stmt.Return(List(Expr.Literal("false", TString))))
         Some(generateDef(stmt))
-      case ValueType.Data(name, targs) =>
-        val data = dctx.datas.getOrElse(name, {
+      case ValueType.Data(name, targs) => dctx.datas.get(name) match {
+        case Some(data) => generateShowInstance(data, targs)
+        // an extern type (such as `Int`) is shown by its `showBuiltin`
+        case None if dctx.findExternDef(FUNCTION_BUILTIN_NAME, List(vt)).isDefined =>
+          Some(generateDef(generateValAppRet(vt)))
+        case None =>
           Context.abort(pretty"Extern type '${name}', does not have a manual show implementation")
-        })
-        generateShowInstance(data, targs)
+      }
       case ValueType.Var(name) =>
         val lookup = ctx.tparamLookup.getOrElse(name, {
           Context.abort(pretty"Too much type indirection over show, cannot lookup '${name}'")
