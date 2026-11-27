@@ -1,0 +1,39 @@
+import exception
+
+def firstAbove(limit: Int, numbers: List[Int]): Int / throw[MissingValue] = numbers match {
+  case Nil() => do throw(MissingValue())
+  case Cons(number, rest) => if (number > limit) number else firstAbove(limit, rest)
+}
+
+def main() = {
+  println(catch { firstAbove(2, [1, 2, 3]) } { notice => -1 })
+  println(catch { firstAbove(5, [1, 2, 3]) } { notice => -1 })
+
+  def firstNegative(numbers: List[Int]): Int = catch {
+    numbers.foreach { number => if (number < 0) { do throw(number) } }
+    0
+  }
+  println(firstNegative([1, -2, -3]))
+  println(firstNegative([1, 2, 3]))
+
+  def safeHead(list: List[Int]): Option[Int] = {
+    with landing { notice => None() }
+    Some(list.head)
+  }
+  println(safeHead([1, 2, 3]).show)
+  println(safeHead([]).show)
+
+  var total = 0
+  val steps = returning::loop { i =>
+    total = total + i
+    if (total > 20) { do throw(i) }
+  }
+  println(steps)
+
+  var counter = 0
+  val message = returning::loop {
+    counter = counter + 1
+    if (counter == 3) { do throw("done after " ++ counter.show) }
+  }
+  println(message)
+}

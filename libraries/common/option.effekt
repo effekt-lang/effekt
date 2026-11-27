@@ -36,18 +36,16 @@ def foreach[A](self: Option[A]) { f: A => Unit }: Unit = self match {
   case Some(v) => f(v)
 }
 
-def value[A](self: Option[A]): A / Exception[MissingValue] = self match {
-  case None() => do raise(MissingValue(), "Trying to get the value of an empty option") match {}
+def value[A](self: Option[A]): A / throw[MissingValue] = self match {
+  case None() => do throw(MissingValue())
   case Some(v) => v
 }
 
-def option[A] { p: => A / Exception[MissingValue] }: Option[A] =
-  try { Some(p()) }
-  with Exception[MissingValue] { def raise(_, _) = None() }
+def option[A] { program: => A / throw[MissingValue] }: Option[A] =
+  try { Some(program()) } with throw[MissingValue] { notice => None() }
 
-def option[A, E](proxy: on[E]) { p: => A / Exception[E] }: Option[A] =
-  try { Some(p()) }
-  with Exception[E] { def raise(_, _) = None() }
+def option[A, E](proxy: on[E]) { program: => A / throw[E] }: Option[A] =
+  try { Some(program()) } with throw[E] { notice => None() }
 
 // Interop with FFI
 // ---------------

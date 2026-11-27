@@ -1,15 +1,15 @@
-def ignore[E] { body: => Unit / Exception[E] }: Unit = try {
+def ignore[E] { body: => Unit / throw[E] }: Unit = try {
   body()
-} with Exception[E] {
-  def raise(e: E, msg: String) = ()
+} with throw[E] { e =>
+  ()
 }
-def default[E, T] { default: => T } { prog: => T / Exception[E] }: T =
-  try { prog() } with Exception[E] { def raise(exception: E, msg: String) = default() }
+def default[E, T] { default: => T } { prog: => T / throw[E] }: T =
+  try { prog() } with throw[E] { exception => default() }
 
 record WrongFormat()
 
 def main() = ignore[WrongFormat] {
-  default[WrongFormat, Int] { do raise(WrongFormat(), "haha") } {
+  default[WrongFormat, Int] { do throw(WrongFormat()) } {
     0
   };
   ()

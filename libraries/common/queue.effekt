@@ -32,20 +32,17 @@ def emptyQueue[T](initialCapacity: Int): Queue[T] at global = {
   val capacity = ref(initialCapacity)
 
   def remove(arr: Array[Option[T]], index: Int): Option[T] = {
-    with on[OutOfBounds].default { None() }
     val value = arr.get(index)
     arr.set(index, None())
     value
   }
 
-  def nonEmpty[T] { p: => Option[T] / Exception[OutOfBounds] }: Option[T] =
-    if (size.get <= 0) None() else on[OutOfBounds].default { None() } { p() }
+  def nonEmpty[T] { p: => Option[T] }: Option[T] =
+    if (size.get <= 0) None() else p()
 
   // Exponential back-off
   def resizeTo(requiredSize: Int): Unit =
     if (requiredSize <= capacity.get) () else {
-      with on[OutOfBounds].ignore // should not happen
-
       val oldSize = capacity.get
       val newSize = capacity.get * 2
       val oldContents = contents.get

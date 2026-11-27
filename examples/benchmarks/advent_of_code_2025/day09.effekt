@@ -31,11 +31,6 @@ def maximum { stream: () => Unit / emit[Int] }: Option[Int] = {
   return result
 }
 
-effect done[R](result: R): Unit
-
-def start[R] { program: () => R / done[R] }: R =
-  try { program() } with done[R] { result => result }
-
 type Line {
   Horizontal(place: Int, lower: Int, upper: Int)
   Vertical(place: Int, lower: Int, upper: Int)
@@ -72,29 +67,29 @@ def isInside(point: Point, polygon: Array[Point]): Bool = {
 }
 
 def isInside(rectangle: (Point, Point), polygon: Array[Point]): Bool = {
-  with start[Bool]
+  with catch
   val (p, q) = rectangle
   val min1 = min(p._1, q._1)
   val max1 = max(p._1, q._1)
   val min2 = min(p._2, q._2)
   val max2 = max(p._2, q._2)
 
-  if (not(isInside(Point(p._1, p._2), polygon))) { do done(false) }
-  if (not(isInside(Point(p._1, q._2), polygon))) { do done(false) }
-  if (not(isInside(Point(q._1, p._2), polygon))) { do done(false) }
-  if (not(isInside(Point(q._1, q._2), polygon))) { do done(false) }
+  if (not(isInside(Point(p._1, p._2), polygon))) { do throw(false) }
+  if (not(isInside(Point(p._1, q._2), polygon))) { do throw(false) }
+  if (not(isInside(Point(q._1, p._2), polygon))) { do throw(false) }
+  if (not(isInside(Point(q._1, q._2), polygon))) { do throw(false) }
 
   for { polygon.edges } {
     case Horizontal(place, lower, upper) =>
       if (min2 < place && place < max2) {
         if (not(max(lower, upper) <= min1 || min(lower, upper) >= max1)) {
-          do done(false)
+          do throw(false)
         }
       }
     case Vertical(place, lower, upper) =>
       if (min1 < place && place < max1) {
         if (not(max(lower, upper) <= min2 || min(lower, upper) >= max2)) {
-          do done(false)
+          do throw(false)
         }
       }
   }

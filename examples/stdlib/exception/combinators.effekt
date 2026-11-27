@@ -5,13 +5,15 @@ import result
 
 
 /// Used as a type for `Exception` purely for independent testing
-record TestException()
+record TestException(reason: String)
+
+def display(notice: TestException): String = notice.reason
 
 
 /// Returns the string if index > 0; otherwise raises a TestException.
-def generalOperation(str: String, index: Int): String / Exception[TestException] = {
+def generalOperation(str: String, index: Int): String / throw[TestException] = {
   if (index <= 0)
-    do raise(TestException(), "Error: Invalid index (" ++ show(index) ++ ")")
+    do throw(TestException("Error: Invalid index (" ++ show(index) ++ ")"))
   else
     str
 }
@@ -20,7 +22,7 @@ def main() = {
   val str: String = "hello"
 
   // Test for default handling of TestException
-  def defaultTestException { p: => String / Exception[TestException] }: Unit = {
+  def defaultTestException { p: => String / throw[TestException] }: Unit = {
     with on[TestException].default { println("Test: Default Handling") }
     println(p().show)
   }
@@ -29,7 +31,7 @@ def main() = {
   defaultTestException { str.generalOperation(1) } // hello
 
   // Test for ignoring TestException
-  def ignoreTestException { p: => String / Exception[TestException] }: Unit = {
+  def ignoreTestException { p: => String / throw[TestException] }: Unit = {
     with on[TestException].ignore();
     println(p().show) 
   }
@@ -38,7 +40,7 @@ def main() = {
   ignoreTestException { str.generalOperation(1) } // hello
 
   // Test for reporting TestException
-  def reportTestException { p: => String / Exception[TestException] }: Unit = {
+  def reportTestException { p: => String / throw[TestException] }: Unit = {
     with on[TestException].report();
     println(p().show) 
   }
@@ -48,22 +50,22 @@ def main() = {
   reportTestException { str.generalOperation(1) } // hello
 
   // Test for finalizing TestException
-  def finalizeTestException { p: => String / Exception[TestException] }: Unit = {
+  def finalizeTestException { p: => String / throw[TestException] }: Unit = {
     try {
       with on[TestException].finalize { println("Test: Finalizer") }
       println(p().show) 
-    } with Exception[TestException] { def raise(exception, msg) = () } 
+    } with throw[TestException] { exception => () }
   }
 
   finalizeTestException { str.generalOperation(0) } // Test: Finalizer
   finalizeTestException { str.generalOperation(1) } // Test: Finalizer hello
   
   // Test for "reifying" an Exception using Result
-  def resultTestException { p: => String / Exception[TestException] }: Unit = {
+  def resultTestException { p: => String / throw[TestException] }: Unit = {
     val res = result { p() }
     res match {
       case Success(msg) => println("Success: " ++ msg) 
-      case Error(exc, msg) => println(msg)
+      case Failure(exc) => println(exc.reason)
     }
   }
 

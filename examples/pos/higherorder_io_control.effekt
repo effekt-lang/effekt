@@ -1,3 +1,7 @@
+record RuntimeError(reason: String)
+
+def display(notice: RuntimeError): String = notice.reason
+
 def foo() = {
 
   [1, 2, 3].foreach { x =>
@@ -5,7 +9,7 @@ def foo() = {
   };
 
   [1, 2, 3].foreach { x =>
-    raise(x.show)
+    do throw(RuntimeError(x.show))
   };
 
 }

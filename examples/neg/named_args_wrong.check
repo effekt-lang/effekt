@@ -374,7 +374,7 @@
   4  |  |  |    println(length(y = 3.0, x = 4.0)) // ERROR named argument   examples/neg/named_args_wrong.effekt:4:11
      |  |  |            ^^^^^^^^^^^^^^^^^^^^^^^^ Wrong number of arguments to length: expected 1 value argument, but got 2 value arguments
 
- 63  * def println(o: Option[Int]): Unit = println(show(o))   /libraries/common/option.effekt:63:5
+ 61  * def println(o: Option[Int]): Unit = println(show(o))   /libraries/common/option.effekt:61:5
            ^^^^^^^
   4  |    println(length(y = 3.0, x = 4.0)) // ERROR named argument   examples/neg/named_args_wrong.effekt:4:11
      |            ^^^^^^^^^^^^^^^^^^^^^^^^ Cannot typecheck call.
@@ -396,7 +396,7 @@
   4  |  |  |    println(length(y = 3.0, x = 4.0)) // ERROR named argument   examples/neg/named_args_wrong.effekt:4:11
      |  |  |            ^^^^^^^^^^^^^^^^^^^^^^^^ Wrong number of arguments to length: expected 1 value argument, but got 2 value arguments
 
- 64  * def println(o: Option[Double]): Unit = println(show(o))   /libraries/common/option.effekt:64:5
+ 62  * def println(o: Option[Double]): Unit = println(show(o))   /libraries/common/option.effekt:62:5
            ^^^^^^^
   4  |    println(length(y = 3.0, x = 4.0)) // ERROR named argument   examples/neg/named_args_wrong.effekt:4:11
      |            ^^^^^^^^^^^^^^^^^^^^^^^^ Cannot typecheck call.
@@ -418,7 +418,7 @@
   4  |  |  |    println(length(y = 3.0, x = 4.0)) // ERROR named argument   examples/neg/named_args_wrong.effekt:4:11
      |  |  |            ^^^^^^^^^^^^^^^^^^^^^^^^ Wrong number of arguments to length: expected 1 value argument, but got 2 value arguments
 
- 65  * def println(o: Option[Bool]): Unit = println(show(o))   /libraries/common/option.effekt:65:5
+ 63  * def println(o: Option[Bool]): Unit = println(show(o))   /libraries/common/option.effekt:63:5
            ^^^^^^^
   4  |    println(length(y = 3.0, x = 4.0)) // ERROR named argument   examples/neg/named_args_wrong.effekt:4:11
      |            ^^^^^^^^^^^^^^^^^^^^^^^^ Cannot typecheck call.

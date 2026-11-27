@@ -15,8 +15,8 @@ def run(n: Int) = {
   val size = 4096
 
   on[IOError].result { mkdir(foldername) } match {
-    case Error(EEXIST(), msg) => ()
-    case Error(e, m) => do raise(e, m)
+    case Failure(EEXIST()) => ()
+    case Failure(e) => do throw(e)
     case Success(()) => ()
   }
 

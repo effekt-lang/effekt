@@ -22,11 +22,11 @@ import io/promise
 import io
 import io/error
 
-def readFile(path: String): String / Exception[IOError] =
+def readFile(path: String): String / throw[IOError] =
   if (internal::existsFile(path)) internal::readFile(path)
-  else do raise(ENOENT(), message(ENOENT()))
+  else do throw(ENOENT())
 
-def writeFile(path: String, contents: String): Unit / Exception[IOError] =
+def writeFile(path: String, contents: String): Unit / throw[IOError] =
   internal::writeFile(path, contents)
 
 namespace internal {

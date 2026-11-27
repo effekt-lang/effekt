@@ -24,7 +24,7 @@ interface Buffer[T] {
   def read(): Option[T]
 
   /// Write an element to the head of the buffer
-  def write(el: T): Unit / Exception[BufferOverflow]
+  def write(el: T): Unit / throw[BufferOverflow]
 }
 
 def emptyBuffer[T](capacity: Int): Buffer[T] at global = {

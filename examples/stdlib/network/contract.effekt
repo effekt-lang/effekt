@@ -9,7 +9,7 @@ import stream
 /// Runs the given `handler` on the first connection to a port chosen by the system,
 /// then shuts the listener down.
 /// Returns the port to connect to.
-def serveOnce(handler: Connection => Unit at {io, async, global}): Int / Exception[IOError] = {
+def serveOnce(handler: Connection => Unit at {io, async, global}): Int / throw[IOError] = {
   val listener = bind("127.0.0.1", 0)
   val serverPort = port(listener)
   val _ = spawn(box {
@@ -23,7 +23,7 @@ def serveOnce(handler: Connection => Unit at {io, async, global}): Int / Excepti
   serverPort
 }
 
-def send(connection: Connection, text: String): Int / Exception[IOError] = {
+def send(connection: Connection, text: String): Int / throw[IOError] = {
   val bytes = text.fromString
   write(connection, bytes, 0, bytes.size)
 }
@@ -96,8 +96,8 @@ def main() = {
   try {
     val _ = read(c6, bytearray::allocate(4), 0, 4);
     println("read after close succeeded")
-  } with Exception[IOError] {
-    def raise(e, msg) = println("read after close raised: " ++ msg)
+  } with throw[IOError] { e =>
+    println("read after close raised: " ++ message(e))
   }
 
   // a read which is still pending when the connection is closed returns 0, like if it were at end of file
@@ -123,8 +123,8 @@ def main() = {
   val c8 = connect("127.0.0.1", port8)
   def readOrError(): Int =
     try read(c8, bytearray::allocate(4), 0, 4)
-    with Exception[IOError] { 
-      def raise(e, msg) = e match {
+    with throw[IOError] { e =>
+      e match {
         case EALREADY() => -1
         case _ => -2
       }
@@ -141,8 +141,8 @@ def main() = {
   try {
     val _ = bind("127.0.0.1", port(bound));
     println("binding a bound address succeeded")
-  } with Exception[IOError] {
-    def raise(e, msg) = println("binding a bound address raised: " ++ msg)
+  } with throw[IOError] { e =>
+    println("binding a bound address raised: " ++ message(e))
   }
 
   // a connection which arrives before `listen` starts is handled once it does
@@ -168,8 +168,8 @@ def main() = {
   try { 
     val _ = connect("127.0.0.1", closedPort);
     println("connect to a closed port succeeded")
-  } with Exception[IOError] { 
-    def raise(e, msg) = println("connect to a closed port raised: " ++ msg)
+  } with throw[IOError] { e =>
+    println("connect to a closed port raised: " ++ message(e))
   }
 
   // an address resolves to itself
@@ -197,7 +197,7 @@ def main() = {
   try {
     val _ = connect("localhost", closedPort);
     println("connect to localhost on a closed port succeeded")
-  } with Exception[IOError] {
-    def raise(e, msg) = println("connect to localhost on a closed port raised: " ++ msg)
+  } with throw[IOError] { e =>
+    println("connect to localhost on a closed port raised: " ++ message(e))
   }
 }
