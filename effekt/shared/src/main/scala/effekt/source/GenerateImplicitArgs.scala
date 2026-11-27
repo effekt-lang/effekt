@@ -1,12 +1,11 @@
 package effekt
 package source
 
-import effekt.symbols.cparams
-import scala.util.DynamicVariable
+import effekt.symbols.{builtins, cparams, BlockSymbol, BlockType, Name, ValueSymbol, ValueType}
 
+import scala.util.DynamicVariable
 import effekt.util.messages.{ErrorMessageReifier, Failure, Piece, StructuredMessage}
 import effekt.context.Context
-import effekt.symbols.{BlockType, ValueType, builtins, Name}
 import effekt.context.Annotations
 import effekt.context.Try
 
@@ -20,7 +19,7 @@ object GenerateImplicitArgs {
     def kind: String
     def explanation: List[StructuredMessage] = Nil
   }
-  case class ImplicitBlockLiteral(name: String, callTarget: symbols.CallTarget) extends ImplicitStencil {
+  case class ImplicitBlockLiteral(name: String, callTarget: symbols.TermSymbol) extends ImplicitStencil {
     def kind = "block argument"
   }
   case class BoxedStencil(name: String, block: ImplicitStencil) extends ImplicitStencil {
@@ -196,11 +195,11 @@ object GenerateImplicitArgs {
         Try {
           val id = IdRef(Nil, p.name.name, span.synthesized)
           // like for `f(...)`: a value in the innermost scope shadows the blocks
-          val blocks = Context.resolveFunctionCalltarget(id, scope.lookupOverloaded(id, term => !term.isInstanceOf[Operation])) match {
-            case Left(_) => Nil
-            case Right(blocks) => blocks
+          val sym = Context.resolveFunctionCalltarget(id, scope.lookupOverloaded(id, term => !term.isInstanceOf[Operation])) match {
+            case Left(value) => value
+            case Right(blocks) => symbols.CallTarget(blocks, Some(scope.scope))
           }
-          ImplicitBlockLiteral(p.name.name, symbols.CallTarget(blocks, Some(scope.scope)))
+          ImplicitBlockLiteral(p.name.name, sym)
         } match {
           case Left(failure) => Error(ImplicitBlockLiteral(p.name.name, symbols.CallTarget(Nil, Some(scope.scope))), index, failure)
           case Right(r) => r
@@ -268,10 +267,14 @@ object GenerateImplicitArgs {
                   source.BlockParam(p, Some(source.BlockTypeTree(sym.tpe.get, span.synthesized)), false, span.synthesized): source.BlockParam,
                   source.Var(a, span.synthesized))
               }.unzip3
-              val target = source.IdTarget(source.IdRef(Nil, name, span.synthesized))
+              val target: source.IdTarget = source.IdTarget(source.IdRef(Nil, name, span.synthesized))
               Context.assignSymbol(target.id, sym)
+              val unboxedTarget: CallTarget = sym match {
+                case sym: (ValueSymbol | symbols.RefBinder) => ExprTarget(typer.UnboxInference.unboxCallee(target))
+                case _ => target
+              }
               source.BlockLiteral(ftparams, fvparams, fbparams,
-                source.Return(source.Call(target, ftargs, Many(fvargs, span.synthesized), Many(fbargs, span.synthesized),
+                source.Return(source.Call(unboxedTarget, ftargs, Many(fvargs, span.synthesized), Many(fbargs, span.synthesized),
                   span.synthesized), span.synthesized), span.synthesized)
 
         case (ImplicitVar(kind, name, Some(sym)), _) =>
