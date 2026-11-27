@@ -1,0 +1,10 @@
+import examples/pos/defaults/colors
+import examples/pos/defaults/fallback
+
+def main() = {
+  // defaults of the same name from two modules are selected by their module
+  val fromColors: String = colors::default::Color::describe(Red())
+  println(fromColors)
+  val fromFallback: String = fallback::default::Color::describe(Red())
+  println(fromFallback)
+}

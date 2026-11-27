@@ -1,0 +1,4 @@
+val default::x: Int = 1
+def default::x(): Int = 2
+
+def main() = println(x())

@@ -1,0 +1,4 @@
+1
+[warning] examples/pos/defaults/import_default.effekt:1:1: Module `default` is imported under `default`, which is reserved for default definitions. [namer]
+1  import examples/pos/defaults/default
+   ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^

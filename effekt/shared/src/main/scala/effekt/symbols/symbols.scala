@@ -47,6 +47,10 @@ case class Module(
   private var _exports: Bindings = scala.compiletime.uninitialized
   def exports: Bindings = _exports
 
+  // the definitions this module declares under `default::`, imported into the default layer of its importers
+  private var _defaults: Bindings = scala.compiletime.uninitialized
+  def defaults: Bindings = _defaults
+
   def terms = exports.terms
   def types = exports.types
   def captures = exports.captures
@@ -95,10 +99,12 @@ case class Module(
    */
   def exports(
     includes: List[Module],
-    exports: Bindings
+    exports: Bindings,
+    defaults: Bindings
   ): this.type = {
     _includes = includes
     _exports = exports
+    _defaults = defaults
     this
   }
 }

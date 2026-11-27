@@ -78,6 +78,11 @@ object Namer extends Phase[Parsed, NameResolved] {
     def importDependency(filePath: String) =
       val included = Context.moduleOf(filePath)
 
+      // the routes below bind `default::...` when the module's path starts with (or its name is) `default`
+      if (included.namespace.headOption.contains("default") || included.name.name == "default") {
+        Context.warning(pretty"Module `${included.name.name}` is imported under `default`, which is reserved for default definitions.")
+      }
+
       // Fully qualified:
       //   include "foo/bar/baz.effekt" as foo::bar::baz
       scope.importAs(included.exports, included.namespace)
@@ -89,6 +94,11 @@ object Namer extends Phase[Parsed, NameResolved] {
       // Open it:
       //   import baz::*
       scope.importAll(included.exports)
+
+      // its defaults, by the same three routes, but into the default layer
+      scope.importDefaultsAs(included.defaults, included.namespace)
+      scope.importDefaultsAs(included.defaults, List(included.name.name))
+      scope.importDefaultsAs(included.defaults, Nil)
       included
 
     // process the prelude (but don't if we are processing the prelude already)
@@ -114,7 +124,7 @@ object Namer extends Phase[Parsed, NameResolved] {
     // We only want to import each dependency once.
     val allIncludes = (processedPreludes ++ includes).distinct
 
-    Context.module.exports(allIncludes, scope.exports)
+    Context.module.exports(allIncludes, scope.exports, scope.ownDefaults)
     decl
   }
 
@@ -135,6 +145,9 @@ object Namer extends Phase[Parsed, NameResolved] {
 
     case source.NamespaceDef(id, definitions, doc, span) =>
       Context.requireToplevel("Namespace")
+      if (id.name == "default") {
+        Context.error(pretty"A namespace cannot be called `default`: declare a default as `def default::...`.")
+      }
       Context.namespace(id.name) {
         definitions.foreach(preresolve)
       }
@@ -1011,11 +1024,15 @@ trait NamerOps extends ContextOps { Context: Context =>
 
   private[namer] def define(id: Id, s: TermSymbol): Unit = {
     assignSymbol(id, s)
-    defineInPaths(id.path, scope.define(id.name, s))
+    if (id.path.headOption.contains("default")) scope.defineDefault(id.path, id.name, s)
+    else defineInPaths(id.path, scope.define(id.name, s))
   }
 
   private[namer] def define(id: Id, s: TypeSymbol): Unit = {
     assignSymbol(id, s)
+    if (id.name == "default" || id.path.headOption.contains("default")) {
+      error(pretty"`default` is reserved for default definitions, so a type cannot be called or declared under it.")
+    }
     defineInPaths(id.path, scope.define(id.name, s))
   }
 
@@ -1057,6 +1074,7 @@ trait NamerOps extends ContextOps { Context: Context =>
 
   private[namer] def importSelfAs(path: List[String]): Unit = {
     scope.importAs(scope.exports, path)
+    scope.importDefaultsAs(scope.ownDefaults, path)
   }
 
   /**

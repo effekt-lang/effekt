@@ -168,8 +168,9 @@ trait Intelligence {
 
   def allBindings(scope: Scope)(using C: Context): ScopeInfo =
     scope match {
-      case Scope.Global(imports, bindings) =>
-        val bindingsOut = allBindings(BindingOrigin.Imported, imports)
+      case Scope.Global(imports, defaults, bindings) =>
+        val bindingsOut = allBindings(BindingOrigin.Imported, defaults)
+          ++ allBindings(BindingOrigin.Imported, imports)
           ++ allBindings(BindingOrigin.Defined, bindings)
         ScopeInfo(None, ScopeKind.Global, bindingsOut, None)
       case Scope.Named(name, bindings, outer) =>
