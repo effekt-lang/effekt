@@ -1,0 +1,9 @@
+type Color { Red() }
+
+def show(c: Color): String = "red"
+def println(c: Color): Unit = println("a written println is preferred over the default")
+
+def main() = {
+  println(Red())
+  println(show(Red()))
+}

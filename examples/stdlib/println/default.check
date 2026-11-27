@@ -1,0 +1,8 @@
+red
+green
+Circle(2)
+Some(Circle(3))
+42
+Cons(1, Cons(2, Nil()))
+Array(true, false)
+a string is printed as it is

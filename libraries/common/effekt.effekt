@@ -55,6 +55,9 @@ extern def println(value: String): Unit =
     ret %Pos zeroinitializer ; Unit
   """
 
+/// Prints any value according to a matching `show` at the call site
+def default::println[A](value: A) { ?show: A => String }: Unit = println(show(value))
+
 extern jsNode """
 $effekt.readln = function readln$impl(callback) {
   const readline = require('node:readline').createInterface({
@@ -75,13 +78,6 @@ extern def readln() at async: String =
     musttail call tailcc void @return_Pos(%Stack %stack, %Pos %result) "no_callee_saved_registers"
     ret void
   """
-
-def println(value: Int): Unit = println(value.show)
-def println(value: Unit): Unit = println(value.show)
-def println(value: Double): Unit = println(value.show)
-def println(value: Bool): Unit = println(value.show)
-def println(value: Byte): Unit = println(value.show)
-def println(value: Char): Unit = println(value.show)
 
 extern def showBuiltin(value: Int) at {}: String =
   js "'' + ${value}"
@@ -222,8 +218,6 @@ extern def genericCompareImpl[R](x: R, y: R) at {}: Int =
 /// Only available on the JavaScript backend.
 def genericCompare[R](x: R, y: R): Ordering =
   genericCompareImpl(x, y).fromInt
-
-def println(o: Ordering): Unit = println(o.show)
 
 
 // Comparison ops

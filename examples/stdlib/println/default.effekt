@@ -1,0 +1,23 @@
+type Color { Red(); Green() }
+type Shape { Circle(radius: Int) }
+
+def show(c: Color): String = c match {
+  case Red() => "red"
+  case Green() => "green"
+}
+
+def main() = {
+  // a type with a written `show` is printed by it
+  println(Red())
+  Green().println
+
+  // a type without one is printed by the generated `show`
+  println(Circle(2))
+  println(Some(Circle(3)))
+
+  // the standard library's instances
+  println(42)
+  println([1, 2])
+  println(array::fromList([true, false]))
+  println("a string is printed as it is")
+}

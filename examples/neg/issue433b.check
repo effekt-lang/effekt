@@ -9,7 +9,7 @@
      |      ^^^^^^^^^^^^^^^^^^ Cannot typecheck call.
      |
      |  |  There are multiple overloads, which all fail to check:
-147  |  |  * extern def infixPlusPlus(s1: String, s2: String) at {}: String =   /libraries/common/effekt.effekt:147:12
+143  |  |  * extern def infixPlusPlus(s1: String, s2: String) at {}: String =   /libraries/common/effekt.effekt:143:12
      |  |               ^^^^^^^^^^^^^
   6  |  |  |      "type error" ++ 42   examples/neg/issue433b.effekt:6:5
      |  |  |      ^^^^^^^^^^^^^^^^^^ Expected Unit but got String.
@@ -37,7 +37,7 @@
      |      ^^^^^^^^^^^^^^^^^^ Cannot typecheck call.
      |
      |  |  There are multiple overloads, which all fail to check:
-147  |  |  * extern def infixPlusPlus(s1: String, s2: String) at {}: String =   /libraries/common/effekt.effekt:147:12
+143  |  |  * extern def infixPlusPlus(s1: String, s2: String) at {}: String =   /libraries/common/effekt.effekt:143:12
      |  |               ^^^^^^^^^^^^^
   6  |  |  |      "type error" ++ 42   examples/neg/issue433b.effekt:6:5
      |  |  |      ^^^^^^^^^^^^^^^^^^ Expected Unit but got String.

@@ -14,12 +14,12 @@
      |                   ^^^^^ Cannot typecheck call.
      |
      |  |  There are multiple overloads, which all fail to check:
-343  |  |  * extern def infixPlus(x: Int, y: Int) at {}: Int =   /libraries/common/effekt.effekt:343:12
+337  |  |  * extern def infixPlus(x: Int, y: Int) at {}: Int =   /libraries/common/effekt.effekt:337:12
      |  |               ^^^^^^^^^
   6  |  |  |      val s: Int = x + 1   examples/neg/issue433c.effekt:6:18
      |  |  |                   ^ Expected Int but got String.
      |  |
-406  |  |  * extern def infixPlus(x: Double, y: Double) at {}: Double =   /libraries/common/effekt.effekt:406:12
+400  |  |  * extern def infixPlus(x: Double, y: Double) at {}: Double =   /libraries/common/effekt.effekt:400:12
      |  |               ^^^^^^^^^
   6  |  |  |      val s: Int = x + 1   examples/neg/issue433c.effekt:6:18
      |  |  |                   ^^^^^ Expected Int but got Double.
