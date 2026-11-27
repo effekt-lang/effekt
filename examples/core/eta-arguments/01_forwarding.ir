@@ -1,0 +1,33 @@
+// A block literal that only forwards its parameters to a block variable is passed as that block.
+
+def inc(x: Int) = {
+  return x: Int
+}
+
+def apply(){f: (Int) => Int} = {
+  (f: (Int) => Int @ {f})(1)
+}
+
+def main() = {
+  (apply: (){f: (Int) => Int} => Int @ {})(){
+    (x: Int) => {
+      (inc: (Int) => Int @ {})(x: Int)
+    }
+  }
+}
+
+/// ETA_ARGUMENTS
+
+def inc(x: Int) = {
+  return x: Int
+}
+
+def apply(){f: (Int) => Int} = {
+  (f: (Int) => Int @ {f})(1)
+}
+
+def main() = {
+  (apply: (){f: (Int) => Int} => Int @ {})(){
+    (inc: (Int) => Int @ {})
+  }
+}

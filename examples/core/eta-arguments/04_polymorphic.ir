@@ -1,0 +1,33 @@
+// Type parameters are forwarded too.
+
+def id['A](x: 'A) = {
+  return x: 'A
+}
+
+def apply(){f: ['B]('B) => 'B} = {
+  (f: ['B]('B) => 'B @ {f})[Int](1)
+}
+
+def main() = {
+  (apply: (){f: ['B]('B) => 'B} => Int @ {})(){
+    ['C](x: 'C) => {
+      (id: ['A]('A) => 'A @ {})['C](x: 'C)
+    }
+  }
+}
+
+/// ETA_ARGUMENTS
+
+def id['A](x: 'A) = {
+  return x: 'A
+}
+
+def apply(){f: ['B]('B) => 'B} = {
+  (f: ['B]('B) => 'B @ {f})[Int](1)
+}
+
+def main() = {
+  (apply: (){f: ['B]('B) => 'B} => Int @ {})(){
+    (id: ['A]('A) => 'A @ {})
+  }
+}
