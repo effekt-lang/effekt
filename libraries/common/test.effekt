@@ -73,7 +73,7 @@ def assertThrows[E](?sourcePosition: SourcePosition) { body: => Unit / throw[E] 
   do assert(on[E].default { true } { body(); false }, "Expected Exception, but exited normally", sourcePosition)
 
 def assertFail(?sourcePosition: SourcePosition) { body: => Unit / fail }: Unit / Assertion =
-  do assert(succeeds {body}, "Expected 'fail', but exited normally", sourcePosition)
+  do assert(not(succeeds {body}), "Expected 'fail', but exited normally", sourcePosition)
 
 def assertNoFail(?sourcePosition: SourcePosition) { body: => Unit / fail }: Unit / Assertion =
   onFail { do assert(false, "Unexpected 'fail'", sourcePosition) } {body}
