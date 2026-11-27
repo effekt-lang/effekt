@@ -958,15 +958,6 @@ def isSortedBy[A](list: List[A]) { lessOrEqual: (A, A) => Bool }: Bool = {
 // Show Instances
 // --------------
 
-// TODO: Get rid of these after monomorphization is merged
-
-
-def println(l: List[Int]): Unit = println(show(l))
-def println(l: List[Double]): Unit = println(show(l))
-def println(l: List[Char]): Unit = println(show(l))
-def println(l: List[Bool]): Unit = println(show(l))
-def println(l: List[String]): Unit = println(show(l))
-
 // Streaming
 // ---------
 

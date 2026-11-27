@@ -3,7 +3,7 @@
                                                   ^^^^^^^
 
      There are multiple overloads, which all fail to check:
-147  * extern def infixPlusPlus(s1: String, s2: String) at {}: String =   /libraries/common/effekt.effekt:147:12
+143  * extern def infixPlusPlus(s1: String, s2: String) at {}: String =   /libraries/common/effekt.effekt:143:12
                   ^^^^^^^^^^^^^
   7  |    with eff: Eff[Int] { def op[C](x) = resume(x ++ "") }   examples/neg/issue373/existentials.effekt:7:46
      |                                               ^^^^^^^ Expected Int but got String.
