@@ -29,7 +29,7 @@ object Transformer extends Phase[Typechecked, CoreTransformed] {
 
   def transform(mod: Module, tree: source.ModuleDecl)(using Context): ModuleDecl = Context.using(mod) {
     val source.ModuleDecl(path, imports, defs, doc, span) = tree
-    val exports = transform(mod.exports)
+    val exports = transform(mod.exports) ++ transform(mod.defaults)
     val toplevelDeclarations = defs.flatMap(d => transformToplevel(d))
 
     val definitions = toplevelDeclarations.collect { case d: Toplevel => d }

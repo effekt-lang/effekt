@@ -55,6 +55,12 @@ case class Bindings(
 }
 
 object Bindings {
+  /** Applies `f` to the namespace at `path` within `ns` (creating it if needed) */
+  def within(ns: Bindings, path: List[String])(f: Bindings => Bindings): Bindings = path match {
+    case segment :: rest => ns.updateNamespace(segment, child => within(child, rest)(f))
+    case Nil => f(ns)
+  }
+
   val empty: Bindings = Bindings()
 }
 
@@ -63,8 +69,11 @@ object scopes {
   enum Scope {
     /**
      * The toplevel global scope ("project scope")
+     *
+     * Lookup goes through the module's own `bindings`, then its `imports`, then the `defaults`:
+     * the definitions declared under `default::`, of this module and of the imported ones
      */
-    case Global(imports: Bindings, bindings: Bindings)
+    case Global(imports: Bindings, defaults: Bindings, bindings: Bindings)
 
     /**
      * A scope introducing a new namespace
@@ -86,7 +95,7 @@ object scopes {
 
     def imports(using E: ErrorReporter): Bindings = this match {
       case s: Scope.Named => E.abort("Can only import at the top of a file or function definition.")
-      case s@Scope.Global(imports, bindings) => imports
+      case s@Scope.Global(imports, _, bindings) => imports
       case s@Scope.Local(_, imports, bindings, outer, _) => imports
     }
 
@@ -94,7 +103,7 @@ object scopes {
      * Return a new Scope with `newBindings`.
      */
     def withBindings(newBindings: Bindings): Scope = this match {
-      case g@Global(_, _) => g.copy(bindings = newBindings)
+      case g@Global(_, _, _) => g.copy(bindings = newBindings)
       case n@Named(_, _, _) =>
         // Changing the bindings in a namespace requires us to update the outer scope(s) to point to the new bindings as well.
         val updatedOuter = updateOuterScopes(n.outer, n.name, newBindings)
@@ -115,7 +124,7 @@ object scopes {
     private def updateOuterScopes(current: Scope, key: String, childBindings: Bindings): Scope = current match {
       case g: Global =>
         val updatedBindings = g.bindings.copy(namespaces = g.bindings.namespaces.updated(key, childBindings))
-        Global(g.imports, updatedBindings)
+        Global(g.imports, g.defaults, updatedBindings)
 
       case n: Named =>
         val updatedBindings = n.bindings.copy(namespaces = n.bindings.namespaces.updated(key, childBindings))
@@ -131,7 +140,7 @@ object scopes {
      * Return a new Scope with `newImports`.
      */
     def withImports(newImports: Bindings): Scope = this match {
-      case g@Global(_, _) => g.copy(imports = newImports)
+      case g@Global(_, _, _) => g.copy(imports = newImports)
       case n@Named(_, _, _) => throw new IllegalStateException("Cannot change imports in a named scope")
       case l@Local(_, _, _, _, _) => l.copy(imports = newImports)
     }
@@ -155,8 +164,8 @@ object scopes {
     }
 
     scope match {
-      case Scope.Global(imports, bindings) =>
-        qualified(path, bindings) ++ qualified(path, imports)
+      case Scope.Global(imports, defaults, bindings) =>
+        qualified(path, bindings) ++ qualified(path, imports) ++ qualified(path, defaults)
       case Scope.Named(name, bindings, outer) =>
         qualified(path, bindings) ++ all(path, outer)(select)
       case Scope.Local(_, imports, bindings, outer, _) =>
@@ -189,15 +198,27 @@ object scopes {
   }
 
   case class Scoping(modulePath: List[String], var scope: Scope) {
-    def importAs(bindings: Bindings, path: List[String])(using E: ErrorReporter): Unit = {
-      def go(ns: Bindings, path: List[String]): Bindings = path match {
-        case pathSeg :: rest =>
-          ns.updateNamespace(pathSeg, child => go(child, rest))
-        case Nil =>
-          ns.importAll(bindings)
-      }
 
-      scope = scope.withImports(go(scope.imports, path))
+    // the defaults this module declares (what it exports to the default layer of its importers)
+    var ownDefaults: Bindings = Bindings.empty
+
+    def importAs(bindings: Bindings, path: List[String])(using E: ErrorReporter): Unit =
+      scope = scope.withImports(Bindings.within(scope.imports, path)(_.importAll(bindings)))
+
+    /** Imports `defaults` under `path` into the default layer */
+    def importDefaultsAs(defaults: Bindings, path: List[String])(using E: ErrorReporter): Unit = scope match {
+      case g: Scope.Global => scope = g.copy(defaults = Bindings.within(g.defaults, path)(_.importAll(defaults)))
+      case _ => ()
+    }
+
+    /** Declares `sym` as a default, under every suffix of `path` (as `defineInPaths` does for other definitions) */
+    def defineDefault(path: List[String], name: String, sym: TermSymbol)(using E: ErrorReporter): Unit = scope match {
+      case g: Scope.Global =>
+        requireValueOrBlock(name, sym, g.defaults.terms.getOrElse(name, Set.empty))
+        def add(ns: Bindings) = path.tails.foldLeft(ns) { (ns, suffix) => Bindings.within(ns, suffix)(_.addTerm(name, sym)) }
+        scope = g.copy(defaults = add(g.defaults))
+        ownDefaults = add(ownDefaults)
+      case _ => E.abort(pp"A default must be declared at the top level of a module.")
     }
 
     // TODO check shadowing etc. Also here concrete functions will *always* shadow imports,
@@ -220,8 +241,8 @@ object scopes {
       }
 
       scope match {
-        case Scope.Global(imports, bindings) =>
-          qualified(path, bindings) orElse qualified(path, imports)
+        case Scope.Global(imports, defaults, bindings) =>
+          qualified(path, bindings) orElse qualified(path, imports) orElse qualified(path, defaults)
         case Scope.Named(name, bindings, outer) =>
           qualified(path, bindings) orElse first(path, outer)(select)
         case Scope.Local(_, imports, bindings, outer, _) =>
@@ -342,8 +363,12 @@ object scopes {
       all(path, scope) { _.terms.getOrElse(name, Set.empty) }.flatten.toSet
 
     def define(name: String, sym: TermSymbol)(using E: ErrorReporter): Unit = {
-      val bindings = scope.bindings
-      val termsInScope = currentTermsFor(name)
+      requireValueOrBlock(name, sym, currentTermsFor(name))
+      scope = scope.withBindings(scope.bindings.addTerm(name, sym))
+    }
+
+    // a value and a block of the same name cannot be bound together
+    private def requireValueOrBlock(name: String, sym: TermSymbol, termsInScope: Set[TermSymbol])(using E: ErrorReporter): Unit =
       sym match {
         case v: ValueSymbol =>
           if (termsInScope.exists(_.isInstanceOf[BlockSymbol])) {
@@ -354,8 +379,6 @@ object scopes {
             E.abort(s"Block ${name} has the same name as a value definition in the same scope, which is not allowed.")
           }
       }
-      scope = scope.withBindings(scope.bindings.addTerm(name, sym))
-    }
 
     def define(name: String, sym: TypeSymbol)(using E: ErrorReporter): Unit =
       val bindings = scope.bindings
@@ -395,7 +418,7 @@ object scopes {
     // returns the current path
     def path: Option[List[String]] =
       def collect(scope: Scope): Option[List[String]] = scope match {
-        case Scope.Global(imports, bindings) => Some(modulePath)
+        case Scope.Global(_, _, _) => Some(modulePath)
         case Scope.Named(name, bindings, outer) => collect(outer) match {
           case Some(path) => Some(path :+ name)
           // name spaces also START a new path, if there hasn't been one, already
@@ -408,5 +431,5 @@ object scopes {
 
   def toplevel(modulePath: List[String], prelude: Bindings): Scoping =
     val imports = Bindings.empty.importAll(prelude)
-    Scoping(modulePath, Scope.Global(imports, Bindings.empty))
+    Scoping(modulePath, Scope.Global(imports, Bindings.empty, Bindings.empty))
 }
