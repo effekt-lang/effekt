@@ -1,0 +1,57 @@
+// An effectful block forwards its capability as a block parameter: still only a forwarding.
+
+interface Tick {
+  tick: () => Unit
+}
+
+def visit(x: Int){tick: Tick} = {
+  (tick: Tick @ {tick}).tick: () => Unit()
+}
+
+def each(){f: (Int){tick: Tick} => Unit} = {
+  def t = new Tick {
+    def tick() = {
+      return ()
+    }
+  }
+  (f: (Int){tick: Tick} => Unit @ {f})(1){
+    (t: Tick @ {})
+  }
+}
+
+def main() = {
+  (each: (){f: (Int){tick: Tick} => Unit} => Unit @ {})(){
+    (x: Int){tick: Tick} => {
+      (visit: (Int){tick: Tick} => Unit @ {})(x: Int){
+        (tick: Tick @ {tick})
+      }
+    }
+  }
+}
+
+/// ETA_ARGUMENTS
+
+interface Tick {
+  tick: () => Unit
+}
+
+def visit(x: Int){tick: Tick} = {
+  (tick: Tick @ {tick}).tick: () => Unit()
+}
+
+def each(){f: (Int){tick: Tick} => Unit} = {
+  def t = new Tick {
+    def tick() = {
+      return ()
+    }
+  }
+  (f: (Int){tick: Tick} => Unit @ {f})(1){
+    (t: Tick @ {})
+  }
+}
+
+def main() = {
+  (each: (){f: (Int){tick: Tick} => Unit} => Unit @ {})(){
+    (visit: (Int){tick: Tick} => Unit @ {})
+  }
+}

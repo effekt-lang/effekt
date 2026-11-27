@@ -1,0 +1,33 @@
+// Block literals passed as arguments are eta reduced (forwarded)
+//   f(...){ [T](x){g} => h[T](x){g} }   ~>   f(...){h} 
+// if `h` is free in the literal
+
+def sub(a: Int, b: Int): Int = a - b
+def apply2 { f: (Int, Int) => Int }: Int = f(10, 3)
+def applyWith { f: (Int) { Int => Int } => Int }: Int = f(5) { x => x * 2 }
+
+// forwards: may become `{sub}`
+def forwarded(): Int = apply2 { (a, b) => sub(a, b) }
+
+// arguments swapped: not a forwarding
+def swapped(): Int = apply2 { (a, b) => sub(b, a) }
+
+// calls its own block parameter: not a forwarding to a variable outside it
+def ownParameter(): Int = applyWith { (n) { g } => g(n) }
+
+// an argument used twice: not a forwarding
+def duplicated(): Int = apply2 { (a, b) => sub(a, a) }
+
+// in a recursion, the forwarding block is passed on at every level
+def total(l: List[Int]) { weight: Int => Int }: Int = l match {
+  case Nil() => 0
+  case Cons(h, t) => weight(h) + total(t) { x => weight(x) }
+}
+
+def main() = {
+  println(forwarded())
+  println(swapped())
+  println(ownParameter())
+  println(duplicated())
+  println(total([1, 2, 3]) { x => x * x })
+}

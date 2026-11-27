@@ -1,0 +1,42 @@
+// A literal that calls its own block parameter does not forward to a block outside it: `g` is bound by the literal.
+// (This is technically ill-typed in source today)
+
+def apply(){f: (Int){g: (Int) => Int} => Int} = {
+  def k(x: Int) = {
+    return x: Int
+  }
+  (f: (Int){g: (Int) => Int} => Int @ {f})(1){
+    (k: (Int) => Int @ {})
+  }
+}
+
+def main() = {
+  (apply: (){f: (Int){g: (Int) => Int} => Int} => Int @ {})(){
+    (x: Int){g: (Int) => Int} => {
+      (g: (Int){g: (Int) => Int} => Int @ {g})(x: Int){
+        (g: (Int) => Int @ {g})
+      }
+    }
+  }
+}
+
+/// ETA_ARGUMENTS
+
+def apply(){f: (Int){g: (Int) => Int} => Int} = {
+  def k(x: Int) = {
+    return x: Int
+  }
+  (f: (Int){g: (Int) => Int} => Int @ {f})(1){
+    (k: (Int) => Int @ {})
+  }
+}
+
+def main() = {
+  (apply: (){f: (Int){g: (Int) => Int} => Int} => Int @ {})(){
+    (x: Int){g: (Int) => Int} => {
+      (g: (Int){g: (Int) => Int} => Int @ {g})(x: Int){
+        (g: (Int) => Int @ {g})
+      }
+    }
+  }
+}

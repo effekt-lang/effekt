@@ -1,0 +1,18 @@
+// A recursive call that passes its block parameter on through a literal (as an implicit block argument does) passes
+// the parameter itself, instead of wrapping it once more at every level.
+
+def total(n: Int){weight: (Int) => Int} = {
+  (total: (Int){weight: (Int) => Int} => Int @ {})(n: Int){
+    (x: Int) => {
+      (weight: (Int) => Int @ {weight})(x: Int)
+    }
+  }
+}
+
+/// ETA_ARGUMENTS
+
+def total(n: Int){weight: (Int) => Int} = {
+  (total: (Int){weight: (Int) => Int} => Int @ {})(n: Int){
+    (weight: (Int) => Int @ {weight})
+  }
+}

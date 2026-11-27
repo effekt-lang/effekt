@@ -1,0 +1,67 @@
+// Literals that do anything but forward their own parameters, in order, stay literals.
+
+def sub(a: Int, b: Int) = {
+  return a: Int
+}
+
+def apply(){f: (Int, Int) => Int} = {
+  (f: (Int, Int) => Int @ {f})(1, 2)
+}
+
+def main(g: (Int, Int) => Int at {}) = {
+  val swapped = (apply: (){f: (Int, Int) => Int} => Int @ {})(){
+    (a: Int, b: Int) => {
+      (sub: (Int, Int) => Int @ {})(b: Int, a: Int)
+    }
+  };
+  val duplicated = (apply: (){f: (Int, Int) => Int} => Int @ {})(){
+    (a: Int, b: Int) => {
+      (sub: (Int, Int) => Int @ {})(a: Int, a: Int)
+    }
+  };
+  val more = (apply: (){f: (Int, Int) => Int} => Int @ {})(){
+    (a: Int, b: Int) => {
+      val r = (sub: (Int, Int) => Int @ {})(a: Int, b: Int);
+      return r: Int
+    }
+  };
+  (apply: (){f: (Int, Int) => Int} => Int @ {})(){
+    (a: Int, b: Int) => {
+      (unbox g: (Int, Int) => Int at {})(a: Int, b: Int)
+    }
+  }
+}
+
+/// ETA_ARGUMENTS
+
+def sub(a: Int, b: Int) = {
+  return a: Int
+}
+
+def apply(){f: (Int, Int) => Int} = {
+  (f: (Int, Int) => Int @ {f})(1, 2)
+}
+
+def main(g: (Int, Int) => Int at {}) = {
+  val swapped = (apply: (){f: (Int, Int) => Int} => Int @ {})(){
+    (a: Int, b: Int) => {
+      (sub: (Int, Int) => Int @ {})(b: Int, a: Int)
+    }
+  };
+  val duplicated = (apply: (){f: (Int, Int) => Int} => Int @ {})(){
+    (a: Int, b: Int) => {
+      (sub: (Int, Int) => Int @ {})(a: Int, a: Int)
+    }
+  };
+  val more = (apply: (){f: (Int, Int) => Int} => Int @ {})(){
+    (a: Int, b: Int) => {
+      val r = (sub: (Int, Int) => Int @ {})(a: Int, b: Int);
+      return r: Int
+    }
+  };
+  (apply: (){f: (Int, Int) => Int} => Int @ {})(){
+    (a: Int, b: Int) => {
+      (unbox g: (Int, Int) => Int at {})(a: Int, b: Int)
+    }
+  }
+}

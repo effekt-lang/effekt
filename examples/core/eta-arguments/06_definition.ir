@@ -1,0 +1,26 @@
+// A forwarding literal bound by a definition stays: as `def f = g` it would no longer be a function, and a recursive
+// one (`def f = { x => f(x) }`) would become the alias `def f = f`.
+
+def inc(x: Int) = {
+  return x: Int
+}
+
+def main() = {
+  def f(x: Int) = {
+    (inc: (Int) => Int @ {})(x: Int)
+  }
+  (f: (Int) => Int @ {})(1)
+}
+
+/// ETA_ARGUMENTS
+
+def inc(x: Int) = {
+  return x: Int
+}
+
+def main() = {
+  def f(x: Int) = {
+    (inc: (Int) => Int @ {})(x: Int)
+  }
+  (f: (Int) => Int @ {})(1)
+}
