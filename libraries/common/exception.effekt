@@ -45,6 +45,28 @@ def wrongFormat(msg: String): Nothing / throw[WrongFormat] =
 
 
 /**
+ * Runs the program and, if it throws, continues with the handler instead
+ */
+def catch[E, R] { program: => R / throw[E] } { handler: E => R }: R =
+  try { program() } with throw[E] { notice => handler(notice) }
+
+/**
+ * Runs the program and, if it throws, returns the thrown value
+ */
+def catch[R] { program: => R / throw[R] }: R =
+  try { program() } with throw[R] { result => result }
+
+/**
+ * Like `catch`, but takes the handler first, for use with `with`:
+ *
+ * ```
+ * with landing { notice => None() }; ...
+ * ```
+ */
+def landing[E, R] { handler: E => R } { program: => R / throw[E] }: R =
+  try { program() } with throw[E] { notice => handler(notice) }
+
+/**
  * Converts exceptions of (static) type E to an uncatchable panic that aborts the program
  */
 def panicOn[E, T] { program: => T / throw[E] } { ?display: E => String }: T =
@@ -99,3 +121,21 @@ def panic[E, T](proxy: on[E]) { program: => T / throw[E] } { ?display: E => Stri
 
 def report[E](proxy: on[E]) { program: => Unit / throw[E] } { ?display: E => String }: Unit =
   report[E] {program}
+
+namespace returning {
+
+/// Repeat `action` until a result is thrown, and return it.
+def loop[R] { action: () => Unit / throw[R] }: R =
+  try {
+    def go(): R = { action(); go() }
+    go()
+  } with throw[R] { result => result }
+
+/// Repeat `action` until a result is thrown, and return it, supplying the iteration count.
+def loop[R] { action: Int => Unit / throw[R] }: R =
+  try {
+    def go(i: Int): R = { action(i); go(i + 1) }
+    go(0)
+  } with throw[R] { result => result }
+
+}
