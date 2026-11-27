@@ -1,0 +1,3 @@
+record default::Point(x: Int)
+
+def main() = ()

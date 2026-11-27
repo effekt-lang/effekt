@@ -1,0 +1,3 @@
+import examples/pos/defaults/default
+
+def main() = println(helper())

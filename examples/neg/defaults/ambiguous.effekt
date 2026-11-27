@@ -1,0 +1,7 @@
+import examples/pos/defaults/colors
+import examples/pos/defaults/fallback
+
+def main() = {
+  val s: String = default::Color::describe(Red())
+  println(s)
+}

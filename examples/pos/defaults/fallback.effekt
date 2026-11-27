@@ -1,0 +1,7 @@
+module examples/pos/defaults/fallback
+
+import examples/pos/defaults/colors
+
+def default::Color::describe(c: Color): String = "default in fallback"
+
+def main() = ()

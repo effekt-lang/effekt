@@ -1,0 +1,12 @@
+type Shape { Dot() }
+
+def describe(s: Shape): String = "written"
+def default::describe(s: Shape): String = "default"
+
+def main() = {
+  // a module's own definition is preferred over its own default
+  val written: String = describe(Dot())
+  println(written)
+  val default: String = default::describe(Dot())
+  println(default)
+}

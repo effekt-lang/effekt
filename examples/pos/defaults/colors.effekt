@@ -1,0 +1,10 @@
+module examples/pos/defaults/colors
+
+type Color { Red() }
+
+def describe(c: Color): String = "written in colors"
+def default::Color::describe(c: Color): String = "default in colors"
+
+def show(c: Color): String = "show in colors"
+
+def main() = ()

@@ -1,0 +1,25 @@
+import examples/pos/defaults/colors
+
+def main() = {
+  // an imported definition is preferred over an imported default
+  val written: String = describe(Red())
+  println(written)
+
+  // ... also when qualified by its module
+  val qualified: String = colors::describe(Red())
+  println(qualified)
+
+  // the default is still reachable by its own names
+  val default: String = default::Color::describe(Red())
+  println(default)
+  val byType: String = Color::describe(Red())
+  println(byType)
+
+  // the library's `show` is preferred over the default `show`
+  val shown: String = show(Red())
+  println(shown)
+
+  // and the default `show` is used where it is the only one
+  val number: String = show(42)
+  println(number)
+}

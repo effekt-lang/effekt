@@ -1,0 +1,10 @@
+[error] examples/neg/defaults/ambiguous.effekt:5:19: Ambiguous overload. [typer]
+5    val s: String = default::Color::describe(Red())
+                     ^^^^^^^^^^^^^^^^^^^^^^^^
+
+   There are multiple overloads, which all would type check:
+6  * def default::Color::describe(c: Color): String = "default in colors"   ./examples/pos/defaults/colors.effekt:6:5
+         ^^^^^^^^^^^^^^^^^^^^^^^^
+
+5  * def default::Color::describe(c: Color): String = "default in fallback"   ./examples/pos/defaults/fallback.effekt:5:5
+         ^^^^^^^^^^^^^^^^^^^^^^^^

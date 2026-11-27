@@ -1,0 +1,4 @@
+def main() = {
+  def default::x(): Int = 1
+  println(x())
+}

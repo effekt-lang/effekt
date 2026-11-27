@@ -1,0 +1,5 @@
+module examples/pos/defaults/default
+
+def helper(): Int = 1
+
+def main() = ()
