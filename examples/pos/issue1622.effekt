@@ -1,0 +1,22 @@
+
+def foo[A](x: A, y: A){?compare: (A, A) => Ordering}: A = {
+  compare(x, y) match {
+    case Less() => x
+    case _ => y
+  }
+}
+def foov[A](x: A, y: A, ?compare: (A, A) => Ordering at {}): A = {
+  compare(x, y) match {
+    case Greater() => x
+    case _ => y
+  }
+}
+def bar[A](x: A, y: A, ?compare: (A, A) => Ordering at {}): A = {
+  foo(x, foov(x, y))
+}
+
+
+def main() = {
+  def compare(x: Int, y: Int): Ordering = Equal()
+  println(foo(1,2))
+}
