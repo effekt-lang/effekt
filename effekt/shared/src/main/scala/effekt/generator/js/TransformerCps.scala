@@ -373,7 +373,7 @@ object TransformerCps extends Transformer {
         // Prepare the substitution
         val subst = Substitution(
           values = valueSubst,
-          blocks = Map.empty,
+          blocks = paramTmps.map { case (p, t) => p -> cps.Block.BlockVar(t) },
           conts = tmp_k.map(t => k1 -> Cont.ContVar(t)).toMap,
           metaconts = tmp_ks.map(t => ks1 -> MetaCont(t)).toMap
         )

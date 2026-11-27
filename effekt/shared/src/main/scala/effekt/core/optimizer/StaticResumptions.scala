@@ -26,10 +26,26 @@ object StaticResumptions {
    * That is only sound if the body cannot resume another continuation to the same prompt: the machine
    * does not allow a prompt twice on the stack (#1510). So we leave alone every prompt
    *   - some shift to which lets its continuation escape, also through a block that closes over it,
-   *   - that occurs other than as the prompt of a shift, or
-   *   - that is a parameter, since we do not know which reset it stands for.
+   *   - that occurs other than as the prompt of a shift or passed to a definition for a parameter,
+   *   - that is a parameter of a block other than a definition only ever called, or
+   *   - that is passed for a parameter we leave alone, or is a parameter something we leave alone is passed for.
    */
   def blocked(m: ModuleDecl): Set[Id] = {
+    object defining extends Tree.Query[Unit, Map[Id, BlockLit]] {
+      def empty = Map.empty
+      def combine = _ ++ _
+      override def stmt(using Unit) = {
+        case Stmt.Def(id, block: BlockLit, rest) => Map(id -> block) ++ query(block.body) ++ query(rest)
+      }
+      override def toplevel(using Unit) = {
+        case Toplevel.Def(id, block: BlockLit) => Map(id -> block) ++ query(block.body)
+      }
+    }
+    val definitions = defining.query(m)(using ())
+    def prompts(bparams: List[BlockParam]): Set[Id] = bparams.collect { case BlockParam(id, BlockType.Prompt(_), _) => id }.toSet
+
+    val passed = scala.collection.mutable.ListBuffer.empty[(Id, Id)]
+
     object blocking extends Tree.Query[Unit, Set[Id]] {
       def empty = Set.empty
       def combine = _ ++ _
@@ -37,14 +53,33 @@ object StaticResumptions {
         case shift @ Stmt.Shift(Block.BlockVar(prompt, _, _), BlockParam(k, BlockType.Resume(result, _), _), body) =>
           (if (Shift(shift, k, result).resumesOnly && !escapes(k, body)) Set.empty else Set(prompt)) ++ query(body)
         case Stmt.Reset(BlockLit(_, _, _, _, body)) => query(body)
+        case Stmt.Def(id, BlockLit(_, _, _, _, body), rest) => query(body) ++ query(rest)
+        case Stmt.App(Block.BlockVar(callee, _, _), _, vargs, bargs) if definitions.contains(callee) =>
+          all(vargs, query) ++ all(definitions(callee).bparams zip bargs, {
+            case (BlockParam(parameter, _, _), Block.BlockVar(prompt, BlockType.Prompt(_), _)) =>
+              passed += (parameter -> prompt)
+              Set.empty
+            case (_, argument) => query(argument)
+          })
       }
       override def block(using Unit) = {
         case Block.BlockVar(id, BlockType.Prompt(_), _) => Set(id)
-        case BlockLit(_, _, _, bparams, body) =>
-          bparams.collect { case BlockParam(id, BlockType.Prompt(_), _) => id }.toSet ++ query(body)
+        case Block.BlockVar(id, _, _) if definitions.contains(id) => prompts(definitions(id).bparams)
+        case BlockLit(_, _, _, bparams, body) => prompts(bparams) ++ query(body)
+      }
+      override def toplevel(using Unit) = {
+        case Toplevel.Def(id, BlockLit(_, _, _, _, body)) => query(body)
       }
     }
-    blocking.query(m)(using ())
+
+    @tailrec def spread(blocked: Set[Id]): Set[Id] = {
+      val next = blocked ++ passed.collect {
+        case (parameter, prompt) if blocked(parameter) => prompt
+        case (parameter, prompt) if blocked(prompt) => parameter
+      }
+      if next == blocked then blocked else spread(next)
+    }
+    spread(blocking.query(m)(using ()))
   }
 
   /**

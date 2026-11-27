@@ -1,0 +1,37 @@
+// A call passing a local block gets a copy of the callee for the code of that block, at the top level. The copy
+// makes the block anew and takes the reference the block closes over as a parameter.
+
+def apply(x: Int){f: (Int) => Int} = {
+  (f: (Int) => Int @ {f})(x: Int)
+}
+
+def main() = {
+  var c @ r = 0;
+  (apply: (Int){f: (Int) => Int} => Int @ {})(1){(x: Int) =>
+    put c @ r = x: Int;
+    return x: Int
+  }
+}
+
+/// RECURSIVE
+
+/// SPECIALIZE
+
+def apply(x: Int){f @ f: (Int) => Int} = {
+  f: (Int) => Int @ {f}(x: Int)
+}
+def main() = {
+  var c @ r = 0;
+  def b(x: Int) = {
+    put c @ r = x: Int;
+    return x: Int
+  }
+  apply_b: (Int){c: Ref[Int]} => Int @ {r}(1){c: Ref[Int] @ {r}}
+}
+def apply_b(x: Int){c @ c: Ref[Int]} = {
+  def b(x: Int) = {
+    put c @ c = x: Int;
+    return x: Int
+  }
+  b: (Int) => Int @ {c}(x: Int)
+}

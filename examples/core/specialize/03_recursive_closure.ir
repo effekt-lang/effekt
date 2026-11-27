@@ -1,0 +1,56 @@
+// `loop` passes itself a block `next` it defines, which captures the one before. That block is recursively built, so `k`
+// stays a parameter for it, while the copy for `first` from `main` still gets made.
+
+def loop(b: Bool){k: (Int) => Int} = {
+  if (b: Bool) {
+    (k: (Int) => Int @ {k})(0)
+  } else {
+    def next(x: Int) = {
+      (k: (Int) => Int @ {k})(x: Int)
+    }
+    (loop: (Bool){k: (Int) => Int} => Int @ {})(b: Bool){next: (Int) => Int @ {k}}
+  }
+}
+
+def main(b: Bool) = {
+  def first(x: Int) = {
+    return x: Int
+  }
+  (loop: (Bool){k: (Int) => Int} => Int @ {})(b: Bool){first: (Int) => Int @ {}}
+}
+
+/// RECURSIVE
+
+next
+
+/// SPECIALIZE
+
+def loop(b: Bool){k @ k: (Int) => Int} = {
+  if (b: Bool) {
+    k: (Int) => Int @ {k}(0)
+  } else {
+    def next(x: Int) = {
+      k: (Int) => Int @ {k}(x: Int)
+    }
+    loop: (Bool){k: (Int) => Int} => Int @ {}(b: Bool){next: (Int) => Int @ {k}}
+  }
+}
+def main(b: Bool) = {
+  def first(x: Int) = {
+    return x: Int
+  }
+  loop_first: (Bool) => Int @ {}(b: Bool)
+}
+def loop_first(b: Bool) = {
+  def first(x: Int) = {
+    return x: Int
+  }
+  if (b: Bool) {
+    first: (Int) => Int @ {}(0)
+  } else {
+    def next(x: Int) = {
+      first: (Int) => Int @ {}(x: Int)
+    }
+    loop: (Bool){k: (Int) => Int} => Int @ {}(b: Bool){next: (Int) => Int @ {}}
+  }
+}
