@@ -51,7 +51,7 @@ extern type Address =
   llvm "%Pos"
 
 /// The text of the given `address`, such as `127.0.0.1` or `::1`.
-extern def toString(address: Address) at {}: String =
+extern def showBuiltin(address: Address) at {}: String =
   jsNode "${address}"
   llvm "ret %Pos ${address}"
 
