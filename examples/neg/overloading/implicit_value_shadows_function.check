@@ -4,4 +4,4 @@
 
    Cannot instantiate 1st block argument fmt of type Int => String.
 6    val s: String = describe(1)
-                                ^ Cannot typecheck call to fmt. Does a function/method with that name exist?
+                                ^ Expected fmt to be a function, but got a value of type Int instead, which cannot be called as a function.
